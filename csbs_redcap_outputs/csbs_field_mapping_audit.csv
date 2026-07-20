@@ -1,0 +1,150 @@
+field_name,field_label,form_name,field_type
+csbsbs_1,1. Alertness,csbs_bs,radio
+csbsbs_2,2. Emotional reaction,csbs_bs,radio
+csbsbs_3,3. Level of interest and attention,csbs_bs,radio
+csbsbs_4,4. Comfort level,csbs_bs,radio
+csbsbs_5,5. Level of activity,csbs_bs,radio
+csbsbs_6,6. Overall level of communication,csbs_bs,radio
+csbsbs_7,7. Play behavior,csbs_bs,radio
+csbsbs_clusterscores,Cluster scores,csbs_bs,descriptive
+csbsbs_clusterscores2,Cluster Scores,csbs_bs,descriptive
+csbsbs_com4_1,(1) Wind-up toy,csbs_bs,radio
+csbsbs_com4_2,(2) Balloon,csbs_bs,radio
+csbsbs_com4_3,(3) Bubbles,csbs_bs,radio
+csbsbs_com4_4,(4) Jar,csbs_bs,radio
+csbsbs_com4_5,(5) Books,csbs_bs,radio
+csbsbs_com4_6,(6) Play,csbs_bs,radio
+csbsbs_comments,Comments:,csbs_bs,notes
+csbsbs_compercentile,Communication Percentile Rank,csbs_bs,text
+csbsbs_compercentilepre,Communication Percentile Rank,csbs_bs,text
+csbsbs_composite,Composite Scores,csbs_bs,descriptive
+csbsbs_compositepre,Composite Scores,csbs_bs,descriptive
+csbsbs_comraw,Communication Weighted Raw Score,csbs_bs,calc
+csbsbs_comstandard,Communication Standard Score,csbs_bs,notes
+csbsbs_comstandardpre,Communication Standard Score,csbs_bs,notes
+csbsbs_dedate,Date Entered (mm-dd-yyyy),csbs_bs,text
+csbsbs_dename,Data Entry RA (Firstname Lastname),csbs_bs,text
+csbsbs_doe,Date of Evaluation (mm-dd-yyyy),csbs_bs,text
+csbsbs_emotionpercentile,Emotion and Eye Gaze Percentile Rank,csbs_bs,text
+csbsbs_emotionpercentilepre,Emotion and Eye Gaze Percentile Rank,csbs_bs,text
+csbsbs_emotionraw,Emotion and Eye Gaze Weighted Raw Score,csbs_bs,calc
+csbsbs_emotionstandard,Emotion and Eye Gaze Standard Score,csbs_bs,notes
+csbsbs_emotionstandardpre,Emotion and Eye Gaze Standard Score,csbs_bs,notes
+csbsbs_examiner,"Examiner (if administered and scored by different people, only enter the scorer's name here)",csbs_bs,text
+csbsbs_gesraw,Gestures Weighted Raw Score,csbs_bs,calc
+csbsbs_gesturespercentile,Gestures Percentile Rank,csbs_bs,text
+csbsbs_gesturespercentilepre,Gestures Percentile Rank,csbs_bs,text
+csbsbs_gesturesstandard,Gestures Standard Score,csbs_bs,notes
+csbsbs_gesturesstandardpre,Gestures Standard Score,csbs_bs,notes
+csbsbs_instructions,"<div class=""rich-text-field-label""><p>Instructions for caregivers: <span style=""font-weight: normal;"">Please compare your child's behavior during the communication and play assessments we have just completed to your observations of your child in similar situations. Select the response that comes closes to your observations.</span></p></div>",csbs_bs,descriptive
+csbsbs_objectpercentile,Object Use Percentile Rank,csbs_bs,text
+csbsbs_objectpercentilepre,Object Use Percentile Rank,csbs_bs,text
+csbsbs_objectraw,Object Use Weighted Raw Score,csbs_bs,calc
+csbsbs_objectstandard,Object Use Standard Score,csbs_bs,notes
+csbsbs_objectstandardpre,Object Use Standard Score,csbs_bs,notes
+csbsbs_scale1,Scale 1,csbs_bs,text
+csbsbs_scale10,Scale 10,csbs_bs,text
+csbsbs_scale11,Scale 11 ____ x 2,csbs_bs,text
+csbsbs_scale12,Scale 12,csbs_bs,text
+csbsbs_scale13,Scale 13 ____ ÷ 2,csbs_bs,text
+csbsbs_scale14,Scale 14,csbs_bs,text
+csbsbs_scale15,Scale 15,csbs_bs,text
+csbsbs_scale16_1,Object names ____ x 3,csbs_bs,text
+csbsbs_scale16_2,Person names ____ x 3,csbs_bs,text
+csbsbs_scale16_3,Body parts ____ x 3,csbs_bs,text
+csbsbs_scale17,Scale 17,csbs_bs,text
+csbsbs_scale18,Scale 18,csbs_bs,text
+csbsbs_scale19,Scale 19,csbs_bs,text
+csbsbs_scale2,Scale 2,csbs_bs,text
+csbsbs_scale20,Scale 20,csbs_bs,text
+csbsbs_scale3,Scale 3 _____ x 3,csbs_bs,text
+csbsbs_scale4,Scale 4 ____ ÷ 3,csbs_bs,text
+csbsbs_scale5,Scale 5,csbs_bs,text
+csbsbs_scale6,Scale 6,csbs_bs,text
+csbsbs_scale7,Scale 7,csbs_bs,text
+csbsbs_scale8,Scale 8 ____ x 2,csbs_bs,text
+csbsbs_scale9,Scale 9,csbs_bs,text
+csbsbs_scoring,Scoring Worksheet,csbs_bs,descriptive
+csbsbs_scoring_1,1. Gaze shifts,csbs_bs,checkbox
+csbsbs_scoring_10,10. Syllables with consonants,csbs_bs,checkbox
+csbsbs_scoring_11,11. Inventory of consonants,csbs_bs,checkbox
+csbsbs_scoring_12,12. Words,csbs_bs,checkbox
+csbsbs_scoring_13,13. Inventory of words,csbs_bs,notes
+csbsbs_scoring_14,14. Word combinations,csbs_bs,checkbox
+csbsbs_scoring_15,15. Inventory of word combinations,csbs_bs,notes
+csbsbs_scoring_16,16. Language comprehension,csbs_bs,descriptive
+csbsbs_scoring_16_body1,body part 1:,csbs_bs,text
+csbsbs_scoring_16_body2,body part 2:,csbs_bs,text
+csbsbs_scoring_16_object1,object name 1:,csbs_bs,text
+csbsbs_scoring_16_object2,object name 2:,csbs_bs,text
+csbsbs_scoring_16_object3,object name 3:,csbs_bs,text
+csbsbs_scoring_16_part3,body part 3:,csbs_bs,text
+csbsbs_scoring_16_person1,person name 1:,csbs_bs,text
+csbsbs_scoring_16_person2,person name 2:,csbs_bs,text
+csbsbs_scoring_16_person3,person name 3:,csbs_bs,text
+csbsbs_scoring_17,17. Inventory of action schemes,csbs_bs,checkbox
+csbsbs_scoring_17_1,other action:,csbs_bs,text
+csbsbs_scoring_18,18. Action schemes toward other,csbs_bs,notes
+csbsbs_scoring_19,19. Sequences action schemes,csbs_bs,notes
+csbsbs_scoring_2,2. Shared positive affect,csbs_bs,checkbox
+csbsbs_scoring_20,20. Stacks tower of blocks,csbs_bs,radio
+csbsbs_scoring_3,3. Gaze/point following,csbs_bs,checkbox
+csbsbs_scoring_5,5. Behavior regulation,csbs_bs,checkbox
+csbsbs_scoring_6,6. Social interaction,csbs_bs,checkbox
+csbsbs_scoring_7,7. Joint attention,csbs_bs,checkbox
+csbsbs_scoring_8,8. Inventory of conventional gestures,csbs_bs,checkbox
+csbsbs_scoring_9,9. Distal gestures,csbs_bs,checkbox
+csbsbs_social,Social,csbs_bs,descriptive
+csbsbs_social2,Social,csbs_bs,descriptive
+csbsbs_socialageequiv,Social Age Equivalent,csbs_bs,text
+csbsbs_socialageequiv_calc,Social Composite Score Age Equivalent,csbs_bs,calc
+csbsbs_socialageequivpre,Social Age Equivalent,csbs_bs,text
+csbsbs_socialcompositecalc,Social Composite Score,csbs_bs,calc
+csbsbs_socialpercentile,Social Percentile Rank,csbs_bs,text
+csbsbs_socialpercentilepre,Social Percentile Rank,csbs_bs,text
+csbsbs_socialstandard,Social Standard Score,csbs_bs,notes
+csbsbs_socialstandardpre,Social Standard Score,csbs_bs,notes
+csbsbs_soundspercentile,Sounds Percentile Rank,csbs_bs,text
+csbsbs_soundspercentilepre,Sounds Percentile Rank,csbs_bs,text
+csbsbs_soundsraw,Sounds Weighted Raw Score,csbs_bs,calc
+csbsbs_soundsstandard,Sounds Standard Score,csbs_bs,notes
+csbsbs_soundsstandardpre,Sounds Standard Score,csbs_bs,notes
+csbsbs_speech,Speech,csbs_bs,descriptive
+csbsbs_speechageequiv,Speech Age Equivalent,csbs_bs,text
+csbsbs_speechageequiv_calc,Speech Composite Score Age Equivalent ,csbs_bs,calc
+csbsbs_speechageequivpre,Speech Age Equivalent,csbs_bs,text
+csbsbs_speechcompositecalc,Speech Composite Score,csbs_bs,calc
+csbsbs_speechpercentile,Speech Percentile Rank,csbs_bs,text
+csbsbs_speechpercentilepre,Speech Percentile Rank,csbs_bs,text
+csbsbs_speechpre,Speech,csbs_bs,descriptive
+csbsbs_speechstandard,Speech Standard Score,csbs_bs,notes
+csbsbs_speechstandardpre,Speech Standard Score,csbs_bs,notes
+csbsbs_symbolic,Symbolic,csbs_bs,descriptive
+csbsbs_symbolicageequiv,Symbolic Age Equivalent,csbs_bs,text
+csbsbs_symbolicageequiv_calc,Symbolic Composite Score Age Equivalent,csbs_bs,calc
+csbsbs_symbolicageequivpre,Symbolic Age Equivalent,csbs_bs,text
+csbsbs_symboliccompositecalc,Symbolic Composite Score,csbs_bs,calc
+csbsbs_symbolicpercentile,Symbolic Percentile Rank,csbs_bs,text
+csbsbs_symbolicpercentilepre,Symbolic Percentile Rank,csbs_bs,text
+csbsbs_symbolicpre,Symbolic,csbs_bs,descriptive
+csbsbs_symbolicstandard,Symbolic Standard Score,csbs_bs,notes
+csbsbs_symbolicstandardpre,Symbolic Standard Score,csbs_bs,notes
+csbsbs_total,TOTAL Standard Score,csbs_bs,notes
+csbsbs_totalageequiv,Total Age Equivalent,csbs_bs,text
+csbsbs_totalageequiv_calc,Total Score Age Equivalent ,csbs_bs,calc
+csbsbs_totalageequivpre,Total Age Equivalent,csbs_bs,text
+csbsbs_totalpercent,Total Percentile Rank,csbs_bs,text
+csbsbs_totalpercentilepre,Total Percentile Rank,csbs_bs,text
+csbsbs_totalrawcalc,CSBS BS Total Raw Score,csbs_bs,calc
+csbsbs_totalstandardpre,Total Standard Score,csbs_bs,notes
+csbsbs_underraw,Understanding Weighted Raw Score,csbs_bs,calc
+csbsbs_understandingpercentile,Understanding Percentile Rank,csbs_bs,text
+csbsbs_understandingpercentilepre,Understanding Percentile Rank,csbs_bs,text
+csbsbs_understandingstandard,Understanding Standard Score,csbs_bs,notes
+csbsbs_understandingstandardpre,Understanding Standard Score,csbs_bs,notes
+csbsbs_wordspercentile,Words Percentile Rank,csbs_bs,text
+csbsbs_wordspercentilepre,Words Percentile Rank,csbs_bs,text
+csbsbs_wordsraw,Words Weighted Raw Score,csbs_bs,calc
+csbsbs_wordsstandard,Words Standard Score,csbs_bs,notes
+csbsbs_wordsstandardpre,Words Standard Score,csbs_bs,notes
+demo_id,Participant ID,demographics_complete_this_first,text

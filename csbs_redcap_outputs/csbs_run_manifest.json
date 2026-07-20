@@ -1,0 +1,28 @@
+{
+  "generated_at_utc": "2026-07-20T17:19:55.380667+00:00",
+  "endpoint_hostname": "redcap.research.sc.edu",
+  "selected_forms": [
+    "csbs_bs"
+  ],
+  "selected_fields": [
+    "demo_id",
+    "csbsbs_examiner",
+    "csbs_bs_complete"
+  ],
+  "record_id_field": "demo_id",
+  "completion_field": "csbs_bs_complete",
+  "expected_examiner_field": "csbsbs_examiner",
+  "event_names_for_csbs_bs": [
+    "9_months_arm_1",
+    "12_months_arm_1",
+    "15_months_arm_1",
+    "18_months_arm_1",
+    "21_months_arm_1",
+    "24_months_arm_1",
+    "next_outcome_arm_1"
+  ],
+  "exported_row_count": 7302,
+  "completed_row_count": 1179,
+  "examiner_field_returned": false,
+  "status": "blocked_missing_examiner_field"
+}
