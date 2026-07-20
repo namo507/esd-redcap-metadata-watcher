@@ -1,28 +1,248 @@
 {
-  "generated_at_utc": "2026-07-20T17:19:55.380667+00:00",
+  "generated_at_utc": "2026-07-20T20:01:53.199458+00:00",
+  "run_started_at_utc": "2026-07-20T20:01:48.234903+00:00",
+  "status": "completed_with_blank_examiner_fallback",
+  "primary_deliverable": "IPSA_CSBS_scoring_assignments_master.csv",
   "endpoint_hostname": "redcap.research.sc.edu",
+  "api_operations": [
+    "project (connectivity only)",
+    "metadata",
+    "instrument",
+    "formEventMapping",
+    "repeatingFormsEvents (when available)",
+    "record (read only)",
+    "report 4692 (read only; population verification)"
+  ],
   "selected_forms": [
     "csbs_bs"
   ],
-  "selected_fields": [
-    "demo_id",
-    "csbsbs_examiner",
-    "csbs_bs_complete"
-  ],
-  "record_id_field": "demo_id",
-  "completion_field": "csbs_bs_complete",
-  "expected_examiner_field": "csbsbs_examiner",
-  "event_names_for_csbs_bs": [
-    "9_months_arm_1",
-    "12_months_arm_1",
-    "15_months_arm_1",
-    "18_months_arm_1",
-    "21_months_arm_1",
-    "24_months_arm_1",
-    "next_outcome_arm_1"
-  ],
-  "exported_row_count": 7302,
-  "completed_row_count": 1179,
-  "examiner_field_returned": false,
-  "status": "blocked_missing_examiner_field"
+  "selected_events": {
+    "contact_history": [
+      "12_months_arm_1",
+      "15_months_arm_1",
+      "18_months_arm_1",
+      "21_months_arm_1",
+      "24_months_arm_1",
+      "9_months_arm_1",
+      "next_outcome_arm_1"
+    ],
+    "scoring_output": [
+      "12_months_arm_1",
+      "15_months_arm_1",
+      "18_months_arm_1",
+      "24_months_arm_1",
+      "9_months_arm_1"
+    ]
+  },
+  "eligibility_reference": {
+    "report_id": 4692,
+    "report_name": "CSBS BS- All Ages, Validated",
+    "report_scope": "unsuffixed exact REDCap IDs only",
+    "target_visit_months": [
+      9,
+      12,
+      15,
+      18,
+      24
+    ],
+    "expanded_live_export_rows": 1174,
+    "unsuffixed_export_rows": 486,
+    "additional_dde_rows": 688,
+    "live_report_row_count": 486,
+    "id_event_multiset_match": true
+  },
+  "selected_fields": {
+    "record_id": "demo_id",
+    "visit_month": "redcap_event_name",
+    "examiner": "csbsbs_examiner",
+    "evaluation_date": "csbsbs_doe",
+    "completion": "csbs_bs_complete"
+  },
+  "record_id_policy": {
+    "source": "demo_id",
+    "preserve_exactly": true,
+    "dde_suffix_pattern": "--[12]$",
+    "grouping": "each exact REDCap ID is a separate case; suffixes are never stripped or merged"
+  },
+  "event_field_handling": "derive numeric visit month from redcap_event_name",
+  "contact_history_policy": "all completed CSBS events for every exact REDCap ID; one interaction per exact ID, scoring clinician, and Date of Evaluation; duplicates are removed only within the same exact ID",
+  "furthest_in_time_policy": "nearest absolute gap in days using csbsbs_doe; dates are not imputed",
+  "repeating_instance_handling": "retain repeat instrument and instance when REDCap returns them",
+  "repeating_metadata_status": "endpoint unavailable; record export context used",
+  "repeating_metadata_rows": 0,
+  "blank_examiner_policy": "lowest current workload; random.Random(42) among tied lowest workloads",
+  "examiner_export_verification": {
+    "required_field": "csbsbs_examiner",
+    "field_returned": true,
+    "raw_nonblank_rows": 544,
+    "policy": "fail closed when the column is omitted or all values are blank"
+  },
+  "examiner_interpretation": {
+    "policy": "preserve exact raw display value; recognize only the configured observed-value allowlist after Unicode NFKC, whitespace collapse, and casefold; exclude and credit every Emma/Tessa/Axie scorer named in composite values",
+    "known_values_to_scoring_clinicians": {
+      "Emma Platt": [
+        "Emma"
+      ],
+      "Tessa Djiko": [
+        "Tessa"
+      ],
+      "Axie Acosta": [
+        "Axie"
+      ],
+      "Eilis McLaughlin": [],
+      "Katie Rowland": [],
+      "Alexis Federico": [],
+      "Elizabeth Dixon": [],
+      "Jessica Bradshaw": [],
+      "Elizabeth": [],
+      "Alexis": [],
+      "Eilis": [],
+      "Eilis M": [],
+      "EM": [],
+      "eilis McLaughlin": [],
+      "Cecilia Thomas": [],
+      "Caroline Christianson": [],
+      "Tessa Djiiko": [
+        "Tessa"
+      ],
+      "Tessa Dijko": [
+        "Tessa"
+      ],
+      "Axie Acosta & Emma Platt (coscored)": [
+        "Axie",
+        "Emma"
+      ],
+      "Elizabeth Dixon & Axie Acosta (co-score)": [
+        "Axie"
+      ],
+      "Emma Platt, Alexis Federico, Jessica Bradshaw (scored during clinical meeting)": [
+        "Emma"
+      ],
+      "Tessa Djiko, Axie Acosta, Eilis McLaughlin (all coscored)": [
+        "Tessa",
+        "Axie"
+      ]
+    },
+    "mapping_counts": {
+      "recognized_examiner_rows": 540,
+      "recognized_pool_examiner_rows": 357,
+      "recognized_nonpool_examiner_rows": 183,
+      "recognized_composite_examiner_rows": 4,
+      "missing_examiner_rows": 634,
+      "unexpected_examiner_rows": 0,
+      "irrelevant_unexpected_examiner_rows": 0
+    }
+  },
+  "random_seed": 42,
+  "row_counts": {
+    "exported_rows": 2573,
+    "csbs_filtered_rows": 2573,
+    "completed_rows": 1179,
+    "included_completed_contact_rows": 1179,
+    "included_completed_scoring_rows": 1174,
+    "included_completed_missing_evaluation_dates": 0,
+    "raw_pool_contact_mentions": 362,
+    "deduplicated_pool_contacts": 359,
+    "duplicate_contact_mentions_removed": 3,
+    "eligible_rows": 1174,
+    "excluded_rows": 1399,
+    "audit_warning_rows": 0,
+    "duplicate_rows_flagged": 0,
+    "exact_record_ids_included": 371,
+    "unsuffixed_scoring_rows_included": 486,
+    "dde_scoring_rows_included": 688,
+    "dde_suffix_1_scoring_rows_included": 344,
+    "dde_suffix_2_scoring_rows_included": 344,
+    "nontarget_csbs_event_rows_excluded": 431,
+    "raw_nonblank_examiner_rows": 544,
+    "recognized_examiner_rows": 540,
+    "recognized_pool_examiner_rows": 357,
+    "recognized_nonpool_examiner_rows": 183,
+    "recognized_composite_examiner_rows": 4,
+    "missing_examiner_rows": 634,
+    "unexpected_examiner_rows": 0,
+    "irrelevant_unexpected_examiner_rows": 0,
+    "known_examiner_eligible_rows": 540,
+    "blank_examiner_fallback_rows": 634,
+    "assigned_rows": 1174,
+    "candidate_trace_rows": 3163
+  },
+  "assignment_rule_counts": {
+    "Blank examiner random after workload tie": 329,
+    "Blank examiner lower workload": 305,
+    "NS": 227,
+    "NS lower workload": 147,
+    "NS random after workload tie": 119,
+    "FT": 31,
+    "LV": 16
+  },
+  "workload": {
+    "Emma": 390,
+    "Tessa": 390,
+    "Axie": 394
+  },
+  "quality_checks": {
+    "required_examiner_field_was_returned": true,
+    "unsuffixed_population_matches_reference_report_4692": true,
+    "recognized_examiner_check_is_nonvacuous": true,
+    "record_1108_matches_live_examiner_values_by_visit": true,
+    "jessi_master_has_exact_four_columns": true,
+    "jessi_master_row_count_equals_assignments": true,
+    "jessi_master_matches_assignment_projection": true,
+    "master_id_visit_multiset_matches_live_expanded_population": true,
+    "every_included_row_is_csbs": true,
+    "every_included_row_is_a_target_scoring_event": true,
+    "every_included_row_has_a_nonblank_record_id": true,
+    "redcap_record_ids_are_preserved_exactly": true,
+    "dde_suffix_records_are_included_as_distinct_exact_ids": true,
+    "both_dde_suffixes_are_present": true,
+    "master_has_no_duplicate_exact_id_visit_keys": true,
+    "contact_history_uses_only_nonblank_exact_record_ids": true,
+    "contact_history_has_valid_evaluation_dates": true,
+    "contact_history_deduplicates_same_child_clinician_date": true,
+    "every_included_row_is_complete": true,
+    "every_included_row_has_valid_evaluation_date": true,
+    "every_included_row_has_valid_numeric_visit_month": true,
+    "every_included_visit_month_matches_reference_report": true,
+    "every_nonmissing_examiner_is_recognized": true,
+    "master_examiner_is_exact_live_value_or_blank": true,
+    "no_relevant_unexpected_examiner_values": true,
+    "unexpected_raw_examiner_values_are_preserved_in_audit": true,
+    "blank_fallback_is_only_used_for_true_missing_cells": true,
+    "no_assigned_scorer_is_named_in_examiner_value": true,
+    "every_included_row_receives_exactly_one_scorer": true,
+    "assignment_count_equals_number_of_included_visits": true,
+    "eligible_count_matches_all_completed_scoring_records": true,
+    "workload_total_equals_number_of_included_visits": true,
+    "workload_summary_contains_all_clinicians": true,
+    "candidate_trace_row_count_matches_candidate_pools": true,
+    "candidate_trace_group_sizes_are_correct": true,
+    "candidate_pools_exactly_exclude_named_scoring_clinicians": true,
+    "candidate_trace_has_one_selected_candidate_per_visit": true,
+    "candidate_trace_selected_candidate_matches_assignment": true,
+    "independent_trace_hierarchy_and_history_verification": true,
+    "assignment_rule_labels_are_valid": true,
+    "duplicate_rows_are_flagged_for_review": true,
+    "every_exported_row_has_one_disposition": true,
+    "fixed_seed_replay_matches_assignments": true,
+    "fixed_seed_replay_matches_candidate_trace": true
+  },
+  "limitations": {
+    "examiner_field_returned": true,
+    "nonblank_examiner_rows_in_csbs_export": 544,
+    "rows_where_no_self_assignment_is_verifiable": 540,
+    "rows_where_no_self_assignment_is_not_verifiable": 634,
+    "full_blinding_guarantee": false,
+    "note": "Blank-examiner assignments are workload-balanced and reproducible, but cannot prove that the assigned scorer differs from the unreported examiner."
+  },
+  "jessi_validation": {
+    "status": "trace_only",
+    "row_count": 5
+  },
+  "version_metadata": {
+    "pipeline": "ipsa-csbs-live-2026-07-20-v4-exact-all-record-ids",
+    "python": "3.12.13",
+    "pandas": "3.0.3",
+    "requests": "2.34.2"
+  }
 }

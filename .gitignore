@@ -23,3 +23,9 @@ design-qa.md
 *.secret
 *_PROMPT.md
 .DS_Store
+csbs_redcap_outputs/csbs_scoring_assignments.csv
+csbs_redcap_outputs/csbs_scoring_candidate_trace.csv
+csbs_redcap_outputs/csbs_exclusions_audit.csv
+csbs_redcap_outputs/csbs_workload_summary.csv
+csbs_redcap_outputs/IPSA_CSBS_scoring_assignments_master.csv
+csbs_redcap_outputs/invalid_permission_filtered_run_*/
