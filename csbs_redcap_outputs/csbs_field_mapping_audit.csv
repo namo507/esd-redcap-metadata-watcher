@@ -32,7 +32,7 @@ csbsbs_emotionpercentilepre,Emotion and Eye Gaze Percentile Rank,csbs_bs,text,CS
 csbsbs_emotionraw,Emotion and Eye Gaze Weighted Raw Score,csbs_bs,calc,CSBS indicator,not exported (not required),not requested
 csbsbs_emotionstandard,Emotion and Eye Gaze Standard Score,csbs_bs,notes,CSBS indicator,not exported (not required),not requested
 csbsbs_emotionstandardpre,Emotion and Eye Gaze Standard Score,csbs_bs,notes,CSBS indicator,not exported (not required),not requested
-csbsbs_examiner,"Examiner (if administered and scored by different people, only enter the scorer's name here)",csbs_bs,text,examiner,selected examiner source; exact observed-value allowlist; preserve raw name; row-level blank fallback only,returned; 544 raw nonblank; 540 recognized; 357 name at least one scorer; 183 name only non-pool staff; 4 composite; 634 blank; 0 relevant unexpected; 0 irrelevant unexpected
+csbsbs_examiner,"Examiner (if administered and scored by different people, only enter the scorer's name here)",csbs_bs,text,examiner,selected examiner source; exact observed-value allowlist; preserve raw name; row-level blank fallback only,returned; 544 raw nonblank across the full export; base assignment population: 302 recognized; 222 name at least one scorer; 80 name only non-pool staff; 4 composite; 184 blank; 0 relevant unexpected; 18 irrelevant unexpected
 csbsbs_gesraw,Gestures Weighted Raw Score,csbs_bs,calc,CSBS indicator,not exported (not required),not requested
 csbsbs_gesturespercentile,Gestures Percentile Rank,csbs_bs,text,CSBS indicator,not exported (not required),not requested
 csbsbs_gesturespercentilepre,Gestures Percentile Rank,csbs_bs,text,CSBS indicator,not exported (not required),not requested
@@ -149,4 +149,4 @@ csbsbs_wordspercentilepre,Words Percentile Rank,csbs_bs,text,CSBS indicator,not 
 csbsbs_wordsraw,Words Weighted Raw Score,csbs_bs,calc,CSBS indicator,not exported (not required),not requested
 csbsbs_wordsstandard,Words Standard Score,csbs_bs,notes,CSBS indicator,not exported (not required),not requested
 csbsbs_wordsstandardpre,Words Standard Score,csbs_bs,notes,CSBS indicator,not exported (not required),not requested
-demo_id,Participant ID,demographics_complete_this_first,text,ID,selected verbatim; every exact REDCap ID is separate; --1/--2 suffixes retained,returned
+demo_id,Participant ID,demographics_complete_this_first,text,ID,selected base ID; records ending --1/--2 are ignored as double-entry copies,returned

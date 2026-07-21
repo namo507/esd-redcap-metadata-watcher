@@ -1,6 +1,6 @@
 {
-  "generated_at_utc": "2026-07-20T20:01:53.199458+00:00",
-  "run_started_at_utc": "2026-07-20T20:01:48.234903+00:00",
+  "generated_at_utc": "2026-07-20T20:31:53.280614+00:00",
+  "run_started_at_utc": "2026-07-20T20:31:50.102903+00:00",
   "status": "completed_with_blank_examiner_fallback",
   "primary_deliverable": "IPSA_CSBS_scoring_assignments_master.csv",
   "endpoint_hostname": "redcap.research.sc.edu",
@@ -37,7 +37,7 @@
   "eligibility_reference": {
     "report_id": 4692,
     "report_name": "CSBS BS- All Ages, Validated",
-    "report_scope": "unsuffixed exact REDCap IDs only",
+    "report_scope": "base REDCap IDs after double-entry copies are ignored",
     "target_visit_months": [
       9,
       12,
@@ -45,9 +45,8 @@
       18,
       24
     ],
-    "expanded_live_export_rows": 1174,
-    "unsuffixed_export_rows": 486,
-    "additional_dde_rows": 688,
+    "base_export_rows": 486,
+    "completed_target_double_entry_rows_ignored": 688,
     "live_report_row_count": 486,
     "id_event_multiset_match": true
   },
@@ -58,14 +57,14 @@
     "evaluation_date": "csbsbs_doe",
     "completion": "csbs_bs_complete"
   },
-  "record_id_policy": {
+  "double_entry_record_policy": {
     "source": "demo_id",
-    "preserve_exactly": true,
     "dde_suffix_pattern": "--[12]$",
-    "grouping": "each exact REDCap ID is a separate case; suffixes are never stripped or merged"
+    "ignore": true,
+    "scope": "IDs ending --1 or --2 are excluded from assignments and contact history"
   },
   "event_field_handling": "derive numeric visit month from redcap_event_name",
-  "contact_history_policy": "all completed CSBS events for every exact REDCap ID; one interaction per exact ID, scoring clinician, and Date of Evaluation; duplicates are removed only within the same exact ID",
+  "contact_history_policy": "all completed CSBS events for base IDs only; one interaction per child, scoring clinician, and Date of Evaluation; double-entry IDs are ignored",
   "furthest_in_time_policy": "nearest absolute gap in days using csbsbs_doe; dates are not imputed",
   "repeating_instance_handling": "retain repeat instrument and instance when REDCap returns them",
   "repeating_metadata_status": "endpoint unavailable; record export context used",
@@ -94,20 +93,6 @@
       "Alexis Federico": [],
       "Elizabeth Dixon": [],
       "Jessica Bradshaw": [],
-      "Elizabeth": [],
-      "Alexis": [],
-      "Eilis": [],
-      "Eilis M": [],
-      "EM": [],
-      "eilis McLaughlin": [],
-      "Cecilia Thomas": [],
-      "Caroline Christianson": [],
-      "Tessa Djiiko": [
-        "Tessa"
-      ],
-      "Tessa Dijko": [
-        "Tessa"
-      ],
       "Axie Acosta & Emma Platt (coscored)": [
         "Axie",
         "Emma"
@@ -124,13 +109,13 @@
       ]
     },
     "mapping_counts": {
-      "recognized_examiner_rows": 540,
-      "recognized_pool_examiner_rows": 357,
-      "recognized_nonpool_examiner_rows": 183,
+      "recognized_examiner_rows": 302,
+      "recognized_pool_examiner_rows": 222,
+      "recognized_nonpool_examiner_rows": 80,
       "recognized_composite_examiner_rows": 4,
-      "missing_examiner_rows": 634,
+      "missing_examiner_rows": 184,
       "unexpected_examiner_rows": 0,
-      "irrelevant_unexpected_examiner_rows": 0
+      "irrelevant_unexpected_examiner_rows": 18
     }
   },
   "random_seed": 42,
@@ -138,64 +123,65 @@
     "exported_rows": 2573,
     "csbs_filtered_rows": 2573,
     "completed_rows": 1179,
-    "included_completed_contact_rows": 1179,
-    "included_completed_scoring_rows": 1174,
+    "included_completed_contact_rows": 491,
+    "included_completed_scoring_rows": 486,
     "included_completed_missing_evaluation_dates": 0,
-    "raw_pool_contact_mentions": 362,
-    "deduplicated_pool_contacts": 359,
+    "raw_pool_contact_mentions": 227,
+    "deduplicated_pool_contacts": 224,
     "duplicate_contact_mentions_removed": 3,
-    "eligible_rows": 1174,
-    "excluded_rows": 1399,
+    "eligible_rows": 486,
+    "excluded_rows": 2087,
     "audit_warning_rows": 0,
     "duplicate_rows_flagged": 0,
-    "exact_record_ids_included": 371,
-    "unsuffixed_scoring_rows_included": 486,
-    "dde_scoring_rows_included": 688,
-    "dde_suffix_1_scoring_rows_included": 344,
-    "dde_suffix_2_scoring_rows_included": 344,
-    "nontarget_csbs_event_rows_excluded": 431,
+    "exact_record_ids_included": 134,
+    "base_scoring_rows_included": 486,
+    "dde_rows_ignored": 1652,
+    "completed_target_dde_rows_ignored": 688,
+    "dde_suffix_1_completed_target_rows_ignored": 344,
+    "dde_suffix_2_completed_target_rows_ignored": 344,
+    "nontarget_csbs_event_rows_excluded": 151,
     "raw_nonblank_examiner_rows": 544,
-    "recognized_examiner_rows": 540,
-    "recognized_pool_examiner_rows": 357,
-    "recognized_nonpool_examiner_rows": 183,
+    "recognized_examiner_rows": 302,
+    "recognized_pool_examiner_rows": 222,
+    "recognized_nonpool_examiner_rows": 80,
     "recognized_composite_examiner_rows": 4,
-    "missing_examiner_rows": 634,
+    "missing_examiner_rows": 184,
     "unexpected_examiner_rows": 0,
-    "irrelevant_unexpected_examiner_rows": 0,
-    "known_examiner_eligible_rows": 540,
-    "blank_examiner_fallback_rows": 634,
-    "assigned_rows": 1174,
-    "candidate_trace_rows": 3163
+    "irrelevant_unexpected_examiner_rows": 18,
+    "known_examiner_eligible_rows": 302,
+    "blank_examiner_fallback_rows": 184,
+    "assigned_rows": 486,
+    "candidate_trace_rows": 1234
   },
   "assignment_rule_counts": {
-    "Blank examiner random after workload tie": 329,
-    "Blank examiner lower workload": 305,
-    "NS": 227,
-    "NS lower workload": 147,
-    "NS random after workload tie": 119,
-    "FT": 31,
+    "NS": 158,
+    "Blank examiner lower workload": 98,
+    "Blank examiner random after workload tie": 86,
+    "NS lower workload": 76,
+    "FT": 27,
+    "NS random after workload tie": 25,
     "LV": 16
   },
   "workload": {
-    "Emma": 390,
-    "Tessa": 390,
-    "Axie": 394
+    "Emma": 162,
+    "Tessa": 161,
+    "Axie": 163
   },
   "quality_checks": {
     "required_examiner_field_was_returned": true,
-    "unsuffixed_population_matches_reference_report_4692": true,
+    "base_population_matches_reference_report_4692": true,
     "recognized_examiner_check_is_nonvacuous": true,
     "record_1108_matches_live_examiner_values_by_visit": true,
     "jessi_master_has_exact_four_columns": true,
     "jessi_master_row_count_equals_assignments": true,
     "jessi_master_matches_assignment_projection": true,
-    "master_id_visit_multiset_matches_live_expanded_population": true,
+    "master_id_visit_multiset_matches_live_base_population": true,
     "every_included_row_is_csbs": true,
     "every_included_row_is_a_target_scoring_event": true,
     "every_included_row_has_a_nonblank_record_id": true,
     "redcap_record_ids_are_preserved_exactly": true,
-    "dde_suffix_records_are_included_as_distinct_exact_ids": true,
-    "both_dde_suffixes_are_present": true,
+    "no_double_entry_ids_appear_in_master": true,
+    "completed_double_entry_rows_are_explicitly_ignored": true,
     "master_has_no_duplicate_exact_id_visit_keys": true,
     "contact_history_uses_only_nonblank_exact_record_ids": true,
     "contact_history_has_valid_evaluation_dates": true,
@@ -230,8 +216,8 @@
   "limitations": {
     "examiner_field_returned": true,
     "nonblank_examiner_rows_in_csbs_export": 544,
-    "rows_where_no_self_assignment_is_verifiable": 540,
-    "rows_where_no_self_assignment_is_not_verifiable": 634,
+    "rows_where_no_self_assignment_is_verifiable": 302,
+    "rows_where_no_self_assignment_is_not_verifiable": 184,
     "full_blinding_guarantee": false,
     "note": "Blank-examiner assignments are workload-balanced and reproducible, but cannot prove that the assigned scorer differs from the unreported examiner."
   },
@@ -240,7 +226,7 @@
     "row_count": 5
   },
   "version_metadata": {
-    "pipeline": "ipsa-csbs-live-2026-07-20-v4-exact-all-record-ids",
+    "pipeline": "ipsa-csbs-live-2026-07-20-v5-ignore-double-entry-records",
     "python": "3.12.13",
     "pandas": "3.0.3",
     "requests": "2.34.2"
