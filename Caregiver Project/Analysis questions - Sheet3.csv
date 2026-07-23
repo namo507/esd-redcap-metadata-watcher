@@ -1,0 +1,80 @@
+Analysis Questions,Significant,Link,,
+"Screening(Yes[Definitely Yes] / No [Others]) = Autism Family
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.mfv83vrhrptz,Screening = tfa_free_screen where we combined the responses as Yes/No options for logistic regression,
+"Screening (Yes/No)[Yes: Definitely Yes, NO: Others] = Ethical Stand (Very Ethically Right) vs others
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.kyn2dfhxsiln,"Autism Family = fif_num_autistic, coded response 0 for no and others as Yes",
+"Screening (Yes/No)[Yes: Definitely Yes, NO: Others] = Ethical Stand (Combined: Very Ethically Right + Ethically right) vs others
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.j6ih4pu1aaof,"Ethical Stand = tfa_scan_any = Thinking about what is right and fair foreveryone:Is it ethical for pediatricians to offerfree infant autism screenings at 4-month well-child checkups to all babies, even if there areno troubling behavior or delays?
+Coded as binary: Very Ethically Righ vs Others",
+"Screening (Yes/No) [Yes: Definitely Yes, NO: Others] = Accuracy Score
+","Model p-value: 0.1091, not significant
+Accuracy score 98-100%: significant",https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.9ndx6p8qjens,,
+"Prenatal Genetic Testing = Autism Family
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.b2vknvbxjsfz,,
+"Prenatal Genetic Testing = Ethical Binary Combined Score (1 + 2)
+Prenatal Genetic Testing  = Ethical Binary (1: Very Ethically Right vs others)
+",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.awtqbi6j32ft,,
+"Screening(Yes[Definitely Yes] / No [Others]) = Wish Early Diagnosis (Yes/No)
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.ded9xdn3homm,,
+Chi Square Test: What affects how you feel about early helpand support (early intervention) -> Screening Choices,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.76ebme5wb3nr,,
+"Exploded: Screening(Yes[Definitely Yes] / No [Others]) = “What effect would this have on your parenting or your family's plans?” (like quitting my job or moving states
+/ others)",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.dxfs5yoz8n49,,
+,,,,
+Autism Knowledge Score: recalculated ,,,"Autism knowledge scores are calculated in 2 ways. There were 8 knowledge questions that we measured here:
+tfa_genetics, tfa_vaccines, tfa_tylenol, tfa_medications, tfa_rate, tfa_behavior_age (need to verify the right answer),tfa_autistic_us, tfa_mult_kids_odds
+ 
+First method: participants responding correctly to the knowledge questions gets 1 points otherwise no pints. Scores range from 0-8.
+
+Second method (got significant result): The correct option will get 4 points. For the slider knowledge questions, teh responses can be from 1 - 4. The correct response will get 4 points and other responses will get 3, 2, 1 points accordingly. ","Mapping for Second Method: recalculated score
+master_score_maps = {
+    ""Unnamed: 122"": {1.0: 4, 2.0: 3, 3.0: 2, 4.0: 1},  # genetics
+    ""Unnamed: 123"": {1.0: 1, 2.0: 2, 3.0: 3, 4.0: 4},  #vaccines
+    ""Unnamed: 124"": {1.0: 1, 2.0: 2, 3.0: 3, 4.0: 4},  # tylenol
+    ""Unnamed: 127"": {1.0: 4, 2.0: 3, 3.0: 2, 4.0: 1},  #medication
+    ""  More children have an autism diagnosis compared to 20 years ago BECAUSE..."": {1.0: 4, 2.0: 3, 3.0: 2, 4.0: 1}
+}"
+Screening(Yes[Definitely Yes:69] / No [Others: 62]) = Autism Family * Autism Knowledge Score,Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.f3sxke2z360y,,
+"Screening(Yes[Definitely Yes:69] / No [Others: 62]) = Autism Knowledge Score
+",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.of00qbqg67s5,,
+"Recalculated Autism Knowledge = Perceived Autism Knowledge, Parent Having Autism
+",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.ei2ixehzer3b,,
+,,,,
+6/10,,,,
+Screening = Accuracy * Autism Family,Not Significant; model p-value is significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.9ndx6p8qjens,,
+Wish Early Diag = Ethical Stand,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.eqljyfy0p84v,,
+Screening(Yes[Definitely Yes] / No [Others]) = fif_diag_firstsigns,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.n1brhzwuiesl,,
+"Screening(Yes[Definitely Yes] / No [Others]) = tfa_behavior_age",Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.lw6ez3adjeie,,
+tfa_interact_positive = Autism Family,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.tuc71hplns98,,
+"tfa_gain_vs_loss = Autism Family",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.nubalxi7cm0,,
+tfa_regret = Autism Family,Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.svg8uex8l7ic,,
+"tfa_regret = Accuracy Score",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.wbk5n9gi1qlk,,
+tfa_interact_negative = Autism Family ,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.r9jg8l5j5w9q,,
+tfa_gain_vs_loss_neg  = Autism Family,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.h8lnjlb10g5m,,
+"tfa_regret_pos = Autism Family",Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.fqudrdcyjfz1,,
+,,,, 
+tfa_test_future = Autism Family,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.1b6jjh5i9vwj,tfa_test_future = At what age would you choose to do the test?,
+tfa_test_future = Hidden scores,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.55m5tmt53le5,"Hidden,  conformity_val, score, #1
+Hidden,  tradition_val, score, #2
+Hidden,  benevolence_val, score, #3
+Hidden,  universalism_val, score, #4
+Hidden,  self_direction_val, score, #5
+Hidden,  stimulation_val, score, #6
+Hidden,  hedonism_val, score, #7
+Hidden,  achievement_val, score, #8
+Hidden,  power_val, score, #9
+Hidden,  security_val, score, #10",
+tfa_future = Autism Family,Not Significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.4adzxhrjbvqi,"tfa_future = For you to feel okay doing the baby autismscreening test, how sure/certain would thetest need to be in predicting how much helpyour child will need?",
+tfa_future = Hidden Scores,Only Conformity value predicts test certainty,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.lnrz315dn6x5,,
+"tfa_difficult = Autism Household
+tfa_difficult = Hidden values","Not Significant
+Among the hidden scores, only conformity is significant.",https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.6vuvgfnnz4k,"tfa_difficult = ""How difficult would it be to spend an extra 15-30 minutes to complete this autism screening test?""",
+tfa_doable = hidden scores,Only Power_value is significant,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.xb9qx2go99lm,"""How doable would it be?""",
+,,,,
+tfa_scan_any(Ethical Stand) = Hidden Scores,"Self-Direction and Security scores are significant, other hidden scores are not significant",https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.9ay2plxzb87,,
+Hidden Scores = Autism Family,"Self_direction, Hedonism, Stimulation, Achievement significant",https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.11ecrj8jjfqj,,
+tfa_scan_mine (Moral Stand) = tfa_scan_any(Ethical Stand),Yes,https://docs.google.com/document/d/1xUtNDSAoyzhP9pwoxSbViKLtI9wzOF7dtNteFk1wWQo/edit?tab=t.kp6cdm80zxub,,
+,,,,
+Visualizations,,,,
+False-positive and False-negative scenarios and connection with ASD/non-ASD households,,,,
+"Response distribution between Autism Slider questions(genetics, vaccines etc)  and how they would respond to Screening = tfa_free_screen questions",,,,
+How ASD/Non-ASD households respond to different Autism tests (EEG/MRI/tfa_video/saliva test/heart-rate/bolld-test),,,,
