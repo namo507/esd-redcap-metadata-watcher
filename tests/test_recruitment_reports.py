@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import traceback
 
 from openpyxl import load_workbook
 import pandas as pd
@@ -340,3 +341,35 @@ def test_missing_configured_status_field_is_rejected(tmp_path, monkeypatch):
             api_url="https://example.test/api/",
             project_factory=incomplete_factory,
         )
+
+
+def test_formatted_export_failure_traceback_does_not_retain_token(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setenv("NANO_API_TOKEN", NANO_TOKEN)
+    monkeypatch.setenv("NICO_API_TOKEN", NICO_TOKEN)
+
+    def token_bearing_failure(api_url, token, *, timeout):
+        raise RuntimeError(f"request rejected for token={token}")
+
+    with pytest.raises(RuntimeError) as caught:
+        generate_reports(
+            report_date=date(2026, 7, 23),
+            public_dir=tmp_path / "public",
+            secure_dir=tmp_path / "secure",
+            legacy_nano_dir=tmp_path / "legacy",
+            env_file=tmp_path / "missing.env",
+            api_url="https://example.test/api/",
+            project_factory=token_bearing_failure,
+        )
+
+    formatted = "".join(
+        traceback.format_exception(
+            type(caught.value),
+            caught.value,
+            caught.value.__traceback__,
+        )
+    )
+    assert NANO_TOKEN not in formatted
+    assert "[redacted]" in formatted

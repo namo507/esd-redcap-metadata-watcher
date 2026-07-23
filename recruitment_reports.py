@@ -757,7 +757,9 @@ def fetch_study(
         )
     except Exception as exc:
         detail = sanitize_error(exc)
-        raise RuntimeError(f"{config.key} REDCap export failed: {detail}") from exc
+        # Suppress the original cause: notebook tracebacks include chained
+        # exceptions and could otherwise retain a token-bearing PyCap message.
+        raise RuntimeError(f"{config.key} REDCap export failed: {detail}") from None
 
     counted = audit["in_cumulative"].eq(1)
     strict_exclusion = pd.Series(False, index=audit.index)
