@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 output/
 qa/
+recruitment_audit_secure/
 design-qa.md
 .env
 .env.*
