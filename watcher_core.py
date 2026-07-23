@@ -456,7 +456,7 @@ def build_project_summary(
         collision_count = int((collisions > 1).sum())
 
     def flag_count(column: str) -> int:
-        if column not in design.columns:
+        if design.empty or column not in design.columns:
             return 0
         return int(design[column].map(bool).sum())
 
