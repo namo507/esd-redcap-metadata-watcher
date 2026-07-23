@@ -1,0 +1,39 @@
+variable,reversed,scale,evidence / source,direction source
+tfa_intervene,no,1-4,"label: 4 = ""Very important""; higher = more important",exported value labels
+tfa_wchild,YES,1-3,"label: 1 = ""Very important"" -> reversed",exported value labels
+tfa_track,YES,1-2,"label: 1 = ""Very helpful"" -> reversed",exported value labels
+tfa_overall_help,YES,1-4,"label: 1 = ""Very helpful"" -> reversed",exported value labels
+tfa_screen_accuracy,no,1-5,"label: 1 = ""98-100%"" (strictest demand); higher = more tolerant of an imperfect test",exported value labels
+tfa_future,no,1-4,"label: 1 = ""Very sure"" (strictest demand); higher = more tolerant",exported value labels
+tfa_believe_positive,YES,1-7,slider; declared 1 = believe completely -> reversed so higher = more belief,"declared, checked in §6"
+tfa_believe_negative,YES,1-7,slider; declared 1 = believe completely -> reversed so higher = more belief,"declared, checked in §6"
+tfa_free_screen,no,0-4,"label: 4 = ""Definitely yes""; higher = more willing",exported value labels
+tfa_test_choice,no,0-3,"label: 0 = ""should NOT exist""; higher = broader endorsement",exported value labels
+tfa_test_today,no,1-5,"label: 1 = ""do not want the test""; not a monotonic scale (see 5.3)",exported value labels
+tfa_scan_any,YES,1-5,"label: 1 = ""Very ethically right"" -> reversed",exported value labels
+tfa_scan_mine,YES,1-6,"label: 1 = ""Very morally right"" -> reversed",exported value labels
+tfa_happy,no,1-5,emotion slider; higher = felt more of this emotion,"declared, checked in §6"
+tfa_trusting,no,1-5,emotion slider; higher = felt more of this emotion,"declared, checked in §6"
+tfa_comfortable,no,1-5,emotion slider; higher = felt more of this emotion,"declared, checked in §6"
+tfa_scared,YES,1-5,negative emotion -> reversed so higher = less concern,"declared, checked in §6"
+tfa_sad,YES,1-5,negative emotion -> reversed so higher = less concern,"declared, checked in §6"
+tfa_angry,YES,1-5,negative emotion -> reversed so higher = less concern,"declared, checked in §6"
+tfa_disgusted,YES,1-5,negative emotion -> reversed so higher = less concern,"declared, checked in §6"
+tfa_surprised,YES,1-5,negative emotion -> reversed so higher = less concern,"declared, checked in §6"
+tfa_gain_vs_loss,YES,1-7,slider; declared 1 = gained much more -> reversed so higher = more net gain,"declared, checked in §6"
+tfa_gain_vs_loss_neg,YES,1-7,slider; declared 1 = gained much more -> reversed so higher = more net gain,"declared, checked in §6"
+tfa_regret,no,1-7,slider; declared 1 = strong regret; higher = less regret,"declared, checked in §6"
+tfa_regret_pos,no,1-7,slider; declared 1 = strong regret; higher = less regret,"declared, checked in §6"
+tfa_difficult,no,1-4,"label: 4 = ""Very easy""; higher = easier",exported value labels
+tfa_doable,YES,1-4,"label: 1 = ""Very doable"" -> reversed",exported value labels
+tfa_separate_difficult,no,1-4,"label: 4 = ""Very easy""; higher = easier",exported value labels
+tfa_separate_doable,YES,1-4,"label: 1 = ""Very doable"" -> reversed",exported value labels
+tfa_series_difficult,no,1-4,"label: 4 = ""Very easy""; higher = easier",exported value labels
+tfa_series_doable,YES,1-4,"label: 1 = ""Very doable"" -> reversed",exported value labels
+tfa_mri,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_eeg,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_blood,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_video,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_saliva,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_heart,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
+tfa_observe,no,1-7,modality slider; higher = more acceptable,"declared, checked in §6"
