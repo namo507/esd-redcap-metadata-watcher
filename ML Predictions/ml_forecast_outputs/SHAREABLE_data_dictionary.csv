@@ -1,0 +1,7 @@
+analytic_field,source,dtype,definition,permitted,recode,notes
+participant_id,Block A col 1,int-like string,Pseudonymous participant identifier,4–5 digit integer,"cast to str, zero-strip; keep raw",Identifiable in aggregate — restricted handling
+appointment_date,Block A col 2,date,Scheduled/ideal date of the 36-Month visit (scheduling anchor),%d-%b-%y  e.g. 05-May-26,parse to datetime; keep raw string,Sole scheduling anchor in this export
+visit,Block A col 3,category,Study timepoint label,'36 Months',validate single value,Single timepoint in this file
+visit_month,derived,period[M],Calendar month of appointment_date,month-start,appointment_date -> month start,Modelling time index
+file_month_summary,Block B,int,Hand-built month->count summary,"Mon-YY, int",audit vs recomputed,NOT a source of truth — audited
+file_year_summary,Block C,int,Hand-built year->count summary,"YYYY, int",audit vs recomputed,NOT a source of truth — audited

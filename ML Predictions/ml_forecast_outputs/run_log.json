@@ -1,0 +1,130 @@
+{
+  "study": "Longitudinal Infant/Autism Study \u2014 36-Month Visit Track",
+  "refresh_date": "2026-07-23",
+  "generated_at": "2026-07-23T13:46:30",
+  "python": "3.12.13",
+  "platform": "macOS-26.5.2-arm64-arm-64bit",
+  "seed": 20260723,
+  "input_file": {
+    "exists": true,
+    "path": "/Users/namomac/esd-redcap-metadata-watcher/ML Predictions/36m_Projections(36m Projections).csv",
+    "size_bytes": 6275,
+    "modified": "2026-07-23T13:07:13",
+    "sha256_16": "18fe9ba6758440ce"
+  },
+  "config": {
+    "input_csv": "36m_Projections(36m Projections).csv",
+    "output_dir": "ml_forecast_outputs",
+    "study_name": "Longitudinal Infant/Autism Study \u2014 36-Month Visit Track",
+    "refresh_date": "2026-07-23",
+    "visit_label": "36 Months",
+    "col_pid": "participant_id",
+    "col_appt": "appointment_date",
+    "col_visit": "visit",
+    "appt_date_format": "%d-%b-%y",
+    "horizon_months": 36,
+    "census_min_count": 0,
+    "n_backtest_folds": 6,
+    "backtest_horizon": 6,
+    "min_train_months": 12,
+    "window_early_days": 30,
+    "window_late_days": 60,
+    "due_soon_days": 60,
+    "overdue_grace_days": 30,
+    "completion_rate": null,
+    "completion_low": null,
+    "completion_high": null,
+    "models": [
+      "mean",
+      "seasonal_naive",
+      "poisson_glm",
+      "negbin_glm",
+      "ets",
+      "sarima",
+      "random_forest",
+      "grad_boost"
+    ]
+  },
+  "warnings": [
+    "summary-vs-roster mismatch Oct-2028: file=4 roster=3 (\u0394+1)",
+    "yearly summary also disagrees with roster \u2014 regenerate from roster",
+    "9 trailing months are right-censored (roster not yet populated) and are excluded from model fitting."
+  ],
+  "backtest_ranking": [
+    {
+      "model": "Seasonal-na\u00efve (MoY)",
+      "MAE": 1.6111,
+      "RMSE": 2.0276,
+      "MASE": 0.6287,
+      "bias": 1.0556
+    },
+    {
+      "model": "Poisson GLM",
+      "MAE": 1.6488,
+      "RMSE": 2.0621,
+      "MASE": 0.6434,
+      "bias": 0.6762
+    },
+    {
+      "model": "Negative-Binomial GLM",
+      "MAE": 1.6556,
+      "RMSE": 2.1017,
+      "MASE": 0.6461,
+      "bias": 0.7666
+    },
+    {
+      "model": "ETS / Holt-Winters",
+      "MAE": 1.724,
+      "RMSE": 2.1007,
+      "MASE": 0.6728,
+      "bias": 0.9953
+    },
+    {
+      "model": "Random Forest",
+      "MAE": 1.7748,
+      "RMSE": 2.0885,
+      "MASE": 0.6926,
+      "bias": 0.6309
+    },
+    {
+      "model": "Mean rate",
+      "MAE": 2.0602,
+      "RMSE": 2.3761,
+      "MASE": 0.804,
+      "bias": 0.5125
+    },
+    {
+      "model": "SARIMA",
+      "MAE": 2.1932,
+      "RMSE": 2.5553,
+      "MASE": 0.8559,
+      "bias": 0.6327
+    },
+    {
+      "model": "Gradient Boosting",
+      "MAE": 2.3905,
+      "RMSE": 2.7965,
+      "MASE": 0.9329,
+      "bias": -0.2338
+    }
+  ],
+  "best_model": "Seasonal-na\u00efve (MoY)",
+  "record_counts": {
+    "roster_rows": 186,
+    "participants": 186,
+    "mature_months": 33,
+    "censored_months": 9,
+    "total_visits": 186,
+    "forecast_horizon_months": 36
+  },
+  "diagnostics": {
+    "mean": 5.515151515151516,
+    "var": 6.882575757575758,
+    "dispersion": 1.2479395604395604,
+    "trend_rho": -0.10179077971911638,
+    "trend_p": 0.5729826742595274,
+    "acf_band": 0.34119220567316777,
+    "acf_sig": [],
+    "pacf_sig": []
+  }
+}
