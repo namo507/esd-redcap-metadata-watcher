@@ -19,6 +19,7 @@ from redcap_client import GlobalRequestPacer, sanitize_error
 
 DEFAULT_API_URL = os.getenv("REDCAP_API_URL", "https://redcap.research.sc.edu/api/")
 DEFAULT_OUTPUT_DIR = "recruitment_outputs"
+ARCHIVE_SUBDIR = "archive"
 MIN_REQUEST_INTERVAL_SECONDS = float(
     os.getenv("REDCAP_MIN_REQUEST_INTERVAL_SECONDS", "1.25")
 )
@@ -826,6 +827,36 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _is_dated_output_file(path: Path) -> bool:
+    return bool(
+        re.match(
+            r"^(nano|nico)_recruitment_milestones_\d{4}-\d{2}-\d{2}\.html$",
+            path.name,
+        )
+        or re.match(
+            r"^recruitment_milestones_\d{4}-\d{2}-\d{2}\.(html|xlsx)$",
+            path.name,
+        )
+    )
+
+
+def _archive_existing_dated_outputs(output_root: Path, archive_root: Path) -> list[Path]:
+    archived_files: list[Path] = []
+    if not output_root.exists():
+        return archived_files
+
+    archive_root.mkdir(parents=True, exist_ok=True)
+    for candidate in output_root.iterdir():
+        if not candidate.is_file() or not _is_dated_output_file(candidate):
+            continue
+        archived_target = archive_root / candidate.name
+        if archived_target.exists():
+            archived_target.unlink()
+        candidate.replace(archived_target)
+        archived_files.append(archived_target)
+    return archived_files
+
+
 def _build_excel_sheet(
     snapshot: Mapping[str, Any], config: ProjectConfig
 ) -> pd.DataFrame:
@@ -870,10 +901,12 @@ def generate_reports(
 
     resolved_date = report_date or dt.date.today()
     output_root = Path(output_dir)
+    archive_root = output_root / ARCHIVE_SUBDIR
     snapshots: dict[str, dict[str, Any]] = {}
     renderings: dict[str, str] = {}
     errors: dict[str, str] = {}
     written_files: list[Path] = []
+    archived_files: list[Path] = []
 
     for project_key in selected_projects:
         try:
@@ -891,24 +924,26 @@ def generate_reports(
         detail = "; ".join(f"{key}: {value}" for key, value in errors.items())
         raise RecruitmentReportError(f"No reports were generated. {detail}")
 
+    archived_files = _archive_existing_dated_outputs(output_root, archive_root)
+
     date_stamp = resolved_date.isoformat()
     for project_key, html in renderings.items():
         standalone_html = render_dashboard_html({project_key: html}, resolved_date, api_url)
-        dated_path = output_root / f"{project_key.lower()}_recruitment_milestones_{date_stamp}.html"
+        dated_path = archive_root / f"{project_key.lower()}_recruitment_milestones_{date_stamp}.html"
         latest_path = output_root / f"{project_key.lower()}_recruitment_milestones_latest.html"
         _write_text(dated_path, standalone_html)
         _write_text(latest_path, standalone_html)
         written_files.extend([dated_path, latest_path])
 
     dashboard_html = render_dashboard_html(renderings, resolved_date, api_url)
-    dashboard_dated_path = output_root / f"recruitment_milestones_{date_stamp}.html"
+    dashboard_dated_path = archive_root / f"recruitment_milestones_{date_stamp}.html"
     dashboard_latest_path = output_root / "recruitment_milestones_latest.html"
     _write_text(dashboard_dated_path, dashboard_html)
     _write_text(dashboard_latest_path, dashboard_html)
     written_files.extend([dashboard_dated_path, dashboard_latest_path])
 
     if include_excel:
-        dated_workbook_path = output_root / f"recruitment_milestones_{date_stamp}.xlsx"
+        dated_workbook_path = archive_root / f"recruitment_milestones_{date_stamp}.xlsx"
         latest_workbook_path = output_root / "recruitment_milestones_latest.xlsx"
         with pd.ExcelWriter(dated_workbook_path) as workbook:
             for project_key, snapshot in snapshots.items():
@@ -923,6 +958,7 @@ def generate_reports(
     return {
         "report_date": resolved_date,
         "written_files": written_files,
+        "archived_files": archived_files,
         "snapshots": snapshots,
         "errors": errors,
     }
@@ -969,6 +1005,8 @@ def main() -> int:
         return 1
 
     print(f"Report date: {result['report_date'].isoformat()}")
+    for path in result.get("archived_files", []):
+        print(f"archived {path}")
     for path in result["written_files"]:
         print(f"wrote {path}")
     for project_key, detail in result["errors"].items():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 import recruitment_reports as reports
 
@@ -103,3 +104,30 @@ def test_build_combined_dashboard_extracts_table_body_from_documents() -> None:
 
     assert combined.count('class="report-card"') == 2
     assert combined.count("Recruitment Milestones for MH132925 - The Role of Autonomic Regulation of Attention in the Emergence of ASD") == 2
+
+
+def test_archive_existing_dated_outputs_keeps_latest_aliases(tmp_path: Path) -> None:
+    output_root = tmp_path / "recruitment_outputs"
+    archive_root = output_root / reports.ARCHIVE_SUBDIR
+    output_root.mkdir(parents=True)
+
+    dated_html = output_root / "nano_recruitment_milestones_2026-07-24.html"
+    dated_xlsx = output_root / "recruitment_milestones_2026-07-24.xlsx"
+    latest_html = output_root / "nano_recruitment_milestones_latest.html"
+    latest_xlsx = output_root / "recruitment_milestones_latest.xlsx"
+    dated_html.write_text("dated-html", encoding="utf-8")
+    dated_xlsx.write_bytes(b"dated-xlsx")
+    latest_html.write_text("latest-html", encoding="utf-8")
+    latest_xlsx.write_bytes(b"latest-xlsx")
+
+    archived = reports._archive_existing_dated_outputs(output_root, archive_root)
+
+    assert sorted(path.name for path in archived) == sorted(
+        [dated_html.name, dated_xlsx.name]
+    )
+    assert not dated_html.exists()
+    assert not dated_xlsx.exists()
+    assert (archive_root / dated_html.name).read_text(encoding="utf-8") == "dated-html"
+    assert (archive_root / dated_xlsx.name).read_bytes() == b"dated-xlsx"
+    assert latest_html.read_text(encoding="utf-8") == "latest-html"
+    assert latest_xlsx.read_bytes() == b"latest-xlsx"

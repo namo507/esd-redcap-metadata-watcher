@@ -96,13 +96,21 @@ Optional flags:
 - `--output-dir recruitment_outputs` to change the destination folder.
 - `--no-excel` to skip the workbook export.
 
-The refresh writes timestamped and `latest` outputs:
+The refresh keeps only `latest` files in `recruitment_outputs/` and archives dated files under `recruitment_outputs/archive/`.
 
-- `recruitment_outputs/nano_recruitment_milestones_<date>.html`
-- `recruitment_outputs/nico_recruitment_milestones_<date>.html`
-- `recruitment_outputs/recruitment_milestones_<date>.html`
+Latest files in the root output folder:
+
+- `recruitment_outputs/nano_recruitment_milestones_latest.html`
+- `recruitment_outputs/nico_recruitment_milestones_latest.html`
 - `recruitment_outputs/recruitment_milestones_latest.html`
-- `recruitment_outputs/recruitment_milestones_<date>.xlsx`
+- `recruitment_outputs/recruitment_milestones_latest.xlsx`
+
+Archived dated files:
+
+- `recruitment_outputs/archive/nano_recruitment_milestones_<date>.html`
+- `recruitment_outputs/archive/nico_recruitment_milestones_<date>.html`
+- `recruitment_outputs/archive/recruitment_milestones_<date>.html`
+- `recruitment_outputs/archive/recruitment_milestones_<date>.xlsx`
 
 ## Automate the refresh
 
