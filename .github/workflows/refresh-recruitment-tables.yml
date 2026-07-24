@@ -1,0 +1,65 @@
+name: Refresh Recruitment Tables
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 13 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      NANO_API_TOKEN: ${{ secrets.NANO_API_TOKEN }}
+      NICO_API_TOKEN: ${{ secrets.NICO_API_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Validate secrets
+        run: |
+          if [ -z "$NANO_API_TOKEN" ] || [ -z "$NICO_API_TOKEN" ]; then
+            echo "Both NANO_API_TOKEN and NICO_API_TOKEN repository secrets are required."
+            exit 1
+          fi
+
+      - name: Apply optional API URL override
+        if: ${{ vars.REDCAP_API_URL != '' }}
+        run: echo "REDCAP_API_URL=${{ vars.REDCAP_API_URL }}" >> "$GITHUB_ENV"
+
+      - name: Refresh read-only recruitment outputs
+        run: |
+          python recruitment_reports.py --output-dir recruitment_outputs
+
+      - name: Upload refreshed outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: recruitment-outputs
+          path: |
+            recruitment_outputs/*.html
+            recruitment_outputs/*.xlsx
+          if-no-files-found: error
+
+      - name: Commit refreshed outputs
+        run: |
+          if [ -z "$(git status --porcelain -- recruitment_outputs)" ]; then
+            echo "No recruitment output changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add recruitment_outputs
+          git commit -m "Refresh recruitment tables"
+          git push

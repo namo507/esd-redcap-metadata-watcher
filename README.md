@@ -65,6 +65,63 @@ REDCap is contacted only when **Connect** or **Refresh from API** is selected.
 
 These controls are defined together in the configuration block at the top of `app.py` and in `GlobalRequestPacer` in `redcap_client.py`.
 
+## Refresh recruitment milestone tables
+
+The repository includes a standalone generator for the NANO and NICO recruitment milestone tables shown in `recruitment_outputs/`. It pulls live counts from the REDCap API, preserves the NIH-style milestone layout, and writes both individual project pages and a combined two-table dashboard.
+
+Set one or both environment variables before running the refresh:
+
+```bash
+export NANO_API_TOKEN="..."
+export NICO_API_TOKEN="..."
+```
+
+Run the generator directly:
+
+```bash
+python recruitment_reports.py
+```
+
+Or use the Windows wrapper:
+
+```powershell
+.\scripts\update_recruitment_tables.ps1
+```
+
+Both entry points are read-only. They use REDCap `export_*` methods only and do not create, edit, or delete REDCap records.
+
+Optional flags:
+
+- `--report-date YYYY-MM-DD` to rerun the tables for a specific cut-off date.
+- `--output-dir recruitment_outputs` to change the destination folder.
+- `--no-excel` to skip the workbook export.
+
+The refresh writes timestamped and `latest` outputs:
+
+- `recruitment_outputs/nano_recruitment_milestones_<date>.html`
+- `recruitment_outputs/nico_recruitment_milestones_<date>.html`
+- `recruitment_outputs/recruitment_milestones_<date>.html`
+- `recruitment_outputs/recruitment_milestones_latest.html`
+- `recruitment_outputs/recruitment_milestones_<date>.xlsx`
+
+## Automate the refresh
+
+The repository includes [refresh-recruitment-tables.yml](.github/workflows/refresh-recruitment-tables.yml), a GitHub Actions workflow that:
+
+- runs on a daily schedule and on manual dispatch
+- installs the pinned Python dependencies
+- calls `python recruitment_reports.py --output-dir recruitment_outputs`
+- uploads the refreshed HTML/XLSX files as a workflow artifact
+- commits updated public outputs back to the repository when they change
+
+Repository setup required:
+
+- add `NANO_API_TOKEN` as a repository secret
+- add `NICO_API_TOKEN` as a repository secret
+- optionally add `REDCAP_API_URL` as a repository variable if the endpoint changes
+
+The workflow is also read-only against REDCap. It only exports metadata and participant-level counts needed to render the milestone tables.
+
 ## Add another study
 
 All study-specific configuration is at the top of `app.py`.
@@ -119,6 +176,8 @@ redcap_client.py          Read-only, paced REDCap acquisition
 watcher_core.py           Metadata normalization and comparisons
 charts.py                 Plotly figures
 exports.py                CSV, HTML, and ZIP exports
+recruitment_reports.py    API-backed NANO/NICO recruitment table generator
+scripts/                  Automation entry points for report refreshes
 .streamlit/config.toml    Streamlit theme
 assets/                   ESD Lab and USC visual assets
 tests/                    Unit tests

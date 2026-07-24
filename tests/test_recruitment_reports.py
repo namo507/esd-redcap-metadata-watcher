@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import datetime as dt
+
+import recruitment_reports as reports
+
+
+def _snapshot(project_key: str, report_date: dt.date) -> dict[str, object]:
+    config = reports.PROJECT_CONFIG[project_key]
+    milestones = reports.build_milestones(config)
+    current_index = next(
+        index for index, milestone in enumerate(milestones) if milestone >= report_date
+    )
+    completed = [index for index, milestone in enumerate(milestones) if milestone < report_date]
+    latest_completed_index = completed[-1] if completed else -1
+    live = (
+        {"Total": 219, "Minority": 99, "Hispanic": 16}
+        if project_key == "NANO"
+        else {"Total": 82, "Minority": 53, "Hispanic": 14}
+    )
+    return {
+        "milestones": milestones,
+        "current_index": current_index,
+        "latest_completed_index": latest_completed_index,
+        "live": live,
+    }
+
+
+def test_build_milestones_matches_tri_yearly_schedule() -> None:
+    milestones = reports.build_milestones(reports.PROJECT_CONFIG["NANO"])
+
+    assert len(milestones) == 14
+    assert milestones[0] == dt.date(2024, 8, 1)
+    assert milestones[-1] == dt.date(2028, 12, 1)
+
+
+def test_ratio_and_status_handle_pending_and_missing_targets() -> None:
+    assert reports.ratio_pct(25, 10) == "250%"
+    assert reports.ratio_pct(None, 10) == "N/A"
+    assert reports.ratio_pct(25, 0) == "N/A"
+
+    assert reports.status_text(None, 10, 2, 2) == reports.STATUS_PENDING
+    assert reports.status_text(11, 10, 1, 2) == reports.STATUS_ON_TARGET
+    assert reports.status_text(9, 10, 1, 2) == reports.STATUS_BEHIND
+    assert reports.status_text(9, None, 1, 2) == "N/A"
+
+
+def test_render_project_table_uses_reference_layout_labels() -> None:
+    report_date = dt.date(2026, 7, 24)
+    html = reports.render_project_table(
+        "NANO",
+        _snapshot("NANO", report_date),
+        reports.PROJECT_CONFIG["NANO"],
+        report_date,
+    )
+
+    assert "Recruitment Milestones for MH132925 - The Role of Autonomic Regulation of Attention in the Emergence of ASD" in html
+    assert "Tri Yearly Milestones" in html
+    assert "Actual/Target Ratio: Total Recruitment" in html
+    assert "Targets are PROVISIONAL / UNVERIFIED against the NIH-approved plan." in html
+    assert 'class="month current">Aug 1<' in html
+    assert 'class="value curr current">150<' in html
+
+
+def test_render_dashboard_contains_both_project_tables() -> None:
+    report_date = dt.date(2026, 7, 24)
+    rendered_tables = {
+        project_key: reports.render_project_table(
+            project_key,
+            _snapshot(project_key, report_date),
+            reports.PROJECT_CONFIG[project_key],
+            report_date,
+        )
+        for project_key in ("NANO", "NICO")
+    }
+
+    html = reports.render_dashboard_html(
+        rendered_tables, report_date, reports.DEFAULT_API_URL
+    )
+
+    assert html.count('class="report-card"') == 2
+    assert "Automatic REDCap API refresh for NANO and NICO." in html
+    assert "Recruitment Milestones for NICO Study" in html
+
+
+def test_build_combined_dashboard_extracts_table_body_from_documents() -> None:
+    report_date = dt.date(2026, 7, 24)
+    rendered_table = reports.render_project_table(
+        "NANO",
+        _snapshot("NANO", report_date),
+        reports.PROJECT_CONFIG["NANO"],
+        report_date,
+    )
+    document = reports.render_dashboard_html(
+        {"NANO": rendered_table}, report_date, reports.DEFAULT_API_URL
+    )
+
+    combined = reports.build_combined_dashboard_from_documents(
+        {"NANO": document, "NICO": document},
+        report_date,
+        reports.DEFAULT_API_URL,
+    )
+
+    assert combined.count('class="report-card"') == 2
+    assert combined.count("Recruitment Milestones for MH132925 - The Role of Autonomic Regulation of Attention in the Emergence of ASD") == 2
