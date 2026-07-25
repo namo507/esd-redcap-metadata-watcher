@@ -58,7 +58,7 @@ def test_render_project_table_uses_reference_layout_labels() -> None:
     assert "Recruitment Milestones for MH132925 - The Role of Autonomic Regulation of Attention in the Emergence of ASD" in html
     assert "Tri Yearly Milestones" in html
     assert "Actual/Target Ratio: Total Recruitment" in html
-    assert "Targets are PROVISIONAL / UNVERIFIED against the NIH-approved plan." in html
+    assert "Reference targets and published actuals are reproduced unchanged" in html
     assert 'class="month current">Aug 1<' in html
     assert 'class="value curr current">150<' in html
 
@@ -80,7 +80,7 @@ def test_render_dashboard_contains_both_project_tables() -> None:
     )
 
     assert html.count('class="report-card"') == 2
-    assert "Automatic REDCap API refresh for NANO and NICO." in html
+    assert "Read-only REDCap validation for NANO and NICO" in html
     assert "Recruitment Milestones for NICO Study" in html
 
 

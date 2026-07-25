@@ -37,10 +37,16 @@ Run the automated checks with:
 ```bash
 source .venv312/bin/activate
 python -m pytest
-python -m compileall -q app.py redcap_client.py watcher_core.py charts.py exports.py
+python -m compileall -q app.py redcap_client.py watcher_core.py charts.py \
+  exports.py recruitment_config.py recruitment_ground_truth.py \
+  recruitment_workbooks.py recruitment_reports.py
 ```
 
 ## Token and data handling
+
+The following points describe the interactive metadata-watcher app. The
+standalone recruitment generator has a separate, restricted output contract
+documented below and in `docs/recruitment-ground-truth.md`.
 
 - Tokens are entered through password fields at runtime. No token is hardcoded or bundled with the app.
 - Token values live only in the active Streamlit session state. They are not written to disk, added to URLs, included in downloads, or intentionally logged.
@@ -67,7 +73,16 @@ These controls are defined together in the configuration block at the top of `ap
 
 ## Refresh recruitment milestone tables
 
-The repository includes a standalone generator for the NANO and NICO recruitment milestone tables shown in `recruitment_outputs/`. It pulls live counts from the REDCap API, preserves the NIH-style milestone layout, and writes both individual project pages and a combined two-table dashboard.
+The repository includes a standalone, read-only generator for NANO and NICO.
+It validates the token's project identity and the configured field forms, types,
+and codes before requesting the minimum record fields. It writes image-matched
+aggregate milestone tables to `recruitment_outputs/` and restricted
+participant-audit workbooks/CSVs to the ignored
+`recruitment_audit_secure/` directory.
+
+The verified field mapping, coded demographic rules, inclusion logic, source
+provenance, API-rights evidence, and unresolved protocol mappings are recorded
+in [docs/recruitment-ground-truth.md](docs/recruitment-ground-truth.md).
 
 Set one or both environment variables before running the refresh:
 
@@ -94,6 +109,9 @@ Optional flags:
 
 - `--report-date YYYY-MM-DD` to rerun the tables for a specific cut-off date.
 - `--output-dir recruitment_outputs` to change the destination folder.
+- `--secure-output-dir recruitment_audit_secure` to change the ignored
+  participant-audit destination.
+- `--no-secure-audit` to write aggregate outputs only.
 - `--no-excel` to skip the workbook export.
 
 The refresh keeps only `latest` files in `recruitment_outputs/` and archives dated files under `recruitment_outputs/archive/`.
@@ -103,14 +121,25 @@ Latest files in the root output folder:
 - `recruitment_outputs/nano_recruitment_milestones_latest.html`
 - `recruitment_outputs/nico_recruitment_milestones_latest.html`
 - `recruitment_outputs/recruitment_milestones_latest.html`
+- `recruitment_outputs/nano_recruitment_milestones_latest.xlsx`
+- `recruitment_outputs/nico_recruitment_milestones_latest.xlsx`
 - `recruitment_outputs/recruitment_milestones_latest.xlsx`
 
 Archived dated files:
 
 - `recruitment_outputs/archive/nano_recruitment_milestones_<date>.html`
 - `recruitment_outputs/archive/nico_recruitment_milestones_<date>.html`
+- `recruitment_outputs/archive/nano_recruitment_milestones_<date>.xlsx`
+- `recruitment_outputs/archive/nico_recruitment_milestones_<date>.xlsx`
 - `recruitment_outputs/archive/recruitment_milestones_<date>.html`
 - `recruitment_outputs/archive/recruitment_milestones_<date>.xlsx`
+
+With both project tokens present, the restricted directory also contains two
+project workbooks and a six-file CSV package. The participant audit includes
+raw coded status/date/race/ethnicity evidence and the derived inclusion,
+racial-minority, Hispanic-ethnicity, exclusion-reason, and milestone fields.
+These files contain participant identifiers and must remain in the ignored
+restricted directory.
 
 ## Automate the refresh
 
@@ -118,7 +147,8 @@ The repository includes [refresh-recruitment-tables.yml](.github/workflows/refre
 
 - runs on a daily schedule and on manual dispatch
 - installs the pinned Python dependencies
-- calls `python recruitment_reports.py --output-dir recruitment_outputs`
+- runs the automated tests and token-shaped-literal scan
+- calls `python recruitment_reports.py --output-dir recruitment_outputs --no-secure-audit`
 - uploads the refreshed HTML/XLSX files as a workflow artifact
 - commits updated public outputs back to the repository when they change
 
@@ -128,7 +158,8 @@ Repository setup required:
 - add `NICO_API_TOKEN` as a repository secret
 - optionally add `REDCAP_API_URL` as a repository variable if the endpoint changes
 
-The workflow is also read-only against REDCap. It only exports metadata and participant-level counts needed to render the milestone tables.
+The workflow is also read-only against REDCap. It never writes or uploads the
+restricted participant-audit package.
 
 ## Add another study
 

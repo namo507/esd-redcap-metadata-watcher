@@ -458,7 +458,7 @@ def build_project_summary(
     def flag_count(column: str) -> int:
         if column not in design.columns:
             return 0
-        return int(design[column].map(bool).sum())
+        return sum(bool(value) for value in design[column].tolist())
 
     return {
         "project_title": _safe_text(info.get("project_title", "")),

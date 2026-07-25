@@ -6,7 +6,7 @@ import argparse
 import datetime as dt
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -15,10 +15,30 @@ import numpy as np
 import pandas as pd
 from redcap import Project
 
+from recruitment_config import (
+    CATEGORIES,
+    CATEGORY_LABELS,
+    MONTH_LABELS,
+    PROJECT_CONFIG,
+    PROJECT_ORDER,
+    ProjectConfig,
+)
+from recruitment_ground_truth import (
+    actuals_from_audit,
+    collapse_participants,
+    combined_summary,
+    inventory_counts,
+    minimal_record_fields,
+    summary_long,
+    validate_metadata,
+    validate_project_identity,
+)
+from recruitment_workbooks import write_csv_package, write_project_workbook
 from redcap_client import GlobalRequestPacer, sanitize_error
 
 DEFAULT_API_URL = os.getenv("REDCAP_API_URL", "https://redcap.research.sc.edu/api/")
 DEFAULT_OUTPUT_DIR = "recruitment_outputs"
+DEFAULT_SECURE_OUTPUT_DIR = "recruitment_audit_secure"
 ARCHIVE_SUBDIR = "archive"
 MIN_REQUEST_INTERVAL_SECONDS = float(
     os.getenv("REDCAP_MIN_REQUEST_INTERVAL_SECONDS", "1.25")
@@ -28,118 +48,11 @@ STATUS_ON_TARGET = "\u2705"
 STATUS_BEHIND = "\u26a0\ufe0f"
 STATUS_PENDING = "\U0001f4cb"
 
-MONTH_LABELS = {4: "Apr 1", 8: "Aug 1", 12: "Dec 1"}
-PROJECT_ORDER = ("NANO", "NICO")
-CATEGORIES = ("Total", "Minority", "Hispanic")
-CATEGORY_LABELS = {
-    "Total": "Total Recruitment",
-    "Minority": "Racial Minority Recruitment",
-    "Hispanic": "Hispanic Ethnicity Recruitment",
-}
-
-
-@dataclass(frozen=True)
-class ProjectConfig:
-    label: str
-    grant: str | None
-    study_title: str
-    record_id: str
-    race_field: str
-    race_minority_codes: tuple[int, ...]
-    race_white_codes: tuple[int, ...]
-    race_unknown_codes: tuple[int, ...]
-    race_hispanic_codes: tuple[int, ...]
-    eth_field: str
-    eth_hispanic_codes: tuple[int, ...]
-    eth_unknown_codes: tuple[int, ...]
-    eth_secondary: tuple[tuple[str, tuple[int, ...]], ...] = ()
-    exclusion_flags: tuple[str, ...] = ()
-    review_flags: tuple[str, ...] = ()
-    hard_exclude_flags: tuple[str, ...] = ()
-    dual_field: str | None = None
-    date_anchor: str | None = None
-    targets_available: bool = False
-    milestone_start: dt.date = dt.date(2024, 8, 1)
-    milestone_end: dt.date = dt.date(2028, 12, 1)
-    milestone_months: tuple[int, ...] = (4, 8, 12)
-    historical_actuals: dict[str, list[int]] = field(default_factory=dict)
-    previous_targets: dict[str, list[int | None]] = field(default_factory=dict)
-    current_targets: dict[str, list[int | None]] = field(default_factory=dict)
-    footnote_detail: str = ""
-
-
 @dataclass(frozen=True)
 class TableRow:
     label: str
     kind: str
     values: tuple[Any, ...]
-
-
-PROJECT_CONFIG: dict[str, ProjectConfig] = {
-    "NANO": ProjectConfig(
-        label="NANO Study",
-        grant="MH132925",
-        study_title="The Role of Autonomic Regulation of Attention in the Emergence of ASD",
-        record_id="demo_id",
-        race_field="fif_childrace",
-        race_minority_codes=(1, 2, 3, 4),
-        race_white_codes=(5,),
-        race_unknown_codes=(6,),
-        race_hispanic_codes=(),
-        eth_field="fif_childethnicity",
-        eth_hispanic_codes=(1,),
-        eth_unknown_codes=(3,),
-        exclusion_flags=("demo_ineligible", "demo_unenrolled"),
-        review_flags=("demo_exclude",),
-        milestone_start=dt.date(2024, 8, 1),
-        milestone_end=dt.date(2028, 12, 1),
-        milestone_months=(4, 8, 12),
-        historical_actuals={
-            "Total": [63, 108, 128, 151, 172, 219],
-            "Minority": [25, 48, 59, 84, 96, 99],
-            "Hispanic": [5, 5, 7, 8, 11, 16],
-        },
-        previous_targets={
-            "Total": [90, 110, 130, 150, 170, 190, 200, None, None, None, 160],
-            "Minority": [36, 44, 52, 60, 68, 76, 84, None, None, None, 32],
-            "Hispanic": [3, 5, 7, 9, 11, 13, 14, None, None, None, 7],
-        },
-        current_targets={
-            "Total": [5, 10, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
-            "Minority": [1, 2, None, None, None, None, None, None, None, None, None, 40],
-            "Hispanic": [None, None, 1, None, 1, None, 1, None, 1, None, 1, 10],
-        },
-        targets_available=True,
-        footnote_detail=(
-            "Targets are provisional and still need reconciliation with the NIH-approved plan."
-        ),
-    ),
-    "NICO": ProjectConfig(
-        label="NICO Study",
-        grant=None,
-        study_title="NICO Study",
-        record_id="id",
-        race_field="race",
-        race_minority_codes=(1, 2, 3, 5),
-        race_white_codes=(6,),
-        race_unknown_codes=(7,),
-        race_hispanic_codes=(4,),
-        eth_field="fif_childethnicity",
-        eth_hispanic_codes=(1,),
-        eth_unknown_codes=(3,),
-        eth_secondary=(("ethnicity", (0,)),),
-        exclusion_flags=("demo_ineligible", "demo_unenrolled"),
-        review_flags=("demo_exclude",),
-        dual_field="dual_enrolled",
-        milestone_start=dt.date(2024, 8, 1),
-        milestone_end=dt.date(2028, 12, 1),
-        milestone_months=(4, 8, 12),
-        footnote_detail=(
-            "Child ethnicity is missing for most participants, so the Hispanic count is provisional."
-        ),
-    ),
-}
-
 
 class RecruitmentReportError(RuntimeError):
     """Raised when report generation cannot complete."""
@@ -224,11 +137,13 @@ def _project_title(config: ProjectConfig) -> str:
 def _project_notice(config: ProjectConfig) -> tuple[str, str]:
     if config.targets_available:
         return (
-            "Targets are PROVISIONAL / UNVERIFIED against the NIH-approved plan.",
+            "Reference targets and published actuals are reproduced unchanged; "
+            "no protocol-confirmed enrollment status/date mapping is available.",
             "notice-provisional",
         )
     return (
-        "PENDING TARGET VERIFICATION - NIH milestone dates and targets not supplied; actuals shown are current live counts only.",
+        "N/A - no NICO milestone targets/history or protocol-confirmed "
+        "enrollment status/date mapping is present.",
         "notice-pending",
     )
 
@@ -236,7 +151,7 @@ def _project_notice(config: ProjectConfig) -> tuple[str, str]:
 def _project_footnote(config: ProjectConfig, report_date: dt.date) -> str:
     parts = [
         "Actual/Target Ratio = Actual / Current Target x 100.",
-        "N/A appears when actuals are pending or the current target is 0 or unknown.",
+        "N/A appears when an actual or target is unavailable, or the target is 0.",
         f"Report cut-off: {report_date.isoformat()}.",
     ]
     if config.footnote_detail:
@@ -277,206 +192,101 @@ def _year_spans(milestones: Sequence[dt.date]) -> list[tuple[int, int]]:
     return spans
 
 
-def _validate_required_fields(
-    project_key: str, field_names: set[str], config: ProjectConfig
-) -> None:
-    missing_fields = [
-        field_name
-        for field_name in (config.race_field, config.eth_field)
-        if field_name not in field_names
-    ]
-    if missing_fields:
-        missing_csv = ", ".join(sorted(missing_fields))
-        raise RecruitmentReportError(
-            f"{project_key}: missing configured REDCap fields: {missing_csv}"
-        )
-
-
-def _has_race_codes(participants: pd.DataFrame, race_field: str, codes: Sequence[int]) -> pd.Series:
-    columns = [
-        f"{race_field}___{code}"
-        for code in codes
-        if f"{race_field}___{code}" in participants.columns
-    ]
-    if not columns:
-        return pd.Series(False, index=participants.index)
-    return participants[columns].fillna(0).astype(float).max(axis=1) > 0
-
-
 def build_classification(
     project: Project,
     metadata: pd.DataFrame,
     config: ProjectConfig,
     strict_eligibility: bool = False,
 ) -> tuple[pd.DataFrame, str, int, int, str | None]:
-    field_names = set(metadata["field_name"])
-    _validate_required_fields(config.label, field_names, config)
+    """Compatibility wrapper around the fail-closed participant audit.
 
-    secondary_fields = [field_name for field_name, _ in config.eth_secondary if field_name in field_names]
-    status_flags = [
-        field_name
-        for field_name in (*config.exclusion_flags, *config.review_flags)
-        if field_name in field_names
-    ]
-    dual_field = (
-        config.dual_field
-        if config.dual_field and config.dual_field in field_names
-        else None
-    )
-    record_fields = list(
-        dict.fromkeys(
-            [
-                config.race_field,
-                config.eth_field,
-                *secondary_fields,
-                *status_flags,
-                *([dual_field] if dual_field else []),
-            ]
-        )
-    )
+    ``strict_eligibility`` is retained for API compatibility only. Source
+    ineligible/unenrolled flags are always exclusions under the current
+    ground-truth contract, and unresolved affirmative enrollment remains
+    missing rather than being counted from record presence.
+    """
 
-    records = _paced_call(
+    del strict_eligibility
+    project_key = next(
+        (
+            key
+            for key, configured in PROJECT_CONFIG.items()
+            if configured is config or configured == config
+        ),
+        config.label,
+    )
+    normalized_metadata, _ = validate_metadata(
+        project_key, metadata, config
+    )
+    record_fields = minimal_record_fields(config, normalized_metadata)
+    raw_records = _paced_call(
         project,
         "export_records",
         format_type="df",
         fields=record_fields,
         raw_or_label="raw",
-    ).reset_index()
-    identifier_column = records.columns[0]
-    raw_rows = len(records)
-    unique_participants = records[identifier_column].nunique()
-
-    race_columns = [
-        column_name for column_name in records.columns if column_name.startswith(config.race_field + "___")
-    ]
-    grouped = records.groupby(identifier_column)
-    if race_columns:
-        participants = grouped[race_columns].max()
-    else:
-        participants = pd.DataFrame(index=pd.Index(sorted(records[identifier_column].unique()), name=identifier_column))
-
-    if config.eth_field in records.columns:
-        participants[config.eth_field] = (
-            records.dropna(subset=[config.eth_field]).groupby(identifier_column)[config.eth_field].first()
-        )
-    for field_name, _ in config.eth_secondary:
-        if field_name in records.columns:
-            participants[field_name] = (
-                records.dropna(subset=[field_name]).groupby(identifier_column)[field_name].first()
-            )
-    for field_name in (*status_flags, *(tuple([dual_field]) if dual_field else tuple())):
-        if field_name in records.columns:
-            participants[field_name] = grouped[field_name].max()
-    participants = participants.reset_index()
-
-    participants["race_any"] = _has_race_codes(
+    )
+    records = (
+        raw_records.reset_index()
+        if isinstance(raw_records, pd.DataFrame)
+        else raw_records
+    )
+    milestones = build_milestones(config)
+    participants, _ = collapse_participants(
+        project_key=project_key,
+        records=records,
+        metadata=normalized_metadata,
+        config=config,
+        milestones=milestones,
+        report_date=dt.date.today(),
+    )
+    participants["is_minority"] = participants[
+        "racial_minority_flag"
+    ].astype("Int64")
+    participants["is_hispanic"] = participants[
+        "hispanic_ethnicity_flag"
+    ].astype("Int64")
+    participants["in_cumulative"] = participants[
+        "included_in_recruitment_count"
+    ].astype("Int64")
+    participants["decision"] = participants["inclusion_decision"]
+    participants["reason"] = participants["exclusion_reason"]
+    return (
         participants,
-        config.race_field,
-        (
-            *config.race_minority_codes,
-            *config.race_white_codes,
-            *config.race_unknown_codes,
-            *config.race_hispanic_codes,
-        ),
+        config.record_id,
+        len(records),
+        len(participants),
+        config.dual_field,
     )
-    participants["is_minority"] = _has_race_codes(
-        participants, config.race_field, config.race_minority_codes
-    ).astype(int)
-    participants["race_white"] = _has_race_codes(
-        participants, config.race_field, config.race_white_codes
-    ).astype(int)
-    participants["race_unknown"] = _has_race_codes(
-        participants, config.race_field, config.race_unknown_codes
-    ).astype(int)
-
-    ethnicity = (
-        pd.to_numeric(participants[config.eth_field], errors="coerce")
-        if config.eth_field in participants
-        else pd.Series(np.nan, index=participants.index)
-    )
-    hispanic = ethnicity.isin(config.eth_hispanic_codes)
-    ethnicity_known = ethnicity.notna()
-    for field_name, codes in config.eth_secondary:
-        if field_name in participants.columns:
-            secondary = pd.to_numeric(participants[field_name], errors="coerce")
-            hispanic = hispanic | secondary.isin(codes)
-            ethnicity_known = ethnicity_known | secondary.notna()
-    if config.race_hispanic_codes:
-        hispanic_race = _has_race_codes(participants, config.race_field, config.race_hispanic_codes)
-        hispanic = hispanic | hispanic_race
-        ethnicity_known = ethnicity_known | hispanic_race
-    participants["is_hispanic"] = hispanic.astype(int)
-    participants["eth_known"] = ethnicity_known.astype(int)
-
-    hard_excluded = pd.Series(False, index=participants.index)
-    hard_reason = pd.Series("", index=participants.index)
-    for field_name in config.hard_exclude_flags:
-        if field_name in participants.columns:
-            hit = participants[field_name] == 1
-            hard_excluded = hard_excluded | hit
-            hard_reason = hard_reason.mask(hit & (hard_reason == ""), field_name + "=Yes")
-
-    eligibility_hit = pd.Series(False, index=participants.index)
-    eligibility_reason = pd.Series("", index=participants.index)
-    for field_name in config.exclusion_flags:
-        if field_name in participants.columns:
-            hit = participants[field_name] == 1
-            eligibility_hit = eligibility_hit | hit
-            eligibility_reason = eligibility_reason.mask(
-                hit & (eligibility_reason == ""), field_name + "=Yes"
-            )
-
-    review_hit = pd.Series(False, index=participants.index)
-    review_reason = pd.Series("", index=participants.index)
-    for field_name in config.review_flags:
-        if field_name in participants.columns:
-            hit = participants[field_name] == 1
-            review_hit = review_hit | hit
-            review_reason = review_reason.mask(hit & (review_reason == ""), field_name + "=Yes")
-    missing_race = participants["race_any"] == 0
-    review_hit = review_hit | missing_race
-    review_reason = review_reason.mask(missing_race & (review_reason == ""), "missing race")
-
-    excluded = hard_excluded | (eligibility_hit if strict_eligibility else False)
-    flagged = (~excluded) & (review_hit | eligibility_hit)
-
-    participants["decision"] = np.where(
-        excluded,
-        "excluded",
-        np.where(flagged, "flagged-review", "included"),
-    )
-    exclude_reason = np.where(
-        hard_excluded,
-        "test/training/admin: " + hard_reason,
-        "strict-eligibility: " + eligibility_reason,
-    )
-    flag_reason = np.where(
-        eligibility_hit,
-        "status flag: " + eligibility_reason,
-        "review: " + review_reason,
-    )
-    participants["reason"] = np.where(
-        excluded,
-        exclude_reason,
-        np.where(flagged, flag_reason, "meets inclusion (has record)"),
-    )
-    participants["in_cumulative"] = (participants["decision"] != "excluded").astype(int)
-
-    for field_name in (*config.exclusion_flags, *config.review_flags):
-        if field_name in participants.columns:
-            participants[field_name] = (participants[field_name] == 1).astype(int)
-    if dual_field:
-        participants["dual_enrolled"] = (participants[dual_field] == 1).astype(int)
-
-    return participants, identifier_column, raw_rows, unique_participants, dual_field
 
 
 def live_actuals(participants: pd.DataFrame) -> dict[str, int]:
-    included = participants[participants["in_cumulative"] == 1]
+    inclusion_column = (
+        "included_in_recruitment_count"
+        if "included_in_recruitment_count" in participants.columns
+        else "in_cumulative"
+    )
+    included = participants.loc[
+        participants[inclusion_column].astype("boolean").fillna(False)
+    ]
+    minority_column = (
+        "racial_minority_flag"
+        if "racial_minority_flag" in participants.columns
+        else "is_minority"
+    )
+    hispanic_column = (
+        "hispanic_ethnicity_flag"
+        if "hispanic_ethnicity_flag" in participants.columns
+        else "is_hispanic"
+    )
     return {
         "Total": int(len(included)),
-        "Minority": int(included["is_minority"].sum()),
-        "Hispanic": int(included["is_hispanic"].sum()),
+        "Minority": int(
+            included[minority_column].astype("boolean").fillna(False).sum()
+        ),
+        "Hispanic": int(
+            included[hispanic_column].astype("boolean").fillna(False).sum()
+        ),
     }
 
 
@@ -484,18 +294,17 @@ def actuals_by_milestone(
     snapshot: Mapping[str, Any], config: ProjectConfig, category: str
 ) -> list[int | None]:
     milestones = snapshot["milestones"]
-    current_index = snapshot["current_index"]
-    latest_completed_index = snapshot["latest_completed_index"]
+    explicit_actuals = snapshot.get("actuals_by_category", {}).get(category)
+    if explicit_actuals is not None:
+        return pad_series(explicit_actuals, len(milestones))
+
+    # Compatibility path for callers that build a presentation-only snapshot.
+    # Published history is preserved as supplied; a live inventory total is
+    # never inserted into a historical milestone.
     values: list[int | None] = [None] * len(milestones)
     for index, value in enumerate(config.historical_actuals.get(category, [])):
         if index < len(values):
             values[index] = value
-    if latest_completed_index >= 0:
-        values[latest_completed_index] = snapshot["live"][category]
-    elif current_index < len(values):
-        values[current_index] = snapshot["live"][category]
-    for index in range(current_index + 1, len(values)):
-        values[index] = None
     return values
 
 
@@ -763,7 +572,7 @@ body {{
   <main class=\"page-shell\">
     <header class=\"page-header\">
       <h1>Recruitment Milestones</h1>
-      <p>Automatic REDCap API refresh for NANO and NICO. Report cut-off: {escape(report_date.isoformat())}. Source endpoint: {escape(api_url)}.</p>
+      <p>Read-only REDCap validation for NANO and NICO; published milestone values are preserved and unavailable values remain N/A. Report cut-off: {escape(report_date.isoformat())}. Source endpoint: {escape(api_url)}.</p>
     </header>
     <div class=\"report-stack\">{cards}</div>
   </main>
@@ -782,22 +591,100 @@ def build_combined_dashboard_from_documents(
     return render_dashboard_html(rendered_tables, report_date, api_url)
 
 
+def _first_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for item in value:
+            if isinstance(item, Mapping):
+                return dict(item)
+    return {}
+
+
+def _as_bool(value: Any) -> bool:
+    return str(value).strip().casefold() in {"1", "true", "yes"}
+
+
 def _fetch_snapshot(
     project_key: str, token: str, report_date: dt.date, api_url: str
 ) -> dict[str, Any]:
     config = PROJECT_CONFIG[project_key]
     try:
         project = Project(api_url, token, timeout=(10, 60))
-        metadata = _paced_call(project, "export_metadata", format_type="df").reset_index()
-        participants, identifier_column, raw_rows, unique_participants, dual_field = build_classification(
-            project, metadata, config
+        project_info = _first_mapping(
+            _paced_call(project, "export_project_info", format_type="json")
+        )
+        validate_project_identity(project_key, project_info, config)
+
+        raw_metadata = _paced_call(project, "export_metadata", format_type="df")
+        metadata, schema_checks = validate_metadata(
+            project_key, raw_metadata, config
+        )
+        instruments = _paced_call(
+            project, "export_instruments", format_type="json"
+        )
+        access_evidence: dict[str, bool] = {
+            "project_info": True,
+            "metadata": True,
+            "instruments": True,
+        }
+
+        events: Any = []
+        event_mappings: Any = []
+        repeating: Any = []
+        if _as_bool(project_info.get("is_longitudinal")):
+            events = _paced_call(project, "export_events", format_type="json")
+            event_mappings = _paced_call(
+                project,
+                "export_instrument_event_mappings",
+                format_type="json",
+            )
+            access_evidence["events"] = True
+            access_evidence["event_mappings"] = True
+        if _as_bool(project_info.get("has_repeating_instruments_or_events")):
+            repeating = _paced_call(
+                project,
+                "export_repeating_instruments_events",
+                format_type="json",
+            )
+            access_evidence["repeating"] = True
+
+        record_fields = minimal_record_fields(config, metadata)
+        raw_records = _paced_call(
+            project,
+            "export_records",
+            format_type="df",
+            fields=record_fields,
+            raw_or_label="raw",
+        )
+        records = (
+            raw_records.reset_index()
+            if isinstance(raw_records, pd.DataFrame)
+            else raw_records
+        )
+        access_evidence["minimal_records"] = True
+        milestones = build_milestones(config)
+        participants, data_quality = collapse_participants(
+            project_key=project_key,
+            records=records,
+            metadata=metadata,
+            config=config,
+            milestones=milestones,
+            report_date=report_date,
+        )
+        actuals = actuals_from_audit(participants, config, milestones)
+        inventory = inventory_counts(participants)
+        project_summary = summary_long(
+            project_key=project_key,
+            config=config,
+            milestones=milestones,
+            actuals=actuals,
         )
     except Exception as error:
         raise RecruitmentReportError(
             f"{project_key}: {sanitize_error(error)}"
         ) from error
 
-    milestones = build_milestones(config)
     current_index = next(
         (index for index, milestone in enumerate(milestones) if milestone >= report_date),
         len(milestones) - 1,
@@ -808,16 +695,27 @@ def _fetch_snapshot(
     latest_completed_index = completed_indices[-1] if completed_indices else -1
     snapshot = {
         "project_key": project_key,
+        "project_info": project_info,
         "metadata": metadata,
+        "schema_checks": schema_checks,
+        "instruments": instruments,
+        "events": events,
+        "event_mappings": event_mappings,
+        "repeating": repeating,
+        "record_fields": record_fields,
         "participants": participants,
-        "identifier_column": identifier_column,
-        "raw_rows": raw_rows,
-        "unique_participants": unique_participants,
-        "dual_field": dual_field,
+        "identifier_column": config.record_id,
+        "raw_rows": len(records),
+        "unique_participants": len(participants),
+        "dual_field": config.dual_field,
         "milestones": milestones,
         "current_index": current_index,
         "latest_completed_index": latest_completed_index,
-        "live": live_actuals(participants),
+        "actuals_by_category": actuals,
+        "inventory": inventory,
+        "access_evidence": access_evidence,
+        "data_quality": data_quality,
+        "summary_long": project_summary,
     }
     return snapshot
 
@@ -830,7 +728,7 @@ def _write_text(path: Path, content: str) -> None:
 def _is_dated_output_file(path: Path) -> bool:
     return bool(
         re.match(
-            r"^(nano|nico)_recruitment_milestones_\d{4}-\d{2}-\d{2}\.html$",
+            r"^(nano|nico)_recruitment_milestones_\d{4}-\d{2}-\d{2}\.(html|xlsx)$",
             path.name,
         )
         or re.match(
@@ -880,6 +778,8 @@ def generate_reports(
     api_url: str = DEFAULT_API_URL,
     output_dir: str | os.PathLike[str] = DEFAULT_OUTPUT_DIR,
     include_excel: bool = True,
+    secure_output_dir: str | os.PathLike[str] = DEFAULT_SECURE_OUTPUT_DIR,
+    include_secure_audit: bool = True,
 ) -> dict[str, Any]:
     resolved_tokens = {
         project_key: (token or "").strip()
@@ -906,6 +806,7 @@ def generate_reports(
     renderings: dict[str, str] = {}
     errors: dict[str, str] = {}
     written_files: list[Path] = []
+    secure_written_files: list[Path] = []
     archived_files: list[Path] = []
 
     for project_key in selected_projects:
@@ -923,6 +824,12 @@ def generate_reports(
     if not snapshots:
         detail = "; ".join(f"{key}: {value}" for key, value in errors.items())
         raise RecruitmentReportError(f"No reports were generated. {detail}")
+    if len(selected_projects) > 1 and set(snapshots) != set(selected_projects):
+        detail = "; ".join(f"{key}: {value}" for key, value in errors.items())
+        raise RecruitmentReportError(
+            "A complete multi-project refresh was not available; no outputs were "
+            f"published. {detail}"
+        )
 
     archived_files = _archive_existing_dated_outputs(output_root, archive_root)
 
@@ -955,9 +862,86 @@ def generate_reports(
                 frame.to_excel(workbook, sheet_name=project_key[:31])
         written_files.extend([dated_workbook_path, latest_workbook_path])
 
+        for project_key, snapshot in snapshots.items():
+            config = PROJECT_CONFIG[project_key]
+            dated_project_workbook = (
+                archive_root
+                / f"{project_key.lower()}_recruitment_milestones_{date_stamp}.xlsx"
+            )
+            latest_project_workbook = (
+                output_root
+                / f"{project_key.lower()}_recruitment_milestones_latest.xlsx"
+            )
+            workbook_arguments = {
+                "project_key": project_key,
+                "config": config,
+                "milestones": snapshot["milestones"],
+                "actuals": snapshot["actuals_by_category"],
+                "report_date": resolved_date,
+                "project_info": snapshot["project_info"],
+                "inventory": snapshot["inventory"],
+                "access_evidence": snapshot["access_evidence"],
+            }
+            write_project_workbook(path=dated_project_workbook, **workbook_arguments)
+            write_project_workbook(path=latest_project_workbook, **workbook_arguments)
+            written_files.extend(
+                [dated_project_workbook, latest_project_workbook]
+            )
+
+    if include_secure_audit and set(PROJECT_ORDER).issubset(snapshots):
+        secure_root = Path(secure_output_dir)
+        project_summaries = {
+            project_key: snapshots[project_key]["summary_long"]
+            for project_key in PROJECT_ORDER
+        }
+        combined = combined_summary(project_summaries)
+        all_quality = pd.concat(
+            [
+                snapshots[project_key]["data_quality"]
+                for project_key in PROJECT_ORDER
+            ],
+            ignore_index=True,
+        )
+        project_audits = {
+            project_key: snapshots[project_key]["participants"]
+            for project_key in PROJECT_ORDER
+        }
+        if include_excel:
+            for project_key in PROJECT_ORDER:
+                snapshot = snapshots[project_key]
+                secure_workbook = (
+                    secure_root
+                    / f"{project_key.lower()}_recruitment_ground_truth_{date_stamp}.xlsx"
+                )
+                write_project_workbook(
+                    path=secure_workbook,
+                    project_key=project_key,
+                    config=PROJECT_CONFIG[project_key],
+                    milestones=snapshot["milestones"],
+                    actuals=snapshot["actuals_by_category"],
+                    report_date=resolved_date,
+                    project_info=snapshot["project_info"],
+                    inventory=snapshot["inventory"],
+                    access_evidence=snapshot["access_evidence"],
+                    participant_audit=snapshot["participants"],
+                    combined_milestone_summary=combined,
+                    data_quality_issues=snapshot["data_quality"],
+                )
+                secure_written_files.append(secure_workbook)
+        secure_written_files.extend(
+            write_csv_package(
+                output_dir=secure_root / f"csv_package_{date_stamp}",
+                project_audits=project_audits,
+                project_summaries=project_summaries,
+                combined=combined,
+                data_quality=all_quality,
+            )
+        )
+
     return {
         "report_date": resolved_date,
         "written_files": written_files,
+        "secure_written_files": secure_written_files,
         "archived_files": archived_files,
         "snapshots": snapshots,
         "errors": errors,
@@ -988,6 +972,19 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip the Excel workbook export.",
     )
+    parser.add_argument(
+        "--secure-output-dir",
+        default=DEFAULT_SECURE_OUTPUT_DIR,
+        help=(
+            "Ignored local directory for restricted participant audits and the "
+            "six-file CSV package."
+        ),
+    )
+    parser.add_argument(
+        "--no-secure-audit",
+        action="store_true",
+        help="Do not write participant-level workbooks or CSVs.",
+    )
     return parser.parse_args()
 
 
@@ -999,6 +996,8 @@ def main() -> int:
             api_url=arguments.api_url,
             output_dir=arguments.output_dir,
             include_excel=not arguments.no_excel,
+            secure_output_dir=arguments.secure_output_dir,
+            include_secure_audit=not arguments.no_secure_audit,
         )
     except RecruitmentReportError as error:
         print(str(error))
@@ -1009,6 +1008,11 @@ def main() -> int:
         print(f"archived {path}")
     for path in result["written_files"]:
         print(f"wrote {path}")
+    if result.get("secure_written_files"):
+        print(
+            "wrote restricted audit package: "
+            f"{len(result['secure_written_files'])} files"
+        )
     for project_key, detail in result["errors"].items():
         print(f"warning {project_key}: {detail}")
     return 0

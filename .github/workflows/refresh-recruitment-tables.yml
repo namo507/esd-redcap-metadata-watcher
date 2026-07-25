@@ -39,9 +39,27 @@ jobs:
         if: ${{ vars.REDCAP_API_URL != '' }}
         run: echo "REDCAP_API_URL=${{ vars.REDCAP_API_URL }}" >> "$GITHUB_ENV"
 
+      - name: Run automated checks
+        run: python -m pytest
+
+      - name: Reject token-shaped literals
+        run: |
+          if rg -l --hidden \
+            -g '!.git/**' \
+            -g '!.venv*/**' \
+            -g '!assets/**' \
+            -g '!recruitment_outputs/**' \
+            -g '!recruitment_audit_secure/**' \
+            '[A-Fa-f0-9]{32}' .; then
+            echo "Token-shaped literal found in source."
+            exit 1
+          fi
+
       - name: Refresh read-only recruitment outputs
         run: |
-          python recruitment_reports.py --output-dir recruitment_outputs
+          python recruitment_reports.py \
+            --output-dir recruitment_outputs \
+            --no-secure-audit
 
       - name: Upload refreshed outputs
         uses: actions/upload-artifact@v4
