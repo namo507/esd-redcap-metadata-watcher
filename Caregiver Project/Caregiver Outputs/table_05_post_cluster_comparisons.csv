@@ -1,0 +1,17 @@
+variable,type,n,test,p,effect size,effect measure,pattern,flag
+Wishes an earlier diagnosis (ASD households),categorical,48,chi-square (small expected cells - treat p with caution),0.0042,0.4778,Cramer's V,"Ready and Willing, ethically confident: 7% No | Hesitant, ethically uncertain: 47% No",p < .05 (exploratory)
+Any premature birth,categorical,107,chi-square,0.0169,0.231,Cramer's V,"Ready and Willing, ethically confident: 75% No | Hesitant, ethically uncertain: 52% No",p < .05 (exploratory)
+"Autism knowledge score (0-8, objective)",continuous/ordinal,107,Kruskal-Wallis,0.0633,0.0233,epsilon^2,"Ready and Willing, ethically confident: 4.29 | Hesitant, ethically uncertain: 3.68",
+Caregiver is autistic,categorical,107,chi-square (small expected cells - treat p with caution),0.226,0.1667,Cramer's V,"Ready and Willing, ethically confident: 83% No | Hesitant, ethically uncertain: 86% No",
+Household income,categorical,107,chi-square (small expected cells - treat p with caution),0.2422,0.1978,Cramer's V,"Ready and Willing, ethically confident: 17% $60,000 or less | Hesitant, ethically uncertain: 23% $60,000 or less",
+Any child with special needs,categorical,107,chi-square,0.3489,0.0906,Cramer's V,"Ready and Willing, ethically confident: 48% No | Hesitant, ethically uncertain: 57% No",
+Ease of healthcare access,categorical,106,chi-square (small expected cells - treat p with caution),0.3514,0.1757,Cramer's V,"Ready and Willing, ethically confident: 3% Somewhat difficult | Hesitant, ethically uncertain: 0% Somewhat difficult",
+Number of autistic children,continuous/ordinal,107,Kruskal-Wallis,0.5009,-0.0052,epsilon^2,"Ready and Willing, ethically confident: 0.63 | Hesitant, ethically uncertain: 0.52",
+People in the household,continuous/ordinal,106,Kruskal-Wallis,0.5786,-0.0066,epsilon^2,"Ready and Willing, ethically confident: 4.27 | Hesitant, ethically uncertain: 4.20",
+Number of children,continuous/ordinal,107,Kruskal-Wallis,0.6348,-0.0074,epsilon^2,"Ready and Willing, ethically confident: 2.43 | Hesitant, ethically uncertain: 2.43",
+Gender,categorical,107,chi-square (small expected cells - treat p with caution),0.6607,0.088,Cramer's V,"Ready and Willing, ethically confident: 3% Man | Hesitant, ethically uncertain: 5% Man",
+Self-rated autism knowledge (1-5),continuous/ordinal,107,Kruskal-Wallis,0.7182,-0.0083,epsilon^2,"Ready and Willing, ethically confident: 3.49 | Hesitant, ethically uncertain: 3.43",
+ASD household (autistic child),categorical,107,chi-square,0.7705,0.0282,Cramer's V,"Ready and Willing, ethically confident: 46% ASD household | Hesitant, ethically uncertain: 43% ASD household",
+Area of residence,categorical,107,chi-square,0.8081,0.0631,Cramer's V,"Ready and Willing, ethically confident: 22% Rural | Hesitant, ethically uncertain: 18% Rural",
+Education,categorical,107,chi-square,0.8084,0.0234,Cramer's V,"Ready and Willing, ethically confident: 68% Bachelor's degree or higher | Hesitant, ethically uncertain: 70% Bachelor's degree or higher",
+Works with autistic individuals,categorical,107,chi-square,0.9937,0.0008,Cramer's V,"Ready and Willing, ethically confident: 68% No | Hesitant, ethically uncertain: 68% No",
