@@ -1,0 +1,15 @@
+item,variable,cluster,valid_n,correct_n,correct_pct,ci_low_pct,ci_high_pct
+Genetics,tfa_genetics,Higher acceptability,80,24,30.0,21.064429162615706,40.7683602879673
+Genetics,tfa_genetics,Conditional acceptability,47,10,21.27659574468085,11.989580124247315,34.904302050979275
+Vaccines,tfa_vaccines,Higher acceptability,82,61,74.39024390243902,64.00090293352574,82.59655098159233
+Vaccines,tfa_vaccines,Conditional acceptability,47,34,72.3404255319149,58.24116429931004,83.06359400884708
+Tylenol,tfa_tylenol,Higher acceptability,82,64,78.04878048780488,67.94774330026092,85.63932870212487
+Tylenol,tfa_tylenol,Conditional acceptability,47,35,74.46808510638297,60.4915508600796,84.74699395361627
+Medication,tfa_medications,Higher acceptability,81,40,49.382716049382715,38.771930018551174,60.04940291246379
+Medication,tfa_medications,Conditional acceptability,47,25,53.191489361702125,39.23214192677079,66.66853783153736
+Why diagnoses increased,tfa_rate,Higher acceptability,81,55,67.90123456790124,57.12341939491306,77.0579256056527
+Why diagnoses increased,tfa_rate,Conditional acceptability,47,26,55.319148936170215,41.245213738758245,68.5892525250887
+US prevalence,tfa_autistic_us,Higher acceptability,80,40,50.0,39.2972274311075,60.702772568892506
+US prevalence,tfa_autistic_us,Conditional acceptability,46,14,30.434782608695656,19.079670807448903,44.80591874023817
+Sibling recurrence,tfa_mult_kids_odds,Higher acceptability,81,36,44.44444444444444,34.11937567641278,55.27262070272197
+Sibling recurrence,tfa_mult_kids_odds,Conditional acceptability,47,18,38.297872340425535,25.79048266351308,52.573691556023675

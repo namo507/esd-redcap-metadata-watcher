@@ -1,0 +1,7 @@
+check,n_or_difference,interpretation
+Raw REDCap records,177,Source population in export
+Selected analytic IDs,135,Exact IDs in cleaned labeled subset
+All three forms complete,131,4 selected records are partial
+Valid primary screen outcome,131,4 missing remain missing
+Valid calculated caregiver age,126,Zeros and missing excluded
+Raw/labeled schema difference,3,Demographic labels cannot be position-zipped

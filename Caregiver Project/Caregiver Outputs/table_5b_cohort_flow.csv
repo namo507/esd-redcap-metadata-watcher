@@ -1,0 +1,5 @@
+stage,n,note
+Selected analytic cohort,135,Cohort supplied in cleaned_autism_study_data.csv
+Cluster-assigned (≥8/10 input domains),131,Primary clustering cohort
+Cluster-assigned with valid screening outcome,127,Primary held-out screening comparison
+Excluded from clustering but screening-valid,4,0 answered Definitely yes

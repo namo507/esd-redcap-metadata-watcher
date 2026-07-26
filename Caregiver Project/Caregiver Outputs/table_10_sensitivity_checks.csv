@@ -1,0 +1,5 @@
+check,n,cluster_sizes,agreement_ARI_vs_primary,silhouette,interpretation,strict_screen_rates,strict_screen_difference_pp,strict_screen_fisher_p
+Complete-domain cases only,120,62/58,0.584505288148737,0.152979733239753,Tests composite-level median imputation,,,
+Exclude ethical/moral support,131,80/51,0.6140976030040888,0.17224824627674917,Tests whether the screening association persists without the ethics domain,49/78 (62.8%) vs 20/49 (40.8%),22.004186289900574,0.018076839593787634
+5th–95th percentile winsorization,131,75/56,0.6896542012567571,0.1652326587413531,Tests influence of marginal outliers before standard-deviation scaling,,,
+Ward hierarchical clustering,131,88/43,0.8224044506049525,0.18170732730254774,Tests method dependence,,,

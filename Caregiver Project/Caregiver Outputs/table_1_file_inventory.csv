@@ -1,0 +1,5 @@
+file,rows,columns,size_kb,sha256_12,role
+InfantAutismScreenin-FullDataset_DATA_2026-01-20_0940.csv,177,183,187.5,0aadc4ee96cf,Authoritative raw-code export
+InfantAutismScreenin-FullDataset_DATA_LABELS_2026-01-20_0940.csv,177,186,442.2,55ea1f9e12de,Question/response labels; sensitive fields not loaded
+cleaned_autism_study_data.csv,135,186,429.7,89293f2be8eb,135-ID analytic cohort definition; selection rule undocumented
+Analysis questions - Sheet3.csv,43,5,8.7,0cc7ef113532,Local analysis definitions and prior-result tracker
