@@ -1,0 +1,10 @@
+panel,group,statistic,value,n,p_value,note
+1. ASD household by cluster,Higher acceptability,Household with >=1 autistic child,35/84 (41.7%),84.0,0.3609,"Fisher exact, clusters do not differ"
+1. ASD household by cluster,Conditional acceptability,Household with >=1 autistic child,24/47 (51.1%),47.0,0.3609,"Fisher exact, clusters do not differ"
+2. Screening by ASD household,ASD child at home,Definitely yes,39/60 (65.0%),60.0,0.0137,"Fisher exact, ASD experience predicts screening intent"
+2. Screening by ASD household,No ASD child at home,Definitely yes,30/71 (42.3%),71.0,0.0137,"Fisher exact, ASD experience predicts screening intent"
+3. Cluster gap within ASD strata,Yes ASD at home,Higher vs Conditional definitely yes,30/34 (88.2%) vs 9/24 (37.5%),,0.0001,gap 50.7 pp
+3. Cluster gap within ASD strata,No ASD at home,Higher vs Conditional definitely yes,26/46 (56.5%) vs 4/23 (17.4%),,0.0022,gap 39.1 pp
+4. Logistic model (additive),Higher acceptability profile,Adjusted odds ratio,8.73,127.0,0.0,y ~ cluster + ASD at home
+4. Logistic model (additive),ASD child at home,Adjusted odds ratio,4.32,127.0,0.0012,y ~ cluster + ASD at home
+4. Logistic model (additive),Cluster x ASD interaction,Odds ratio,2.02,127.0,0.4449,"Not significant, effects are additive"

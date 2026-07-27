@@ -11,6 +11,7 @@ table_7_values_summary.csv,10.0,10.0,df50d1822882
 table_8_demographics_summary.csv,11.0,9.0,4877fedc670d
 table_9_decision_summary.csv,2.0,7.0,ef2843d3e358
 table_10_sensitivity_checks.csv,4.0,9.0,ce05647b5a24
+table_11_asd_family_context.csv,9.0,7.0,9e44e30981a3
 figure_1_cluster_count_diagnostics.pdf,,,1b543f329017
 figure_1_cluster_count_diagnostics.png,,,c896fb55cbeb
 figure_2_primary_cluster_profiles.pdf,,,8da451ae31cc
