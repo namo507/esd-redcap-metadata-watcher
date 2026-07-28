@@ -42,6 +42,10 @@ jobs:
       - name: Run automated checks
         run: python -m pytest
 
+      # docs/data.json is generated from REDCap field metadata and legitimately
+      # contains REDCap doc_id_hash values in embedded image URLs. The site
+      # builder itself refuses to write a payload containing any configured
+      # token, which is the check that matters for that file.
       - name: Reject token-shaped literals
         run: |
           if rg -l --hidden \
@@ -53,6 +57,7 @@ jobs:
             -g '!**/ml_forecast_outputs/**' \
             -g '!archive/**' \
             -g '!projects/redcap-logs-dashboard/**' \
+            -g '!docs/data.json' \
             '[A-Fa-f0-9]{32}' .; then
             echo "Token-shaped literal found in source."
             exit 1

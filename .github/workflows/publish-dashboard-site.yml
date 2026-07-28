@@ -1,0 +1,88 @@
+name: Publish Dashboard Site
+
+# Regenerates the static GitHub Pages dashboard from live REDCap data.
+#
+# Pages source: Settings -> Pages -> Deploy from a branch -> main / docs
+# Required repository secrets: NANO_API_TOKEN, NICO_API_TOKEN, IPSA_API_TOKEN,
+# ACTION_API_TOKEN. Any study whose secret is absent is skipped; the build
+# succeeds as long as at least one project connects.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 06:00 America/New_York (10:00 UTC), daily.
+    - cron: '0 10 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-dashboard-site
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NANO_API_TOKEN: ${{ secrets.NANO_API_TOKEN }}
+      NICO_API_TOKEN: ${{ secrets.NICO_API_TOKEN }}
+      IPSA_API_TOKEN: ${{ secrets.IPSA_API_TOKEN }}
+      ACTION_API_TOKEN: ${{ secrets.ACTION_API_TOKEN }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Require at least one token
+        run: |
+          if [ -z "$NANO_API_TOKEN" ] && [ -z "$NICO_API_TOKEN" ] \
+             && [ -z "$IPSA_API_TOKEN" ] && [ -z "$ACTION_API_TOKEN" ]; then
+            echo "No study token secrets are set; nothing to publish."
+            exit 1
+          fi
+
+      - name: Apply optional API URL override
+        if: ${{ vars.REDCAP_API_URL != '' }}
+        run: echo "REDCAP_API_URL=${{ vars.REDCAP_API_URL }}" >> "$GITHUB_ENV"
+
+      - name: Build the static site
+        run: python projects/redcap-metadata-watcher/build_static_site.py --output docs
+
+      - name: Verify the build
+        run: |
+          test -s docs/index.html || { echo "index.html missing or empty"; exit 1; }
+          test -s docs/data.json  || { echo "data.json missing or empty"; exit 1; }
+          python - <<'PY'
+          import json, pathlib, sys
+          payload = json.loads(pathlib.Path("docs/data.json").read_text())
+          studies = payload.get("studies", [])
+          fields = payload.get("fields", {}).get("rows", [])
+          if not studies:
+              sys.exit("no studies in payload")
+          if not fields:
+              sys.exit("no fields in payload")
+          print(f"{len(studies)} studies, {len(fields):,} fields, "
+                f"built {payload['generatedAt']}")
+          PY
+
+      - name: Commit refreshed site
+        run: |
+          if [ -z "$(git status --porcelain -- docs)" ]; then
+            echo "No dashboard changes to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git commit -m "Refresh dashboard site"
+          git push

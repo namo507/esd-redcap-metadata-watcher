@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESD Lab REDCap Studies</title>
+<link rel="icon" href="assets/favicon.png">
+<meta name="description" content="Read-only structural dashboard for the ESD Lab REDCap studies.">
+<style>
+:root{
+  --blue:#3366FF; --red:#D74E2D; --teal:#00A17A; --violet:#8B5CF6;
+  --good:#1F8A5F; --unver:#7C3AED; --incomp:#D74E2D; --none:#9CA3AF;
+  --ink:#0B0D12; --soft:#5A6472; --line:#E3E8F2; --cool:#EEF3FD;
+  --surface:#FFFFFF; --bg:#F4F5F8;
+  --radius:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --ink:#EDF0F6; --soft:#9AA3B2; --line:#2A3140; --cool:#1E2430;
+         --surface:#151A22; --bg:#0E1218; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 "Libre Franklin",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--blue)}
+.wrap{max-width:1280px;margin:0 auto;padding:0 20px 64px}
+
+header.top{background:var(--surface);border-bottom:1px solid var(--line);
+  padding:18px 0 0;margin-bottom:22px}
+.head-in{max-width:1280px;margin:0 auto;padding:0 20px;
+  display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.head-in img{height:34px;width:auto}
+h1{font-size:1.4rem;margin:0;letter-spacing:-.01em}
+.sub{color:var(--soft);font-size:.82rem;margin-top:3px}
+.badge{display:inline-block;background:#E8F5EF;color:#136B49;border:1px solid #BFE3D2;
+  border-radius:999px;padding:2px 11px;font-size:.72rem;font-weight:700;letter-spacing:.02em}
+@media (prefers-color-scheme:dark){.badge{background:#12271F;color:#6FD3A6;border-color:#1F4635}}
+.spacer{flex:1}
+
+nav.tabs{max-width:1280px;margin:16px auto 0;padding:0 20px;display:flex;gap:2px;
+  overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{background:none;border:0;border-bottom:2px solid transparent;
+  padding:10px 14px;font:inherit;font-weight:600;color:var(--soft);cursor:pointer;
+  white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--blue);border-bottom-color:var(--blue)}
+nav.tabs button:hover{color:var(--ink)}
+
+section[role=tabpanel]{display:none}
+section[role=tabpanel].on{display:block}
+
+h2{font-size:1.02rem;margin:26px 0 10px;letter-spacing:-.01em}
+h2:first-child{margin-top:6px}
+p.note{color:var(--soft);font-size:.82rem;margin:-4px 0 12px}
+
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 18px}
+.kpi{flex:1 1 150px;background:var(--surface);border:1px solid var(--line);
+  border-left:4px solid var(--accent,var(--blue));border-radius:var(--radius);padding:12px 14px}
+.kpi .v{font-size:1.5rem;font-weight:700;line-height:1.15}
+.kpi .l{font-size:.7rem;color:var(--soft);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.kpi .s{font-size:.72rem;color:var(--soft);margin-top:3px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 16px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:.83rem;min-width:520px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--soft);font-weight:600;font-size:.72rem;text-transform:uppercase;
+  letter-spacing:.04em;position:sticky;top:0;background:var(--surface);cursor:pointer;
+  user-select:none}
+th.nosort{cursor:default}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:220px;max-width:480px}
+tbody tr:hover{background:var(--cool)}
+.tall{max-height:560px;overflow:auto}
+
+.chip{display:inline-block;border-radius:999px;padding:1px 9px;font-size:.7rem;
+  font-weight:700;color:#fff}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
+  vertical-align:middle}
+.bar-track{background:var(--cool);border-radius:4px;height:8px;width:76px;display:inline-block;
+  vertical-align:middle;overflow:hidden;margin-right:7px}
+.bar-fill{height:100%;border-radius:4px;display:block}
+
+input[type=search],input[type=text],select{background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:8px 11px;font:inherit;width:100%}
+input:focus,select:focus{outline:2px solid var(--blue);outline-offset:-1px}
+.filters{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px}
+@media(max-width:900px){.filters{grid-template-columns:1fr 1fr}}
+.toggles{display:flex;gap:16px;flex-wrap:wrap;margin:4px 0 12px;font-size:.82rem;color:var(--soft)}
+.toggles label{display:flex;align-items:center;gap:6px;cursor:pointer}
+label.fl{display:block;font-size:.72rem;color:var(--soft);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:4px;font-weight:600}
+button.act{background:var(--blue);color:#fff;border:0;border-radius:8px;padding:8px 14px;
+  font:inherit;font-weight:600;cursor:pointer}
+button.act:hover{filter:brightness(1.08)}
+button.ghost{background:none;border:1px solid var(--line);color:var(--ink)}
+
+svg .lbl{font-size:11px;fill:var(--soft)}
+svg .val{font-size:11px;fill:var(--soft);font-variant-numeric:tabular-nums}
+svg .gl{stroke:var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.75rem;color:var(--soft);margin:2px 0 8px}
+.legend span{display:flex;align-items:center;gap:5px}
+
+.tip{position:fixed;pointer-events:none;background:var(--surface);border:1px solid var(--line);
+  border-radius:7px;padding:6px 9px;font-size:.76rem;box-shadow:0 4px 14px rgba(0,0,0,.13);
+  opacity:0;transition:opacity .1s;z-index:50;white-space:nowrap}
+.tip.on{opacity:1}
+
+.pill{display:inline-block;font-size:.7rem;font-weight:700;padding:1px 8px;border-radius:999px;
+  border:1px solid var(--line);color:var(--soft)}
+.pill.bad{background:#FDECE7;color:#9A3412;border-color:#F6C9B8}
+.pill.warnp{background:#F1E9FE;color:#5B21B6;border-color:#DCCBFB}
+.pill.okp{background:#E8F5EF;color:#136B49;border-color:#BFE3D2}
+.pill.part{background:var(--cool);color:var(--soft)}
+@media (prefers-color-scheme:dark){
+  .pill.bad{background:#2A1410;color:#F4A98C;border-color:#4A2418}
+  .pill.warnp{background:#1E1533;color:#C4A6FB;border-color:#33235C}
+  .pill.okp{background:#12271F;color:#6FD3A6;border-color:#1F4635}
+}
+footer{color:var(--soft);font-size:.78rem;border-top:1px solid var(--line);
+  margin-top:34px;padding-top:14px}
+.loading{padding:60px 0;text-align:center;color:var(--soft)}
+dl.defs{display:grid;grid-template-columns:190px 1fr;gap:8px 18px;font-size:.86rem}
+dl.defs dt{font-weight:700}
+dl.defs dd{margin:0;color:var(--soft)}
+@media(max-width:700px){dl.defs{grid-template-columns:1fr}dl.defs dd{margin-bottom:8px}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="head-in">
+    <img src="assets/esd-logo.png" alt="ESD Lab" onerror="this.style.display='none'">
+    <div>
+      <h1>REDCap Studies</h1>
+      <div class="sub" id="subtitle">Loading…</div>
+    </div>
+    <div class="spacer"></div>
+    <div style="text-align:right">
+      <span class="badge">READ-ONLY</span>
+      <div class="sub" id="stamp"></div>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" aria-selected="true" data-p="portfolio">Portfolio</button>
+    <button role="tab" aria-selected="false" data-p="study">Study detail</button>
+    <button role="tab" aria-selected="false" data-p="compare">Instrument comparison</button>
+    <button role="tab" aria-selected="false" data-p="fields">Field explorer</button>
+    <button role="tab" aria-selected="false" data-p="about">Definitions</button>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div id="boot" class="loading">Loading dashboard data…</div>
+
+  <section role="tabpanel" id="p-portfolio" class="on"></section>
+  <section role="tabpanel" id="p-study"></section>
+  <section role="tabpanel" id="p-compare"></section>
+  <section role="tabpanel" id="p-fields"></section>
+  <section role="tabpanel" id="p-about"></section>
+
+  <footer id="foot"></footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+"use strict";
+const SC={NANO:"var(--blue)",NICO:"var(--red)",IPSA:"var(--teal)",ACTION:"var(--violet)"};
+const SHEX={NANO:"#3366FF",NICO:"#D74E2D",IPSA:"#00A17A",ACTION:"#8B5CF6"};
+const STC={"Complete":"#1F8A5F","Unverified":"#7C3AED","Incomplete":"#D74E2D","Not started":"#9CA3AF"};
+const sc=k=>SHEX[k]||"#5A6472";
+const F={REQ:1,ID:2,BR:4,LBL:8,VAL:16};
+const nf=n=>Number(n||0).toLocaleString();
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const el=(h)=>{const d=document.createElement("div");d.innerHTML=h.trim();return d.firstElementChild;};
+
+let DATA=null, FIELDS=[], STUDYSEL=null;
+
+/* ---------- tiny SVG chart helpers ---------- */
+const tip=document.getElementById("tip");
+function showTip(e,html){tip.innerHTML=html;tip.classList.add("on");moveTip(e);}
+function moveTip(e){const p=12;let x=e.clientX+p,y=e.clientY+p;
+  const r=tip.getBoundingClientRect();
+  if(x+r.width>innerWidth-8)x=e.clientX-r.width-p;
+  if(y+r.height>innerHeight-8)y=e.clientY-r.height-p;
+  tip.style.left=x+"px";tip.style.top=y+"px";}
+function hideTip(){tip.classList.remove("on");}
+function bindTip(node,html){
+  node.addEventListener("mouseenter",e=>showTip(e,html));
+  node.addEventListener("mousemove",moveTip);
+  node.addEventListener("mouseleave",hideTip);
+}
+
+/* Horizontal bars. rows=[{label,value,color,tip}] */
+function hbar(rows,opt){
+  opt=opt||{};
+  const pad={l:opt.labelWidth||150,r:52,t:6,b:opt.axis?22:6};
+  const rowH=opt.rowH||26, w=opt.width||520;
+  const h=pad.t+pad.b+rows.length*rowH;
+  const max=Math.max(1,...rows.map(r=>r.value));
+  const iw=w-pad.l-pad.r;
+  const ns="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  svg.setAttribute("width","100%");svg.setAttribute("height",h);
+  svg.setAttribute("role","img");
+  rows.forEach((r,i)=>{
+    const y=pad.t+i*rowH;
+    const bw=Math.max(2,iw*(r.value/max));
+    const t=document.createElementNS(ns,"text");
+    t.setAttribute("x",pad.l-8);t.setAttribute("y",y+rowH/2+4);
+    t.setAttribute("text-anchor","end");t.setAttribute("class","lbl");
+    t.textContent=r.label.length>26?r.label.slice(0,25)+"…":r.label;
+    svg.appendChild(t);
+    const bar=document.createElementNS(ns,"rect");
+    bar.setAttribute("x",pad.l);bar.setAttribute("y",y+5);
+    bar.setAttribute("width",bw);bar.setAttribute("height",rowH-12);
+    bar.setAttribute("rx",4);bar.setAttribute("fill",r.color||"#3366FF");
+    svg.appendChild(bar);
+    bindTip(bar,r.tip||`<b>${esc(r.label)}</b><br>${nf(r.value)}`);
+    const v=document.createElementNS(ns,"text");
+    v.setAttribute("x",pad.l+bw+7);v.setAttribute("y",y+rowH/2+4);
+    v.setAttribute("class","val");
+    v.textContent=r.text!=null?r.text:nf(r.value);
+    svg.appendChild(v);
+  });
+  return svg;
+}
+
+/* Stacked horizontal bars. rows=[{label,parts:[{k,v}]}] */
+function hstack(rows,keys,colors,opt){
+  opt=opt||{};
+  const pad={l:opt.labelWidth||170,r:46,t:6,b:6};
+  const rowH=opt.rowH||24,w=opt.width||560;
+  const h=pad.t+pad.b+rows.length*rowH;
+  const max=Math.max(1,...rows.map(r=>r.parts.reduce((a,p)=>a+p.v,0)));
+  const iw=w-pad.l-pad.r;
+  const ns="http://www.w3.org/2000/svg";
+  const svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox",`0 0 ${w} ${h}`);
+  svg.setAttribute("width","100%");svg.setAttribute("height",h);
+  rows.forEach((r,i)=>{
+    const y=pad.t+i*rowH;
+    const t=document.createElementNS(ns,"text");
+    t.setAttribute("x",pad.l-8);t.setAttribute("y",y+rowH/2+4);
+    t.setAttribute("text-anchor","end");t.setAttribute("class","lbl");
+    t.textContent=r.label.length>28?r.label.slice(0,27)+"…":r.label;
+    svg.appendChild(t);
+    let x=pad.l, total=r.parts.reduce((a,p)=>a+p.v,0);
+    r.parts.forEach(p=>{
+      if(p.v<=0)return;
+      const bw=iw*(p.v/max);
+      const rect=document.createElementNS(ns,"rect");
+      rect.setAttribute("x",x);rect.setAttribute("y",y+5);
+      rect.setAttribute("width",Math.max(1,bw-2));rect.setAttribute("height",rowH-11);
+      rect.setAttribute("rx",3);rect.setAttribute("fill",colors[p.k]);
+      svg.appendChild(rect);
+      bindTip(rect,`<b>${esc(r.label)}</b><br>${esc(p.k)}: ${nf(p.v)}`);
+      x+=bw;
+    });
+    const v=document.createElementNS(ns,"text");
+    v.setAttribute("x",pad.l+iw*(total/max)+7);v.setAttribute("y",y+rowH/2+4);
+    v.setAttribute("class","val");v.textContent=nf(total);
+    svg.appendChild(v);
+  });
+  return svg;
+}
+
+function heat(keys,cells){
+  const ns="http://www.w3.org/2000/svg";
+  const cw=Math.max(58,Math.min(96,520/keys.length)),ch=40,pad={l:78,t:26};
+  const w=pad.l+keys.length*cw+8,h=pad.t+keys.length*ch+8;
+  const svg=document.createElementNS(ns,"svg");
+  svg.setAttribute("viewBox",`0 0 ${w} ${h}`);svg.setAttribute("width","100%");
+  svg.setAttribute("height",h);
+  let max=1;keys.forEach((a,i)=>keys.forEach((b,j)=>{if(i!==j)max=Math.max(max,cells[i][j]);}));
+  keys.forEach((k,j)=>{
+    const t=document.createElementNS(ns,"text");
+    t.setAttribute("x",pad.l+j*cw+cw/2);t.setAttribute("y",pad.t-9);
+    t.setAttribute("text-anchor","middle");t.setAttribute("class","lbl");
+    t.textContent=k;svg.appendChild(t);
+  });
+  keys.forEach((k,i)=>{
+    const t=document.createElementNS(ns,"text");
+    t.setAttribute("x",pad.l-9);t.setAttribute("y",pad.t+i*ch+ch/2+4);
+    t.setAttribute("text-anchor","end");t.setAttribute("class","lbl");
+    t.textContent=k;svg.appendChild(t);
+    keys.forEach((k2,j)=>{
+      const v=cells[i][j],same=i===j;
+      const rect=document.createElementNS(ns,"rect");
+      rect.setAttribute("x",pad.l+j*cw+1);rect.setAttribute("y",pad.t+i*ch+1);
+      rect.setAttribute("width",cw-3);rect.setAttribute("height",ch-3);
+      rect.setAttribute("rx",4);
+      rect.setAttribute("fill",same?"var(--cool)":`rgba(51,102,255,${0.10+0.78*(v/max)})`);
+      svg.appendChild(rect);
+      if(!same)bindTip(rect,`<b>${esc(k)} ∩ ${esc(k2)}</b><br>${v} shared instruments`);
+      const t2=document.createElementNS(ns,"text");
+      t2.setAttribute("x",pad.l+j*cw+cw/2);t2.setAttribute("y",pad.t+i*ch+ch/2+4);
+      t2.setAttribute("text-anchor","middle");t2.setAttribute("class","val");
+      t2.setAttribute("fill",(!same&&v/max>0.55)?"#fff":"var(--soft)");
+      t2.textContent=v;svg.appendChild(t2);
+    });
+  });
+  return svg;
+}
+
+/* ---------- sortable tables ---------- */
+function table(cols,rows,opt){
+  opt=opt||{};
+  const wrap=document.createElement("div");
+  wrap.className="scroll"+(opt.tall?" tall":"");
+  const tb=document.createElement("table");
+  const thead=document.createElement("thead");
+  const tr=document.createElement("tr");
+  cols.forEach((c,i)=>{
+    const th=document.createElement("th");
+    th.textContent=c.h;
+    if(c.num)th.classList.add("num");
+    if(c.nosort)th.classList.add("nosort");
+    else th.addEventListener("click",()=>{
+      const dir=(wrap._sort&&wrap._sort.i===i&&wrap._sort.d===1)?-1:1;
+      wrap._sort={i,d:dir};
+      rows.sort((a,b)=>{
+        const x=c.sort?c.sort(a):a[c.k],y=c.sort?c.sort(b):b[c.k];
+        if(typeof x==="number"&&typeof y==="number")return (x-y)*dir;
+        return String(x).localeCompare(String(y))*dir;
+      });
+      body();
+    });
+    tr.appendChild(th);
+  });
+  thead.appendChild(tr);tb.appendChild(thead);
+  const tbody=document.createElement("tbody");tb.appendChild(tbody);
+  function body(){
+    tbody.innerHTML=rows.map(r=>"<tr>"+cols.map(c=>{
+      const cls=(c.num?"num":"")+(c.wrap?" wrap":"");
+      return `<td class="${cls}">${c.r?c.r(r):esc(r[c.k])}</td>`;
+    }).join("")+"</tr>").join("");
+  }
+  body();
+  wrap.appendChild(tb);
+  return wrap;
+}
+const rate=v=>`<span class="bar-track"><span class="bar-fill" style="width:${Math.min(100,v)}%;background:${v>=66?"#1F8A5F":v>=33?"#3366FF":"#D74E2D"}"></span></span>${v.toFixed(1)}%`;
+const yesno=v=>v?"✓":"";
+
+/* ---------- panels ---------- */
+function portfolio(){
+  const S=DATA.studies, p=document.getElementById("p-portfolio");
+  const tot=k=>S.reduce((a,s)=>a+s[k],0);
+  const comp=S.reduce((a,s)=>a+s.completion.Complete,0);
+  const started=S.reduce((a,s)=>a+s.completion.Complete+s.completion.Incomplete+s.completion.Unverified,0);
+  const rt=started?100*comp/started:0;
+  p.innerHTML="";
+  p.appendChild(el(`<div class="kpis">
+    <div class="kpi"><div class="v">${nf(tot("records"))}</div><div class="l">Records</div><div class="s">across ${S.length} studies</div></div>
+    <div class="kpi"><div class="v">${nf(tot("instruments"))}</div><div class="l">Instruments</div><div class="s">survey + data-entry forms</div></div>
+    <div class="kpi"><div class="v">${nf(tot("fields"))}</div><div class="l">Fields</div><div class="s">all field types</div></div>
+    <div class="kpi"><div class="v">${nf(tot("events"))}</div><div class="l">Events</div><div class="s">longitudinal timepoints</div></div>
+    <div class="kpi"><div class="v">${rt.toFixed(0)}%</div><div class="l">Forms complete</div><div class="s">${nf(comp)} of ${nf(started)} started</div></div>
+  </div>`));
+
+  p.appendChild(el("<h2>Study by study</h2>"));
+  const c1=el('<div class="card"></div>');
+  c1.appendChild(table([
+    {h:"Study",k:"key",r:r=>`<span class="chip" style="background:${sc(r.key)}">${esc(r.key)}</span>`},
+    {h:"REDCap project",k:"title",wrap:true},
+    {h:"PID",k:"pid",num:true},
+    {h:"Records",k:"records",num:true,r:r=>nf(r.records)},
+    {h:"Instruments",k:"instruments",num:true,r:r=>nf(r.instruments)},
+    {h:"Fields",k:"fields",num:true,r:r=>nf(r.fields)},
+    {h:"Events",k:"events",num:true},
+    {h:"Completion",k:"completion_rate",num:true,r:r=>rate(r.completion_rate)},
+    {h:"PHI fields",k:"identifier_fields",num:true},
+    {h:"Longitudinal",k:"longitudinal",r:r=>yesno(r.longitudinal)},
+    {h:"Repeating",k:"repeating",r:r=>yesno(r.repeating)},
+  ],S.slice()));
+  p.appendChild(c1);
+
+  const mk=(title,key,fmt)=>{
+    const c=el(`<div class="card"><h2 style="margin-top:0">${title}</h2></div>`);
+    const rows=S.slice().sort((a,b)=>a[key]-b[key]).map(s=>({
+      label:s.key,value:s[key],color:sc(s.key),
+      text:fmt?fmt(s[key]):nf(s[key]),
+      tip:`<b>${s.key}</b><br>${title}: ${fmt?fmt(s[key]):nf(s[key])}`}));
+    c.appendChild(hbar(rows,{labelWidth:70,rowH:30}));
+    return c;
+  };
+  const g=el('<div class="grid2"></div>');
+  g.appendChild(mk("Records","records"));
+  g.appendChild(mk("Completion rate","completion_rate",v=>v.toFixed(1)+"%"));
+  g.appendChild(mk("Fields","fields"));
+  g.appendChild(mk("Instruments","instruments"));
+  p.appendChild(g);
+
+  p.appendChild(el("<h2>Structural profile</h2><p class='note'>Fields carrying each property.</p>"));
+  const c2=el('<div class="card"></div>');
+  c2.appendChild(table([
+    {h:"Study",k:"key",r:r=>`<span class="chip" style="background:${sc(r.key)}">${esc(r.key)}</span>`},
+    {h:"Required",k:"required_fields",num:true,r:r=>nf(r.required_fields)},
+    {h:"Branching logic",k:"branching_fields",num:true,r:r=>nf(r.branching_fields)},
+    {h:"Identifier-flagged",k:"identifier_fields",num:true,r:r=>nf(r.identifier_fields)},
+  ],S.slice()));
+  p.appendChild(c2);
+}
+
+function studyPanel(){
+  const p=document.getElementById("p-study");
+  const S=DATA.studies;
+  if(!STUDYSEL)STUDYSEL=S[0].key;
+  p.innerHTML="";
+  const bar=el('<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px"></div>');
+  S.forEach(s=>{
+    const b=el(`<button class="act ${s.key===STUDYSEL?"":"ghost"}" style="${s.key===STUDYSEL?`background:${sc(s.key)}`:""}">${esc(s.key)}</button>`);
+    b.onclick=()=>{STUDYSEL=s.key;studyPanel();};
+    bar.appendChild(b);
+  });
+  p.appendChild(bar);
+
+  const s=S.find(x=>x.key===STUDYSEL);
+  const started=s.completion.Complete+s.completion.Incomplete+s.completion.Unverified;
+  p.appendChild(el(`<div class="sub" style="margin-bottom:10px">
+    <span class="chip" style="background:${sc(s.key)}">${esc(s.key)}</span>
+    <b>${esc(s.title)}</b> · pid ${esc(s.pid)} · ${s.longitudinal?"longitudinal":"classic"}${s.repeating?" · repeating instruments":""}${s.surveys?" · surveys enabled":""}
+  </div>`));
+  p.appendChild(el(`<div class="kpis">
+    <div class="kpi" style="--accent:${sc(s.key)}"><div class="v">${nf(s.records)}</div><div class="l">Records</div><div class="s">${nf(s.rows)} record-events</div></div>
+    <div class="kpi" style="--accent:${sc(s.key)}"><div class="v">${nf(s.instruments)}</div><div class="l">Instruments</div></div>
+    <div class="kpi" style="--accent:${sc(s.key)}"><div class="v">${nf(s.fields)}</div><div class="l">Fields</div></div>
+    <div class="kpi" style="--accent:${sc(s.key)}"><div class="v">${nf(s.events)}</div><div class="l">Events</div></div>
+    <div class="kpi" style="--accent:${sc(s.key)}"><div class="v">${s.completion_rate.toFixed(0)}%</div><div class="l">Completion</div><div class="s">${nf(s.completion.Complete)} of ${nf(started)} started</div></div>
+  </div>`));
+
+  const g=el('<div class="grid2"></div>');
+  const cA=el('<div class="card"><h2 style="margin-top:0">Completion by instrument</h2><p class="note">Busiest instruments first.</p></div>');
+  cA.appendChild(el(`<div class="legend">
+    <span><i class="dot" style="background:${STC.Complete}"></i>Complete</span>
+    <span><i class="dot" style="background:${STC.Unverified}"></i>Unverified</span>
+    <span><i class="dot" style="background:${STC.Incomplete}"></i>Incomplete</span></div>`));
+  const top=s.instrument_rows.filter(r=>r.started>0).sort((a,b)=>b.started-a.started).slice(0,14).reverse();
+  cA.appendChild(hstack(top.map(r=>({label:r.name,parts:[
+    {k:"Complete",v:r.complete},{k:"Unverified",v:r.unverified},{k:"Incomplete",v:r.incomplete}]})),
+    null,STC,{labelWidth:190}));
+  g.appendChild(cA);
+
+  const cB=el('<div class="card"><h2 style="margin-top:0">Completion rate</h2><p class="note">Complete ÷ started.</p></div>');
+  cB.appendChild(hbar(top.slice().sort((a,b)=>a.rate-b.rate).map(r=>({
+    label:r.name,value:r.rate,color:sc(s.key),text:r.rate.toFixed(0)+"%",
+    tip:`<b>${esc(r.name)}</b><br>${r.rate.toFixed(1)}%<br>${nf(r.complete)} of ${nf(r.started)} started`
+  })),{labelWidth:190}));
+  g.appendChild(cB);
+  p.appendChild(g);
+
+  const g2=el('<div class="grid2"></div>');
+  const cC=el('<div class="card"><h2 style="margin-top:0">Field types</h2></div>');
+  cC.appendChild(hbar(s.field_types.slice(0,10).reverse().map(([t,n])=>({
+    label:t,value:n,color:sc(s.key),tip:`<b>${esc(t)}</b><br>${nf(n)} fields`})),{labelWidth:110}));
+  g2.appendChild(cC);
+  const cD=el('<div class="card"><h2 style="margin-top:0">Records per event</h2></div>');
+  if(s.event_rows.length){
+    cD.appendChild(hbar(s.event_rows.slice().sort((a,b)=>a.records-b.records).slice(-14).map(r=>({
+      label:r.label,value:r.records,color:sc(s.key),
+      tip:`<b>${esc(r.label)}</b><br>${nf(r.records)} records`})),{labelWidth:150}));
+  } else cD.appendChild(el('<p class="note">No event structure.</p>'));
+  g2.appendChild(cD);
+  p.appendChild(g2);
+
+  p.appendChild(el("<h2>Instruments</h2>"));
+  const box=el('<div class="card"></div>');
+  const search=el('<input type="search" placeholder="Filter instruments by name or label…" style="margin-bottom:10px">');
+  box.appendChild(search);
+  const host=document.createElement("div");box.appendChild(host);
+  const cols=[
+    {h:"Instrument",k:"name"},{h:"Label",k:"label",wrap:true},
+    {h:"Fields",k:"fields",num:true},{h:"Events",k:"events",num:true},
+    {h:"Started",k:"started",num:true,r:r=>nf(r.started)},
+    {h:"Complete",k:"complete",num:true,r:r=>nf(r.complete)},
+    {h:"Completion",k:"rate",num:true,r:r=>rate(r.rate)},
+  ];
+  const draw=()=>{
+    const q=search.value.trim().toLowerCase();
+    const rows=s.instrument_rows.filter(r=>!q||r.name.toLowerCase().includes(q)||(r.label||"").toLowerCase().includes(q));
+    host.innerHTML="";host.appendChild(table(cols,rows,{tall:true}));
+  };
+  search.addEventListener("input",draw);draw();
+  p.appendChild(box);
+
+  if(s.event_rows.length){
+    p.appendChild(el("<h2>Events</h2>"));
+    const c=el('<div class="card"></div>');
+    c.appendChild(table([
+      {h:"Event",k:"label"},{h:"Unique name",k:"name"},
+      {h:"Records",k:"records",num:true,r:r=>nf(r.records)},
+      {h:"Rows",k:"rows",num:true,r:r=>nf(r.rows)},
+      {h:"Started",k:"started",num:true,r:r=>nf(r.started)},
+      {h:"Completion",k:"rate",num:true,r:r=>rate(r.rate)},
+    ],s.event_rows.slice()));
+    p.appendChild(c);
+  }
+
+  p.appendChild(el("<h2>Structural signals</h2><p class='note'>How the project is built — not a judgement about the data.</p>"));
+  const c=el('<div class="card"></div>');
+  c.appendChild(table([
+    {h:"Signal",k:"check"},{h:"Fields",k:"count",num:true,r:r=>nf(r.count)},
+    {h:"What it means",k:"detail",wrap:true},
+  ],s.quality.slice()));
+  p.appendChild(c);
+}
+
+/* field-level harmonization, mirrors metrics.compare_instrument */
+function compareInstrument(name){
+  const keys=DATA.studies.map(s=>s.key);
+  const has=keys.filter(k=>DATA.matrix.some(m=>m.name===name&&m.in.includes(k)));
+  const byName=new Map();
+  FIELDS.forEach(f=>{
+    if(f.form!==name)return;
+    if(!byName.has(f.name))byName.set(f.name,{});
+    byName.get(f.name)[f.study]={type:f.type,label:(f.label||"").trim().toLowerCase()};
+  });
+  const out=[];
+  byName.forEach((per,fname)=>{
+    const present=has.filter(k=>per[k]);
+    const types=new Set(present.map(k=>per[k].type));
+    const labels=new Set(present.map(k=>per[k].label));
+    let v;
+    if(present.length<has.length)v="partial";
+    else if(types.size>1)v="type differs";
+    else if(labels.size>1)v="label differs";
+    else v="identical";
+    const row={field:fname,verdict:v,n:present.length};
+    has.forEach(k=>row[k]=per[k]?per[k].type:"—");
+    out.push(row);
+  });
+  const ord={"type differs":0,"label differs":1,"partial":2,"identical":3};
+  out.sort((a,b)=>(ord[a.verdict]-ord[b.verdict])||(b.n-a.n)||a.field.localeCompare(b.field));
+  return {rows:out,keys:has};
+}
+
+let CMPSEL=null,CMPONLY=true,CMPMIN=2;
+function comparePanel(){
+  const p=document.getElementById("p-compare");
+  const keys=DATA.studies.map(s=>s.key);
+  p.innerHTML="";
+  if(keys.length<2){p.appendChild(el('<div class="card">Two or more connected studies are needed.</div>'));return;}
+
+  p.appendChild(el("<h2>Which instruments do these studies share?</h2>"));
+  const g=el('<div class="grid2"></div>');
+  const cA=el('<div class="card"><h2 style="margin-top:0">Shared by how many studies</h2></div>');
+  const dist={};DATA.matrix.forEach(m=>dist[m.studies]=(dist[m.studies]||0)+1);
+  cA.appendChild(hbar(Object.keys(dist).sort((a,b)=>a-b).map(k=>({
+    label:`${k} stud${k=="1"?"y":"ies"}`,value:dist[k],color:"#3366FF",
+    tip:`<b>${k} studies</b><br>${dist[k]} instruments`})),{labelWidth:90,rowH:30}));
+  g.appendChild(cA);
+  const cB=el('<div class="card"><h2 style="margin-top:0">Pairwise shared instruments</h2></div>');
+  const cells=keys.map(a=>keys.map(b=>DATA.matrix.filter(m=>m.in.includes(a)&&m.in.includes(b)).length));
+  cB.appendChild(heat(keys,cells));
+  g.appendChild(cB);
+  p.appendChild(g);
+
+  const ctl=el(`<div class="card"><label class="fl">Show instruments present in at least N studies</label>
+    <input type="range" min="1" max="${keys.length}" value="${CMPMIN}" style="width:220px">
+    <span class="pill" id="minlab">${CMPMIN}</span></div>`);
+  const range=ctl.querySelector("input");
+  const host=document.createElement("div");
+  const drawMatrix=()=>{
+    const rows=DATA.matrix.filter(m=>m.studies>=CMPMIN);
+    host.innerHTML="";
+    host.appendChild(el(`<p class="note">${nf(rows.length)} of ${nf(DATA.matrix.length)} instruments match.</p>`));
+    host.appendChild(table([
+      {h:"Instrument",k:"name"},{h:"Label",k:"label",wrap:true},
+      {h:"# studies",k:"studies",num:true},
+      ...keys.map(k=>({h:k,k:k,r:r=>r.in.includes(k)?`<span class="dot" style="background:${sc(k)}"></span>`:"",nosort:true})),
+    ],rows.slice(),{tall:true}));
+  };
+  range.addEventListener("input",()=>{CMPMIN=+range.value;ctl.querySelector("#minlab").textContent=CMPMIN;drawMatrix();});
+  drawMatrix();ctl.appendChild(host);p.appendChild(ctl);
+
+  const shared=DATA.matrix.filter(m=>m.studies>=2).map(m=>m.name);
+  p.appendChild(el("<h2>Field-level harmonization</h2>"));
+  if(!shared.length){p.appendChild(el('<div class="card">These studies share no instruments.</div>'));return;}
+  if(!CMPSEL||!shared.includes(CMPSEL))CMPSEL=shared[0];
+
+  const box=el('<div class="card"></div>');
+  const sel=el(`<select style="max-width:520px">${shared.map(n=>`<option ${n===CMPSEL?"selected":""}>${esc(n)}</option>`).join("")}</select>`);
+  box.appendChild(el('<label class="fl">Instrument to compare</label>'));
+  box.appendChild(sel);
+  const out=document.createElement("div");box.appendChild(out);
+  const drawCmp=()=>{
+    const {rows,keys:hk}=compareInstrument(CMPSEL);
+    const cnt=v=>rows.filter(r=>r.verdict===v).length;
+    out.innerHTML="";
+    out.appendChild(el(`<div class="kpis" style="margin-top:14px">
+      <div class="kpi"><div class="v">${nf(rows.length)}</div><div class="l">Fields</div><div class="s">union across studies</div></div>
+      <div class="kpi" style="--accent:#1F8A5F"><div class="v">${nf(cnt("identical"))}</div><div class="l">Identical</div><div class="s">same type and label</div></div>
+      <div class="kpi" style="--accent:#7C3AED"><div class="v">${nf(cnt("label differs"))}</div><div class="l">Label differs</div></div>
+      <div class="kpi" style="--accent:#D74E2D"><div class="v">${nf(cnt("type differs"))}</div><div class="l">Type differs</div></div>
+      <div class="kpi" style="--accent:#9CA3AF"><div class="v">${nf(cnt("partial"))}</div><div class="l">Partial</div><div class="s">missing in some study</div></div>
+    </div>`));
+    const t=el(`<label class="toggles" style="margin-top:2px"><label><input type="checkbox" ${CMPONLY?"checked":""}> Show only fields that differ</label></label>`);
+    const cb=t.querySelector("input");
+    cb.addEventListener("change",()=>{CMPONLY=cb.checked;drawCmp();});
+    out.appendChild(t);
+    let show=CMPONLY?rows.filter(r=>r.verdict!=="identical"):rows;
+    if(!show.length){out.appendChild(el(`<p class="note">${esc(CMPSEL)} is field-for-field identical across these studies.</p>`));}
+    else{
+      const pill=v=>`<span class="pill ${v==="type differs"?"bad":v==="label differs"?"warnp":v==="identical"?"okp":"part"}">${esc(v)}</span>`;
+      out.appendChild(table([
+        {h:"Field",k:"field"},
+        ...hk.map(k=>({h:k,k:k})),
+        {h:"Verdict",k:"verdict",r:r=>pill(r.verdict)},
+        {h:"# with field",k:"n",num:true},
+      ],show,{tall:true}));
+    }
+    out.appendChild(el('<p class="note">Cells show each study\'s field type; “—” means the field is absent there. Structural comparison only — no response value is read.</p>'));
+  };
+  sel.addEventListener("change",()=>{CMPSEL=sel.value;drawCmp();});
+  drawCmp();p.appendChild(box);
+}
+
+function fieldsPanel(){
+  const p=document.getElementById("p-fields");
+  p.innerHTML="";
+  p.appendChild(el("<h2>Search every field across every study</h2>"));
+  const box=el('<div class="card"></div>');
+  const q=el('<input type="search" placeholder="Type a field name, question wording, or answer choice…">');
+  box.appendChild(el('<label class="fl">Search</label>'));box.appendChild(q);
+
+  const studies=[...new Set(FIELDS.map(f=>f.study))].sort();
+  const types=[...new Set(FIELDS.map(f=>f.type))].sort();
+  const forms=[...new Set(FIELDS.map(f=>f.form))].sort();
+  const filt=el(`<div class="filters" style="margin-top:12px">
+    <div><label class="fl">Study</label><select multiple size="4">${studies.map(s=>`<option selected>${esc(s)}</option>`).join("")}</select></div>
+    <div><label class="fl">Field type</label><select multiple size="4">${types.map(s=>`<option>${esc(s)}</option>`).join("")}</select></div>
+    <div><label class="fl">Instrument</label><select multiple size="4">${forms.map(s=>`<option>${esc(s)}</option>`).join("")}</select></div>
+    <div><label class="fl">Flags</label>
+      <div class="toggles" style="flex-direction:column;gap:6px;margin:0">
+        <label><input type="checkbox" data-f="req"> Required only</label>
+        <label><input type="checkbox" data-f="id"> Identifier-flagged only</label>
+        <label><input type="checkbox" data-f="br"> Has branching logic</label>
+        <label><input type="checkbox" data-f="nolbl"> Missing label only</label>
+      </div></div>
+  </div>`);
+  box.appendChild(filt);
+  const [selS,selT,selF]=filt.querySelectorAll("select");
+  const cbs={};filt.querySelectorAll("input[data-f]").forEach(c=>cbs[c.dataset.f]=c);
+
+  const info=el('<p class="note"></p>');box.appendChild(info);
+  const dl=el('<button class="act ghost" style="margin-bottom:10px">Download these fields as CSV</button>');
+  box.appendChild(dl);
+  const host=document.createElement("div");box.appendChild(host);
+
+  const picked=s=>[...s.selectedOptions].map(o=>o.value);
+  let current=[];
+  const draw=()=>{
+    const ss=new Set(picked(selS)),tt=picked(selT),ff=picked(selF);
+    const ts=new Set(tt),fs=new Set(ff);
+    const needle=q.value.trim().toLowerCase();
+    current=FIELDS.filter(f=>{
+      if(!ss.has(f.study))return false;
+      if(tt.length&&!ts.has(f.type))return false;
+      if(ff.length&&!fs.has(f.form))return false;
+      if(cbs.req.checked&&!(f.flags&F.REQ))return false;
+      if(cbs.id.checked&&!(f.flags&F.ID))return false;
+      if(cbs.br.checked&&!(f.flags&F.BR))return false;
+      if(cbs.nolbl.checked&&(f.flags&F.LBL))return false;
+      if(needle&&!f.blob.includes(needle))return false;
+      return true;
+    });
+    info.innerHTML=`<b>${nf(current.length)}</b> of ${nf(FIELDS.length)} fields match · ${nf(new Set(current.map(f=>f.form)).size)} instruments · ${nf(new Set(current.map(f=>f.study)).size)} studies`;
+    host.innerHTML="";
+    host.appendChild(table([
+      {h:"Study",k:"study",r:r=>`<span class="chip" style="background:${sc(r.study)}">${esc(r.study)}</span>`},
+      {h:"Instrument",k:"form"},{h:"Field",k:"name"},{h:"Type",k:"type"},
+      {h:"Label",k:"label",wrap:true},
+      {h:"Validation",k:"validation"},
+      {h:"Choices",k:"choiceCount",num:true},
+      {h:"Req.",k:"flags",r:r=>yesno(r.flags&F.REQ)},
+      {h:"PHI",k:"flags",r:r=>yesno(r.flags&F.ID)},
+      {h:"Branch",k:"flags",r:r=>yesno(r.flags&F.BR)},
+    ],current.slice(0,3000),{tall:true}));
+    if(current.length>3000)host.appendChild(el(`<p class="note">Showing the first 3,000 rows. Narrow the filters, or download the CSV for all ${nf(current.length)}.</p>`));
+  };
+  [q,selS,selT,selF].forEach(n=>n.addEventListener("input",draw));
+  Object.values(cbs).forEach(c=>c.addEventListener("change",draw));
+  dl.addEventListener("click",()=>{
+    const head=["study","instrument","field","type","label","validation","choices","required","identifier","branching"];
+    const csv=[head.join(",")].concat(current.map(f=>[
+      f.study,f.form,f.name,f.type,f.label,f.validation,f.choiceCount,
+      f.flags&F.REQ?1:0,f.flags&F.ID?1:0,f.flags&F.BR?1:0
+    ].map(v=>{const s=String(v==null?"":v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(","))).join("\n");
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download="redcap_field_search.csv";a.click();URL.revokeObjectURL(a.href);
+  });
+  draw();p.appendChild(box);
+}
+
+function aboutPanel(){
+  const p=document.getElementById("p-about");
+  const failed=DATA.failed.length?`<p class="note">Not connected at build time: ${DATA.failed.map(f=>esc(f.key)).join(", ")}.</p>`:"";
+  p.innerHTML=`
+  <h2>What this is</h2>
+  <div class="card">
+    <p>A read-only reporting layer over ${DATA.studies.length} REDCap project(s) at <code>${esc(DATA.apiUrl)}</code>.
+    It reports project structure and form-completion state as counts. This page is a
+    static build — the figures are current as of the build stamp at the top, not live.</p>
+    ${failed}
+  </div>
+
+  <h2>Read-only guarantee</h2>
+  <div class="card"><p>The generator that produced this page calls REDCap through an allowlist
+  that permits only <b>export</b> content types and rejects the parameters REDCap uses to write
+  (<code>action</code>, <code>data</code>, <code>returnContent</code>, <code>overwriteBehavior</code>,
+  <code>forceAutoNumber</code>); a violation raises before any request is made. There is no code
+  path that can create, edit, or delete a REDCap record, field, instrument, or event. This page
+  itself is static HTML and holds no credentials.</p></div>
+
+  <h2>No participant data</h2>
+  <div class="card"><p>Completion figures come from one export of the <code>&lt;form&gt;_complete</code>
+  status fields. Those rows are reduced to counts during the build and discarded — no participant
+  identifier or response value is present in this page or its data file. The CSV download contains
+  field <i>metadata</i> only.</p></div>
+
+  <h2>How the numbers are defined</h2>
+  <div class="card"><dl class="defs">
+    <dt>Records</dt><dd>Distinct record IDs returned by the project's record-ID export.</dd>
+    <dt>Record-events</dt><dd>Rows in a flat export: one per record per event (per repeat instance where applicable).</dd>
+    <dt>Complete / Incomplete / Unverified</dt><dd>REDCap's own <code>&lt;form&gt;_complete</code> states (2 / 0 / 1).</dd>
+    <dt>Not started</dt><dd>The <code>&lt;form&gt;_complete</code> cell is empty — includes forms not mapped to that event.</dd>
+    <dt>Started</dt><dd>Complete + Incomplete + Unverified.</dd>
+    <dt>Completion rate</dt><dd>Complete ÷ Started. Excludes <i>Not started</i>, so a form used in few events is not scored as failing.</dd>
+    <dt>Identifier-flagged</dt><dd>Fields REDCap marks as directly identifying. Counted, never shown as values.</dd>
+    <dt>Verdicts</dt><dd><b>identical</b>: present in every study that has the instrument, same type and label.
+      <b>label differs</b> / <b>type differs</b>: present everywhere, but the label or type disagrees.
+      <b>partial</b>: present in some studies and absent in others.</dd>
+  </dl></div>
+
+  <h2>Rebuilding</h2>
+  <div class="card"><p>A scheduled GitHub Action re-runs the generator with the study tokens held as
+  repository secrets and redeploys this page. To rebuild by hand:</p>
+  <pre style="overflow-x:auto;background:var(--cool);padding:10px;border-radius:8px"><code>python projects/redcap-metadata-watcher/build_static_site.py --output docs</code></pre>
+  <p class="note">The interactive Streamlit version, which reads live rather than from a build,
+  runs locally with <code>streamlit run projects/redcap-metadata-watcher/app.py</code>.</p></div>`;
+}
+
+/* ---------- boot ---------- */
+function tabs(){
+  const nav=document.getElementById("tabs");
+  nav.addEventListener("click",e=>{
+    const b=e.target.closest("button[data-p]");if(!b)return;
+    [...nav.children].forEach(x=>x.setAttribute("aria-selected",String(x===b)));
+    document.querySelectorAll("section[role=tabpanel]").forEach(s=>
+      s.classList.toggle("on",s.id==="p-"+b.dataset.p));
+    if(location.hash.slice(1)!==b.dataset.p)history.replaceState(null,"","#"+b.dataset.p);
+    window.scrollTo({top:0,behavior:"smooth"});
+  });
+  const want=location.hash.slice(1);
+  if(want){const b=nav.querySelector(`button[data-p="${want}"]`);if(b)b.click();}
+}
+
+fetch("data.json").then(r=>{
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  return r.json();
+}).then(d=>{
+  DATA=d;
+  const D=d.fields;
+  FIELDS=D.rows.map(r=>{
+    const o={study:D.studies[r[0]],form:D.forms[r[1]],type:D.types[r[2]],
+      validation:D.validations[r[3]],name:r[4],label:r[5],note:r[6],
+      choices:r[7],choiceCount:r[8],flags:r[9]};
+    o.blob=(o.name+" "+o.label+" "+o.note+" "+o.choices).toLowerCase();
+    return o;
+  });
+  document.getElementById("boot").remove();
+  const when=new Date(d.generatedAt);
+  document.getElementById("subtitle").textContent=
+    `${d.studies.length} studies · ${nf(d.studies.reduce((a,s)=>a+s.records,0))} records · ${nf(FIELDS.length)} fields`;
+  document.getElementById("stamp").textContent="Built "+when.toLocaleString();
+  document.getElementById("foot").innerHTML=
+    `Static build generated ${esc(when.toISOString().replace("T"," ").slice(0,16))} UTC from ${esc(d.apiUrl)} ·
+     read-only, aggregate only · <a href="https://github.com/namo507/esd-redcap-metadata-watcher">source</a>`;
+  portfolio();studyPanel();comparePanel();fieldsPanel();aboutPanel();tabs();
+}).catch(e=>{
+  document.getElementById("boot").innerHTML=
+    `<b>Could not load data.json</b><br><span class="note">${esc(e.message)}. If you opened this file directly, serve the folder instead: <code>python -m http.server</code></span>`;
+});
+</script>
+</body>
+</html>

@@ -7,15 +7,24 @@ than one study shares.
 
 There is **no token entry in the UI**. Tokens come from the environment.
 
+It ships in two forms from the same acquisition and metric code:
+
+| Form | Data | Where it runs |
+| --- | --- | --- |
+| **Streamlit app** (`app.py`) | Live, refreshed on an interval | Locally, or any host that runs Python |
+| **Static site** (`build_static_site.py`) | Snapshot as of the last build | GitHub Pages — see [Static site](#static-site-for-github-pages) |
+
 ## Layout
 
 ```text
-app.py            Streamlit UI — tabs, filters, KPI tiles
-study_config.py   Study registry, .env loading, refresh/pacing settings
-redcap_live.py    Read-only acquisition; reduces records to counts
-metrics.py        Pure metric functions over snapshots
-charts.py         Validated-palette Plotly figures
-tests/            Read-only contract and metric definitions
+app.py                Streamlit UI — tabs, filters, KPI tiles
+build_static_site.py  Pre-renders the same metrics into docs/ for GitHub Pages
+site/index.html       The static page shell (self-contained HTML/CSS/JS)
+study_config.py       Study registry, .env loading, refresh/pacing settings
+redcap_live.py        Read-only acquisition; reduces records to counts
+metrics.py            Pure metric functions over snapshots
+charts.py             Validated-palette Plotly figures
+tests/                Read-only contract and metric definitions
 ```
 
 Shared with the recruitment project at the repository root:
@@ -90,6 +99,37 @@ contains field *metadata* only.
 
 Both guarantees are about this application's behaviour. The token itself is the
 real security boundary — issue export-only tokens.
+
+## Static site for GitHub Pages
+
+GitHub Pages serves static files only — it cannot run Streamlit. `build_static_site.py`
+therefore does the REDCap reads up front, reduces them with the same `metrics`
+functions the app uses, and writes a JSON payload plus a self-contained page that
+reproduces all five tabs client-side (sortable tables, faceted field search,
+instrument comparison, SVG charts, CSV download — no CDN, no framework).
+
+```bash
+python projects/redcap-metadata-watcher/build_static_site.py --output docs
+python -m http.server -d docs 8777      # preview at http://localhost:8777
+```
+
+Output is about 2 MB of JSON (~0.3 MB gzipped) covering 13,755 fields.
+
+**Publishing:** Settings → Pages → Deploy from a branch → `main` / `docs`.
+[`publish-dashboard-site.yml`](../../.github/workflows/publish-dashboard-site.yml)
+rebuilds it daily from repository secrets (`NANO_API_TOKEN`, `NICO_API_TOKEN`,
+`IPSA_API_TOKEN`, `ACTION_API_TOKEN`) and commits `docs/` when it changes.
+
+**Before publishing, understand what becomes public.** A GitHub Pages site has no
+authentication and is search-indexable. This build includes verbatim item wording
+for every field, which covers licensed instruments (CBCL, CSBS, IBQ-R, EMQ, LUI).
+It contains no participant data — but the instrument content is a licensing
+question, not a privacy one. To publish structure without item text, drop
+`r["field_label"]`, `r["field_note"]`, and `r["choices"]` from the `field_rows`
+append in `build_static_site.py`.
+
+The builder refuses to write a payload containing any configured API token, so a
+credential cannot reach the published site even if the metadata changes shape.
 
 ## Adding a study
 

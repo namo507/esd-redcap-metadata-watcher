@@ -26,7 +26,8 @@ Every REDCap interaction in this repository is read-only. All code paths use PyC
 | `shared/tests/` | Unit tests for the shared modules |
 | `assets/` | ESD Lab and USC brand assets, embedded into HTML exports and the dashboard |
 | `.streamlit/config.toml` | Dashboard theme; must stay at the repository root for Streamlit Cloud |
-| `.github/workflows/` | Scheduled recruitment-table refresh |
+| `.github/workflows/` | Scheduled recruitment-table refresh and dashboard-site rebuild |
+| `docs/` | Generated static dashboard published to GitHub Pages — rebuilt by workflow, not edited by hand |
 | `archive/` | Superseded output kept for reference — see [archive/README.md](archive/README.md) |
 
 `shared/` is not an installed package. `pyproject.toml` puts it on `sys.path` for pytest,
