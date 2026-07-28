@@ -11,7 +11,7 @@ Every REDCap interaction in this repository is read-only. All code paths use PyC
 
 | Folder | What it is | Entry point |
 | --- | --- | --- |
-| [projects/redcap-metadata-watcher/](projects/redcap-metadata-watcher/) | Streamlit dashboard that inventories REDCap project metadata and flags structural issues | `app.py` |
+| [projects/redcap-metadata-watcher/](projects/redcap-metadata-watcher/) | Live read-only Streamlit dashboard over all configured studies: ground-truth counts, completion, instrument comparison, field search | `app.py` |
 | [projects/nano-nico-recruitment/](projects/nano-nico-recruitment/) | API-backed recruitment milestone tables for NANO (pid 4218) and NICO (pid 3836), plus the NIH reporting notebooks | `recruitment_reports.py` |
 | [projects/csbs-scoring-assignments/](projects/csbs-scoring-assignments/) | IPSA CSBS-BS scoring-clinician assignment generator | `csbs_scoring_assignment.ipynb` |
 | [projects/caregiver-cluster-analysis/](projects/caregiver-cluster-analysis/) | Caregiver acceptability cluster analysis on the Infant Autism Screening survey | `caregiver_cluster_analysis.ipynb` |
@@ -65,8 +65,13 @@ picks up both the shared suite and the recruitment suite.
 
 ## Token and data handling
 
-- Tokens are entered at runtime (dashboard password fields) or read from environment
-  variables (`NANO_API_TOKEN`, `NICO_API_TOKEN`). None is hardcoded or committed.
+- Tokens live in the repository-root `.env` file, which is **git-ignored**. Copy
+  `.env.example` and fill it in. A hosted deployment supplies the same variable names
+  through its own secret store; already-set environment variables win over the file.
+- Supported: `NANO_API_TOKEN`, `NICO_API_TOKEN`, `IPSA_API_TOKEN`, `ACTION_API_TOKEN`.
+  None is hardcoded, and none may be committed.
+- The dashboard loads only aggregate structure and form-completion counts. Participant
+  rows are reduced to counts in the acquisition layer and discarded before rendering.
 - API error messages pass through credential redaction before display.
 - Participant-level output never leaves the ignored directories:
   `projects/nano-nico-recruitment/recruitment_audit_secure/`, the restricted CSVs under

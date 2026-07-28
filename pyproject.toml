@@ -8,5 +8,6 @@ pythonpath = [
 ]
 testpaths = [
     "shared/tests",
+    "projects/redcap-metadata-watcher/tests",
     "projects/nano-nico-recruitment/tests",
 ]
