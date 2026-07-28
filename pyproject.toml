@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+# Source lives under shared/ and projects/<name>/ rather than the repository
+# root, so make those directories importable for the test suites.
+pythonpath = [
+    "shared",
+    "projects/redcap-metadata-watcher",
+    "projects/nano-nico-recruitment",
+]
+testpaths = [
+    "shared/tests",
+    "projects/nano-nico-recruitment/tests",
+]

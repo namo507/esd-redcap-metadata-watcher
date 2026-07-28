@@ -1,7 +1,7 @@
 """ESD Lab REDCap Metadata Watcher.
 
-Run with:
-    streamlit run app.py
+Run from the repository root with:
+    streamlit run projects/redcap-metadata-watcher/app.py
 
 Tokens remain in Streamlit session state only. The application makes read-only,
 explicitly paced API calls on Connect and Refresh; ordinary UI reruns reuse the
@@ -16,12 +16,23 @@ from functools import lru_cache
 from html import escape
 from io import BytesIO
 from pathlib import Path
+import sys
 import time
 from typing import Any, Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
 import streamlit as st
+
+APP_DIR = Path(__file__).resolve().parent
+REPO_ROOT = APP_DIR.parents[1]
+ASSET_DIR = REPO_ROOT / "assets"
+
+# redcap_client, watcher_core, and exports live in the repository-level shared/
+# directory because the recruitment generator reuses them. Streamlit places only
+# this file's own directory on sys.path, so add shared/ before importing them.
+if str(REPO_ROOT / "shared") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "shared"))
 
 from charts import (
     branching_figure,
@@ -85,9 +96,6 @@ REFRESH_COOLDOWN_SECONDS = 60
 RATE_LIMIT_RETRY_SECONDS = 15
 # ------------------------------------------------------------------------
 
-
-APP_DIR = Path(__file__).resolve().parent
-ASSET_DIR = APP_DIR / "assets"
 
 _LIBRE_FRANKLIN_PATH = ASSET_DIR / "fonts" / "LibreFranklin-VariableFont_wght.ttf"
 if _LIBRE_FRANKLIN_PATH.exists():

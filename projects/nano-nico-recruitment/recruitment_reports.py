@@ -6,6 +6,7 @@ import argparse
 import datetime as dt
 import os
 import re
+import sys
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -14,6 +15,12 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 from redcap import Project
+
+# redcap_client and exports are shared with the metadata-watcher app and live in
+# the repository-level shared/ directory.
+_SHARED_DIR = Path(__file__).resolve().parents[2] / "shared"
+if str(_SHARED_DIR) not in sys.path:
+    sys.path.insert(0, str(_SHARED_DIR))
 
 from recruitment_config import (
     CATEGORIES,

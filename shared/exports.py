@@ -50,7 +50,8 @@ _UNSAFE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 _REDACTED = "[REDACTED]"
 _MODULE_DIR = Path(__file__).resolve().parent
-_ASSET_DIR = _MODULE_DIR / "assets"
+# Brand assets live at the repository root, one level above shared/.
+_ASSET_DIR = _MODULE_DIR.parent / "assets"
 _ESD_LOGO_PATH = _ASSET_DIR / "esd-logo.png"
 _UOFSC_LOGO_PATH = _ASSET_DIR / "uofsc-logo.png"
 _FAVICON_PATH = _ASSET_DIR / "favicon.png"

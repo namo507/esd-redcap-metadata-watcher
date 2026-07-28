@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
 
       - name: Validate secrets
         run: |
@@ -48,8 +48,11 @@ jobs:
             -g '!.git/**' \
             -g '!.venv*/**' \
             -g '!assets/**' \
-            -g '!recruitment_outputs/**' \
-            -g '!recruitment_audit_secure/**' \
+            -g '!**/recruitment_outputs/**' \
+            -g '!**/recruitment_audit_secure/**' \
+            -g '!**/ml_forecast_outputs/**' \
+            -g '!archive/**' \
+            -g '!projects/redcap-logs-dashboard/**' \
             '[A-Fa-f0-9]{32}' .; then
             echo "Token-shaped literal found in source."
             exit 1
@@ -57,8 +60,8 @@ jobs:
 
       - name: Refresh read-only recruitment outputs
         run: |
-          python recruitment_reports.py \
-            --output-dir recruitment_outputs \
+          python projects/nano-nico-recruitment/recruitment_reports.py \
+            --output-dir projects/nano-nico-recruitment/recruitment_outputs \
             --no-secure-audit
 
       - name: Upload refreshed outputs
@@ -66,18 +69,19 @@ jobs:
         with:
           name: recruitment-outputs
           path: |
-            recruitment_outputs/*.html
-            recruitment_outputs/*.xlsx
+            projects/nano-nico-recruitment/recruitment_outputs/*.html
+            projects/nano-nico-recruitment/recruitment_outputs/*.xlsx
           if-no-files-found: error
 
       - name: Commit refreshed outputs
         run: |
-          if [ -z "$(git status --porcelain -- recruitment_outputs)" ]; then
+          OUTPUT_DIR=projects/nano-nico-recruitment/recruitment_outputs
+          if [ -z "$(git status --porcelain -- "$OUTPUT_DIR")" ]; then
             echo "No recruitment output changes to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add recruitment_outputs
+          git add "$OUTPUT_DIR"
           git commit -m "Refresh recruitment tables"
           git push

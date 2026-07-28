@@ -1,14 +1,15 @@
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
 param(
     [string]$ReportDate,
     [string]$OutputDir = "recruitment_outputs",
     [string]$PythonCommand = "python"
 )
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$scriptPath = Join-Path $repoRoot "recruitment_reports.py"
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# scripts/ sits inside the nano-nico-recruitment project folder.
+$projectRoot = Split-Path -Parent $PSScriptRoot
+$scriptPath = Join-Path $projectRoot "recruitment_reports.py"
 
 if (-not (Test-Path $scriptPath)) {
     throw "Could not find recruitment_reports.py at $scriptPath"
@@ -25,7 +26,7 @@ if ($ReportDate) {
     $arguments += @("--report-date", $ReportDate)
 }
 
-Push-Location $repoRoot
+Push-Location $projectRoot
 try {
     & $PythonCommand @arguments
     if ($LASTEXITCODE -ne 0) {

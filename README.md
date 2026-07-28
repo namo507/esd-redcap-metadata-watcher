@@ -1,224 +1,97 @@
-# ESD Lab REDCap Metadata Watcher
+# ESD Lab REDCap Workspace
 
-A read-only Streamlit dashboard for inventorying REDCap project metadata. The app builds its study views from the projects that connect successfully in the current session and reports only observed metadata, missing elements, and rule-based issue flags. It does not write to REDCap, retain credentials, or analyze participant outcomes.
+A multi-project workspace for the ESD Lab's REDCap tooling and study analyses. Each
+deliverable lives in its own folder under `projects/`; the modules that more than one
+project imports live in `shared/`.
 
-## Requirements
+Every REDCap interaction in this repository is read-only. All code paths use PyCap
+`export_*` methods; nothing here creates, edits, or deletes REDCap records.
 
-- Python 3.12
+## Projects
+
+| Folder | What it is | Entry point |
+| --- | --- | --- |
+| [projects/redcap-metadata-watcher/](projects/redcap-metadata-watcher/) | Streamlit dashboard that inventories REDCap project metadata and flags structural issues | `app.py` |
+| [projects/nano-nico-recruitment/](projects/nano-nico-recruitment/) | API-backed recruitment milestone tables for NANO (pid 4218) and NICO (pid 3836), plus the NIH reporting notebooks | `recruitment_reports.py` |
+| [projects/csbs-scoring-assignments/](projects/csbs-scoring-assignments/) | IPSA CSBS-BS scoring-clinician assignment generator | `csbs_scoring_assignment.ipynb` |
+| [projects/caregiver-cluster-analysis/](projects/caregiver-cluster-analysis/) | Caregiver acceptability cluster analysis on the Infant Autism Screening survey | `caregiver_cluster_analysis.ipynb` |
+| [projects/visit-volume-forecast/](projects/visit-volume-forecast/) | 36-Month visit-volume forecasting and model backtests | `visit_volume_forecast.ipynb` |
+| [projects/redcap-logs-dashboard/](projects/redcap-logs-dashboard/) | REDCap logging dashboard (TypeScript/Vite; **nested git repository**) | `npm run dev` |
+
+## Shared and root-level directories
+
+| Path | Purpose |
+| --- | --- |
+| `shared/` | `redcap_client.py` (paced, read-only acquisition), `watcher_core.py` (metadata normalization), `exports.py` (CSV/HTML/ZIP builders) — imported by both Python projects |
+| `shared/tests/` | Unit tests for the shared modules |
+| `assets/` | ESD Lab and USC brand assets, embedded into HTML exports and the dashboard |
+| `.streamlit/config.toml` | Dashboard theme; must stay at the repository root for Streamlit Cloud |
+| `.github/workflows/` | Scheduled recruitment-table refresh |
+| `archive/` | Superseded output kept for reference — see [archive/README.md](archive/README.md) |
+
+`shared/` is not an installed package. `pyproject.toml` puts it on `sys.path` for pytest,
+and the two Python entry points prepend it themselves so `streamlit run` and
+`python recruitment_reports.py` both work without any environment setup.
+
+## Environment
+
+- Python 3.12 (the validated local runtime, 3.12.13, is recorded in `.python-version`)
 - Network access to `https://redcap.research.sc.edu/api/`
-- A read-only REDCap API token for each study being inspected
-
-The repository records the validated local runtime, Python 3.12.13, in `.python-version`. Streamlit Community Cloud selects Python by major/minor version, so choose Python 3.12 in the deployment dialog.
-
-## Run locally
-
-From a local checkout:
-
-```bash
-cd esd-redcap-metadata-watcher
-source .venv312/bin/activate
-python -m streamlit run app.py
-```
-
-For a fresh checkout with Python 3.12 installed:
+- A read-only REDCap API token per study, supplied at runtime or through environment
+  variables — never committed
 
 ```bash
 python3.12 -m venv .venv312
 source .venv312/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
+python -m pip install -r requirements-dev.txt
 ```
 
-Streamlit opens the application at `http://localhost:8501`. Enter one, two, or three project tokens on the gated landing screen, then select **Connect**.
+`requirements.txt` holds the pinned runtime dependencies; `requirements-dev.txt` adds
+pytest.
 
-Run the automated checks with:
+## Run the checks
+
+From the repository root:
 
 ```bash
 source .venv312/bin/activate
 python -m pytest
-python -m compileall -q app.py redcap_client.py watcher_core.py charts.py \
-  exports.py recruitment_config.py recruitment_ground_truth.py \
-  recruitment_workbooks.py recruitment_reports.py
+python -m compileall -q shared projects/redcap-metadata-watcher projects/nano-nico-recruitment
 ```
+
+`pyproject.toml` configures the test paths and import paths, so plain `python -m pytest`
+picks up both the shared suite and the recruitment suite.
 
 ## Token and data handling
 
-The following points describe the interactive metadata-watcher app. The
-standalone recruitment generator has a separate, restricted output contract
-documented below and in `docs/recruitment-ground-truth.md`.
-
-- Tokens are entered through password fields at runtime. No token is hardcoded or bundled with the app.
-- Token values live only in the active Streamlit session state. They are not written to disk, added to URLs, included in downloads, or intentionally logged.
-- **Clear tokens / reset** removes token widgets and all in-session snapshots before rerunning the app.
+- Tokens are entered at runtime (dashboard password fields) or read from environment
+  variables (`NANO_API_TOKEN`, `NICO_API_TOKEN`). None is hardcoded or committed.
 - API error messages pass through credential redaction before display.
-- All REDCap operations are PyCap export methods. No import, delete, or other write method is used.
-- Metadata snapshots and generated exports contain structural project metadata only. The optional row-count check is disabled by default and, when enabled, requests only the record identifier field.
+- Participant-level output never leaves the ignored directories:
+  `projects/nano-nico-recruitment/recruitment_audit_secure/`, the restricted CSVs under
+  `projects/csbs-scoring-assignments/csbs_redcap_outputs/`, and `archive/restricted/`.
+- The `.gitignore` patterns for those paths are depth-independent (`**/`) so they keep
+  matching if a project folder is moved or renamed.
 
-For a public deployment, visitors must supply their own authorized token values. Do not prepopulate tokens, put them in `app.py`, commit them to Git, or add the study tokens to Streamlit Cloud secrets.
-
-## REDCap request and rate-limit design
-
-REDCap is contacted only when **Connect** or **Refresh from API** is selected.
-
-- Projects are fetched sequentially.
-- A process-wide pacing lock coordinates outbound request starts across active sessions.
-- Request starts are separated by at least `REDCAP_MIN_REQUEST_INTERVAL_SECONDS` (1.25 seconds by default).
-- Ordinary Streamlit reruns caused by tabs, filters, tables, or downloads reuse the in-session snapshots and make no API calls.
-- A session cannot refresh again until `REFRESH_COOLDOWN_SECONDS` has elapsed (60 seconds by default).
-- A detected rate-limit response is retried once after `RATE_LIMIT_RETRY_SECONDS` (15 seconds by default); it is not retried indefinitely.
-- A failed token or optional permission failure is isolated to its project/call and does not restart successful requests.
-
-These controls are defined together in the configuration block at the top of `app.py` and in `GlobalRequestPacer` in `redcap_client.py`.
-
-## Refresh recruitment milestone tables
-
-The repository includes a standalone, read-only generator for NANO and NICO.
-It validates the token's project identity and the configured field forms, types,
-and codes before requesting the minimum record fields. It writes image-matched
-aggregate milestone tables to `recruitment_outputs/` and restricted
-participant-audit workbooks/CSVs to the ignored
-`recruitment_audit_secure/` directory.
-
-The verified field mapping, coded demographic rules, inclusion logic, source
-provenance, API-rights evidence, and unresolved protocol mappings are recorded
-in [docs/recruitment-ground-truth.md](docs/recruitment-ground-truth.md).
-
-Set one or both environment variables before running the refresh:
-
-```bash
-export NANO_API_TOKEN="..."
-export NICO_API_TOKEN="..."
-```
-
-Run the generator directly:
-
-```bash
-python recruitment_reports.py
-```
-
-Or use the Windows wrapper:
-
-```powershell
-.\scripts\update_recruitment_tables.ps1
-```
-
-Both entry points are read-only. They use REDCap `export_*` methods only and do not create, edit, or delete REDCap records.
-
-Optional flags:
-
-- `--report-date YYYY-MM-DD` to rerun the tables for a specific cut-off date.
-- `--output-dir recruitment_outputs` to change the destination folder.
-- `--secure-output-dir recruitment_audit_secure` to change the ignored
-  participant-audit destination.
-- `--no-secure-audit` to write aggregate outputs only.
-- `--no-excel` to skip the workbook export.
-
-The refresh keeps only `latest` files in `recruitment_outputs/` and archives dated files under `recruitment_outputs/archive/`.
-
-Latest files in the root output folder:
-
-- `recruitment_outputs/nano_recruitment_milestones_latest.html`
-- `recruitment_outputs/nico_recruitment_milestones_latest.html`
-- `recruitment_outputs/recruitment_milestones_latest.html`
-- `recruitment_outputs/nano_recruitment_milestones_latest.xlsx`
-- `recruitment_outputs/nico_recruitment_milestones_latest.xlsx`
-- `recruitment_outputs/recruitment_milestones_latest.xlsx`
-
-Archived dated files:
-
-- `recruitment_outputs/archive/nano_recruitment_milestones_<date>.html`
-- `recruitment_outputs/archive/nico_recruitment_milestones_<date>.html`
-- `recruitment_outputs/archive/nano_recruitment_milestones_<date>.xlsx`
-- `recruitment_outputs/archive/nico_recruitment_milestones_<date>.xlsx`
-- `recruitment_outputs/archive/recruitment_milestones_<date>.html`
-- `recruitment_outputs/archive/recruitment_milestones_<date>.xlsx`
-
-With both project tokens present, the restricted directory also contains two
-project workbooks and a six-file CSV package. The participant audit includes
-raw coded status/date/race/ethnicity evidence and the derived inclusion,
-racial-minority, Hispanic-ethnicity, exclusion-reason, and milestone fields.
-These files contain participant identifiers and must remain in the ignored
-restricted directory.
-
-## Automate the refresh
-
-The repository includes [refresh-recruitment-tables.yml](.github/workflows/refresh-recruitment-tables.yml), a GitHub Actions workflow that:
-
-- runs on a daily schedule and on manual dispatch
-- installs the pinned Python dependencies
-- runs the automated tests and token-shaped-literal scan
-- calls `python recruitment_reports.py --output-dir recruitment_outputs --no-secure-audit`
-- uploads the refreshed HTML/XLSX files as a workflow artifact
-- commits updated public outputs back to the repository when they change
-
-Repository setup required:
-
-- add `NANO_API_TOKEN` as a repository secret
-- add `NICO_API_TOKEN` as a repository secret
-- optionally add `REDCAP_API_URL` as a repository variable if the endpoint changes
-
-The workflow is also read-only against REDCap. It never writes or uploads the
-restricted participant-audit package.
-
-## Add another study
-
-All study-specific configuration is at the top of `app.py`.
-
-1. Add one entry to `PROJECT_REGISTRY`, preserving the desired display order:
-
-   ```python
-   "NEW_STUDY": {
-       "pid": 0000,
-       "label": "New Study",
-       "reference": False,
-   },
-   ```
-
-2. If it should be the default comparison reference, set `REFERENCE_PROJECT = "NEW_STUDY"` and set the registry `reference` flag to `True` only for that project.
-3. Add or adjust `DOE_DOC_PATTERNS` only when the study uses an additional explicit date-of-evaluation/date-of-collection naming pattern.
-4. Run the tests and start the app. The token field, connection status, study tab, filters, exports, and comparison membership are generated from the registry automatically.
-
-The current implementation assumes every registry entry uses the single `REDCAP_API_URL` configured in `app.py`.
-
-## Deploy on Streamlit Community Cloud
-
-Use a dedicated repository whose root is this directory. Do not make the parent `ideas` directory the repository root because it contains unrelated material that must not be published.
-
-1. Push this directory to a dedicated GitHub repository. A private source repository can still back a public Streamlit app.
-2. In [Streamlit Community Cloud](https://share.streamlit.io/), create an app from that repository.
-3. Choose `app.py` as the entrypoint and select Python 3.12 under **Advanced settings**.
-4. Leave the deployment secrets field empty; study tokens are supplied at runtime.
-5. Deploy, validate the token gate, and set the app's sharing setting to public when ready.
-
-Community Cloud manages the container and start command, so this deployment does not need a Dockerfile. The `.streamlit/config.toml` file at the repository root supplies the dashboard theme.
-
-## Secret-hygiene check before every push
-
-The ignore rules exclude local environments, runtime output, `.env` variants, Streamlit secrets, key files, token files, and prompt documents. Before committing, review filenames and token-like content without printing credential values:
+### Secret-hygiene check before every push
 
 ```bash
 git status --short
 git check-ignore -v .venv312 .env .streamlit/secrets.toml
 git ls-files | rg '(^|/)(\.env($|\.)|secrets\.toml$)|\.(pem|key|p12|pfx|token|secret)$|_PROMPT\.md$'
-rg -l --hidden -g '!.git/**' -g '!.venv*/**' -g '!assets/**' '[A-Fa-f0-9]{32,}' .
+rg -l --hidden -g '!.git/**' -g '!.venv*/**' -g '!assets/**' \
+  -g '!projects/redcap-logs-dashboard/**' -g '!archive/**' '[A-Fa-f0-9]{32,}' .
 git diff --cached --check
 ```
 
-The two search commands should return no tracked secret-bearing file and no unexpected file containing a token-shaped value. Review any filename they report before pushing; never paste the matching value into terminal output, an issue, or a deployment log.
+Both search commands should return no tracked secret-bearing file. Review any filename
+they report before pushing; never paste a matching value into terminal output, an issue,
+or a deployment log.
 
-## Project layout
+## Adding a new project
 
-```text
-app.py                    Streamlit UI and configuration
-redcap_client.py          Read-only, paced REDCap acquisition
-watcher_core.py           Metadata normalization and comparisons
-charts.py                 Plotly figures
-exports.py                CSV, HTML, and ZIP exports
-recruitment_reports.py    API-backed NANO/NICO recruitment table generator
-scripts/                  Automation entry points for report refreshes
-.streamlit/config.toml    Streamlit theme
-assets/                   ESD Lab and USC visual assets
-tests/                    Unit tests
-requirements.txt          Pinned runtime dependencies
-```
+Create `projects/<kebab-case-name>/` with its own `README.md`, keep its inputs and
+outputs inside that folder, and add a row to the table above. If it needs the shared
+REDCap client or export helpers, add its folder to `pythonpath` in `pyproject.toml` and
+prepend `shared/` in its entry point the way the existing projects do.
