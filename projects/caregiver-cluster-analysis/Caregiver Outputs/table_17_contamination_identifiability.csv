@@ -1,0 +1,5 @@
+quantity,estimate,interval_low,interval_high,interpretation
+Elkan–Noto-style nonhuman share in 4581,0.9441342587740728,0.9388814822599009,0.9502052394823933,"Model-implied separation fraction only; recruitment-period and instrument drift violate SCAR, so this is not an identifiable bot prevalence."
+Source-classifier AUC: 4797 versus 4581,0.9803546079019827,,,Separation includes legitimate cohort and instrument drift.
+Negative-control AUC: random 4797 half A versus half B,0.5246924128503075,,,Should remain near 0.5; detects pipeline-induced separation.
+Elkan–Noto labeling propensity c,0.6221222708996268,,,Mean out-of-fold labeled-positive score among clean Tier-4 records.

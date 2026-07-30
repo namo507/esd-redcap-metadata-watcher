@@ -1,0 +1,5 @@
+data_cache/
+Caregiver Outputs/record_flags.parquet
+Caregiver Outputs/record_flags.parquet.sha256
+__pycache__/
+.ipynb_checkpoints/

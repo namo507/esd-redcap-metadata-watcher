@@ -1,0 +1,11 @@
+rule,definition,threshold,justification
+R1,Total time below verified-human floor,11.57,minutes; 4797 completed-human minimum
+R2,TFA time below verified-human floor,7.85,minutes; 4797 completed-human minimum
+R3,Any instrument below clean 1st percentile,"{""feat_time_demo"": 1.1, ""feat_time_fif"": 0.786, ""feat_time_tfa"": 8.568, ""feat_time_val"": 0.68}",computed on 131 completed 4797 records
+R4,Within-block response SD at/below clean 1st percentile,"{""feat_sd_likert_4"": 0.777678586912093, ""feat_sd_likert_5"": 0.8163783945398196, ""feat_sd_likert_6"": 1.1119569339426267, ""feat_sd_likert_7"": 1.068853186621523}","separate 1–4, 1–5, 1–6, and 1–7 blocks"
+R5,Exact ordered Likert fingerprint duplicate,0.8,minimum answered fraction before hashing
+R6,At least 3 submissions in clean-derived short window,60.0,seconds; bounded clean 1st-percentile inter-arrival
+R7,Near-duplicate open text,0.9,TF-IDF cosine similarity
+R8,Logical family-information inconsistency,logical,autistic-child follow-ups or impossible age-band count
+R9,Impossible demographic combination,logical,"age, ZIP, and first-birth plausibility"
+R10,"4797 instrument-native anti-fraud gate (validation-only, not tier-defining)",logical,knee/age/email; email available=False

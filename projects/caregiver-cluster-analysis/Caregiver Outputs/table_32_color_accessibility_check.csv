@@ -1,0 +1,4 @@
+comparison,normal_rgb_distance,deuteranopia_simulated_distance,passes_noncolor_backup,noncolor_backup
+Higher versus Conditional,0.7333857588474683,0.5776435807171356,True,"direct labels, ordering, markers, or facet position"
+Heatmap endpoints,0.7333857588474683,0.5776435807171356,True,"direct labels, ordering, markers, or facet position"
+Olive versus pink,0.3401155467772004,0.2225661452856144,True,"direct labels, ordering, markers, or facet position"

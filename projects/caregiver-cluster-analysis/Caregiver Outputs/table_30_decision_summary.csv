@@ -1,0 +1,6 @@
+decision,recommendation,status,evidence
+D1. Primary cohort,Keep project 4797 primary; use 4581 only as a caveated replication.,Implemented as the default,Robust within the verified-clean primary cohort: the two-profile screening association remains large across clean-project trust tiers.
+D2. Trust target,"Use four graded inclusion tiers, not a binary bot label.",Implemented,"All 1,956 records receive R1–R10 flags and a tier."
+D3. Contamination fraction,Do not present an identifiable bot prevalence.,Open / not identifiable from these data,"PU model-implied separation share 94.4% (93.9%–95.0%), but recruitment and instrument drift violate the identifying assumption."
+D4. Knowledge scoring,Use the binary verified correct-count as primary.,Pre-specified in config; graded documented subset is sensitivity only,"The graded method was documented as significant, creating a forking-path risk."
+D5. Four cluster-excluded records,Report the full tipping-point range.,Implemented,All valid excluded outcomes were non-Definitely-yes; plausible gap range 39.0–44.5 pp.

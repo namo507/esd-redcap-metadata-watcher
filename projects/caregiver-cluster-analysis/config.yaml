@@ -1,0 +1,77 @@
+analysis:
+  seed: 20260725
+  minimum_cluster_domains: 8
+  selected_k: 2
+  stability_repeats: 100
+  consensus_repeats: 1000
+  gap_references: 100
+  bootstrap_repeats: 500
+  minimum_cell_n: 5
+
+redcap:
+  api_url_env: REDCAP_API_URL
+  cache_dir: data_cache
+  request_timeout_seconds: 120
+  request_retries: 4
+  projects:
+    clean_4797:
+      project_id: 4797
+      token_env: TOKEN_CLEAN_4797
+      expected_records: 177
+      csv_fallback: InfantAutismScreenin-FullDataset_DATA_2026-01-20_0940.csv
+    dirty_4581:
+      project_id: 4581
+      token_env: TOKEN_DIRTY_4581
+      expected_records: 1779
+
+fraud_rules:
+  total_time_floor_min: 11.57
+  tfa_time_floor_min: 7.85
+  instrument_fast_quantile: 0.01
+  straightline_quantile: 0.01
+  duplicate_min_answer_fraction: 0.80
+  open_text_similarity_threshold: 0.90
+  burst_min_submissions: 3
+  burst_window_quantile: 0.01
+  burst_window_floor_seconds: 60
+  burst_window_ceiling_seconds: 900
+  plausible_caregiver_age_min: 18
+  plausible_caregiver_age_max: 100
+  disposable_email_domains:
+    - mailinator.com
+    - guerrillamail.com
+    - 10minutemail.com
+    - temp-mail.org
+    - yopmail.com
+
+detectors:
+  isolation_forest_estimators: 500
+  lof_neighbors: 20
+  score_cut_quantile: 0.95
+  pu_bootstrap_repeats: 500
+
+modeling:
+  gmm_k_min: 1
+  gmm_k_max: 6
+  gmm_covariance_types:
+    - spherical
+    - diagonal
+    - tied
+    - full
+  blrt_bootstrap_repeats: 100
+  knowledge_primary: binary_correct_count
+  knowledge_primary_reason: "Pre-specified conservative score; the graded score was documented after significance was observed."
+
+figures:
+  raster_dpi: 300
+  higher_acceptability: "#1F5A7A"
+  conditional_acceptability: "#C67C2D"
+  blue: "#1F5A7A"
+  gold: "#B08A2E"
+  orange: "#C67C2D"
+  olive: "#6F7D3C"
+  pink: "#A85D75"
+  neutral: "#6B7280"
+  light_neutral: "#D1D5DB"
+  ink: "#1F2937"
+  grid: "#E5E7EB"

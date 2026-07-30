@@ -1,0 +1,2 @@
+smaller_profile_n,larger_profile_n,two_sided_alpha,power,pooled_reference_rate,approx_min_detectable_difference_pp,observed_difference_pp,interpretation
+47,80,0.05,0.8,0.5433070866141733,25.64759200965017,42.34042553191489,"A non-significant difference smaller than this threshold would be imprecise evidence, not evidence of no difference."

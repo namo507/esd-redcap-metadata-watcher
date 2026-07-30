@@ -1,0 +1,9 @@
+check,evidence,status,risk
+Expected project row counts,4797=177; 4581=1779,Pass,Critical check; pipeline halts on cohort drift.
+Namespaced UID uniqueness,"1,956/1,956 unique",Pass,Prevents 174 overlapping numeric record IDs from corrupting joins.
+Metadata field inventory,"both=311, 4797-only=13, 4581-only=4",Pass,Pooled models use only shared behavioral/TFA fields.
+Verified-human timing reference,n=131,Pass,R1–R4 thresholds are anchored to completed 4797 caregivers.
+Email anti-fraud component,not returned under current API permissions,Caveat,R10 uses knee and age gates; it does not infer missing email evidence.
+Tier coverage,"1,956/1,956 assigned",Pass,All records are represented in sensitivity definitions.
+Prior supervised LightGBM artifact,Not present in the scoped project files,Caveat,"Concordance uses rules, three novelty detectors, and PU/source classifier."
+PU/contamination identifiability,SHAP=computed; source drift remains inseparable from fraud,Caveat,"Model scores are human-envelope distance, not bot probabilities."

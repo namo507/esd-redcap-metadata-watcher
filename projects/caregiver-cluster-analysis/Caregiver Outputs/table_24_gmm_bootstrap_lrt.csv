@@ -1,0 +1,2 @@
+comparison,covariance_type,observed_lr,bootstrap_repeats,bootstrap_p,best_overall_bic_k,best_overall_bic_covariance
+GMM k=2 versus k=1,diagonal,1587.8285951017224,100,0.009900990099009901,3,diagonal

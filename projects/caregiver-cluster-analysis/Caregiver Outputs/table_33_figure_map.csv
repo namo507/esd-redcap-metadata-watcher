@@ -1,0 +1,33 @@
+file,caption,analytical_role
+figure_7_timing_ecdf.png,"Completed timing blocks only; 4797 is the human reference and 4581 is unverified. Screening, knowledge, values, and demographics are held out of clustering.",figure_7
+figure_7_timing_ecdf.pdf,"Completed timing blocks only; 4797 is the human reference and 4581 is unverified. Screening, knowledge, values, and demographics are held out of clustering.",figure_7
+figure_8_response_fingerprint_heatmap.png,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.,figure_8
+figure_8_response_fingerprint_heatmap.pdf,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.,figure_8
+figure_9_rule_cooccurrence.png,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule.",figure_9
+figure_9_rule_cooccurrence.pdf,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule.",figure_9
+figure_10_behavioral_feature_space.png,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment.",figure_10
+figure_10_behavioral_feature_space.pdf,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment.",figure_10
+figure_11_detector_scores_and_agreement.png,"All 1,956 records. Cuts are the clean Tier-4 95th percentiles. The prior lab LightGBM artifact was unavailable, so the PU two-sample classifier is shown instead.",figure_11
+figure_11_detector_scores_and_agreement.pdf,"All 1,956 records. Cuts are the clean Tier-4 95th percentiles. The prior lab LightGBM artifact was unavailable, so the PU two-sample classifier is shown instead.",figure_11
+figure_11b_pu_feature_importance.png,Gradient-boosted 4797-versus-4581 classifier on behavioral features only (SHAP status: computed). Importance is not proof of fraud.,figure_11b
+figure_11b_pu_feature_importance.pdf,Gradient-boosted 4797-versus-4581 classifier on behavioral features only (SHAP status: computed). Importance is not proof of fraud.,figure_11b
+figure_12_tfa_clustermap.png,Pooled sensitivity definition; n=177 clusterable records. Ten TFA domains are standardized exactly once; all outcomes are held out.,figure_12
+figure_12_tfa_clustermap.pdf,Pooled sensitivity definition; n=177 clusterable records. Ten TFA domains are standardized exactly once; all outcomes are held out.,figure_12
+figure_13_tfa_pca_biplot.png,"4797 status-quo clusterable cohort, n=131. The centroid is valid in linear PCA space; screening, knowledge, values, and demographics are held out.",figure_13
+figure_13_tfa_pca_biplot.pdf,"4797 status-quo clusterable cohort, n=131. The centroid is valid in linear PCA space; screening, knowledge, values, and demographics are held out.",figure_13
+figure_14_umap_tsne_sensitivity.png,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out.",figure_14
+figure_14_umap_tsne_sensitivity.pdf,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out.",figure_14
+figure_15_consensus_matrix.png,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out.",figure_15
+figure_15_consensus_matrix.pdf,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out.",figure_15
+figure_16_case_silhouette.png,"4797 status-quo clusterable cohort, n=131. Negative values remain visible; screening, knowledge, values, and demographics are held out.",figure_16
+figure_16_case_silhouette.pdf,"4797 status-quo clusterable cohort, n=131. Negative values remain visible; screening, knowledge, values, and demographics are held out.",figure_16
+figure_2_primary_cluster_profiles.png,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out.",figure_2
+figure_2_primary_cluster_profiles.pdf,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out.",figure_2
+figure_17_tfa_domain_distributions.png,"4797 status-quo clusterable cohort, n=131. Violin and box summaries show full distribution shape; outcomes are held out.",figure_17
+figure_17_tfa_domain_distributions.pdf,"4797 status-quo clusterable cohort, n=131. Violin and box summaries show full distribution shape; outcomes are held out.",figure_17
+figure_18_logistic_forest.png,"4797 status-quo cluster-assigned records with complete model variables, n=127. Screening is held out of clustering; sparse-data inference uses Firth profile intervals.",figure_18
+figure_18_logistic_forest.pdf,"4797 status-quo cluster-assigned records with complete model variables, n=127. Screening is held out of clustering; sparse-data inference uses Firth profile intervals.",figure_18
+figure_19_tier_to_cluster_alluvial.png,"4797 status-quo clusterable cohort, n=131. Flows describe filtering sensitivity only; screening and all characterization outcomes are held out.",figure_19
+figure_19_tier_to_cluster_alluvial.pdf,"4797 status-quo clusterable cohort, n=131. Flows describe filtering sensitivity only; screening and all characterization outcomes are held out.",figure_19
+figure_20_tier_sensitivity.png,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.,figure_20
+figure_20_tier_sensitivity.pdf,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.,figure_20
