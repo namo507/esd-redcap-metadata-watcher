@@ -1,0 +1,9 @@
+pair_id,domain,file_a,file_b,alignment_method,alignment_value,alignment_delta,video_time,video_time_a,video_time_b,time_delta,video_time_seconds,video_time_hhmmss,time_reference_status,frame_a,frame_b,source_row_a,source_row_b,raw_code_a,raw_code_b,normalized_code_a,normalized_code_b
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,142923.0,1.0,142923.0,142923.0,142924.0,-1.0,142.923,00:02:22.923,both,3992.0,3991.0,3993,3992,RING,SQUIGGLE,RING,SQUIGGLE
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,212355.0,1.0,212355.0,212355.0,212356.0,-1.0,212.355,00:03:32.355,both,6096.0,6095.0,6097,6096,SQUIGGLE,NOISEMAKER,SQUIGGLE,NOISEMAKER
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,212388.0,1.0,212388.0,212388.0,212389.0,-1.0,212.388,00:03:32.388,both,6097.0,6096.0,6098,6097,SQUIGGLE,NOISEMAKER,SQUIGGLE,NOISEMAKER
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,347952.0,1.0,347952.0,347952.0,347953.0,-1.0,347.952,00:05:47.952,both,10205.0,10204.0,10206,10205,BLOCK,NOISEMAKER,BLOCK,NOISEMAKER
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,410751.0,1.0,410751.0,410751.0,410752.0,-1.0,410.751,00:06:50.751,both,12108.0,12107.0,12109,12108,CAR,BLOCK,CAR,BLOCK
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,410784.0,1.0,410784.0,410784.0,410785.0,-1.0,410.784,00:06:50.784,both,12109.0,12108.0,12110,12109,CAR,BLOCK,CAR,BLOCK
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,560868.0,1.0,560868.0,560868.0,560869.0,-1.0,560.868,00:09:20.868,both,16657.0,16656.0,16658,16657,DRUM,POP,DRUM,POP
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,560901.0,1.0,560901.0,560901.0,560902.0,-1.0,560.901,00:09:20.901,both,16658.0,16657.0,16659,16658,DRUM,POP,DRUM,POP

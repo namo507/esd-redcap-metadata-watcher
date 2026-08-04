@@ -1,0 +1,2 @@
+pair_id,domain,file_a,file_b,alignment_method,time_tolerance,aligned_rows,eligible_rows,excluded_missing_count,excluded_special_count,excluded_total_count,agreement_count,disagreement_count,agreement_pct,disagreement_pct,expected_agreement,cohen_kappa,kappa_status
+5108_12m,toy,5108_12m_OIX_Felix.csv,5108_12m_OIX_Tayah.csv,nearest_video_time,17.0,18548,18547,1,0,1,18539,8,99.956866,0.043134,0.15931158,0.999486925,ok

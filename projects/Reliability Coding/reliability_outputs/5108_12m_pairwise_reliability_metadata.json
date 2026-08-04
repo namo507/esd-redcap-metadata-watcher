@@ -1,0 +1,187 @@
+{
+  "workflow_version": "2.0",
+  "file_a": {
+    "path": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/5108_12m_OIX_Felix.csv",
+    "profile": {
+      "rows": 18549,
+      "columns": [
+        "nFrame",
+        "time",
+        "TOY.ordinal",
+        "TOY.onset",
+        "TOY.offset",
+        "TOY.code01",
+        "LOOKING.ordinal",
+        "LOOKING.onset",
+        "LOOKING.offset",
+        "LOOKING.code01",
+        "Unnamed: 10"
+      ],
+      "resolved_columns": {
+        "video_time": "time",
+        "frame": "nFrame",
+        "toy_code": "TOY.code01",
+        "looking_code": "LOOKING.code01"
+      },
+      "malformed_alignment_values": {
+        "video_time": 0,
+        "frame": 0
+      },
+      "usable_video_time_rows": 18549,
+      "usable_frame_rows": 18549,
+      "usable_toy_rows": 18548,
+      "usable_looking_rows": 18548
+    }
+  },
+  "file_b": {
+    "path": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/5108_12m_OIX_Tayah.csv",
+    "profile": {
+      "rows": 18630,
+      "columns": [
+        "nFrame",
+        "time",
+        "TOY.ordinal",
+        "TOY.onset",
+        "TOY.offset",
+        "TOY.code01",
+        "LOOKING.ordinal",
+        "LOOKING.onset",
+        "LOOKING.offset",
+        "LOOKING.code01",
+        "Unnamed: 10"
+      ],
+      "resolved_columns": {
+        "video_time": "time",
+        "frame": "nFrame",
+        "toy_code": "TOY.code01",
+        "looking_code": "LOOKING.code01"
+      },
+      "malformed_alignment_values": {
+        "video_time": 0,
+        "frame": 0
+      },
+      "usable_video_time_rows": 18630,
+      "usable_frame_rows": 18630,
+      "usable_toy_rows": 18629,
+      "usable_looking_rows": 18629
+    }
+  },
+  "configuration": {
+    "requested_domains": [
+      "toy",
+      "looking"
+    ],
+    "excluded_codes": {
+      "toy": [
+        "9",
+        "999"
+      ],
+      "looking": [
+        "9",
+        "999"
+      ]
+    },
+    "age_months": null,
+    "pair_id": null,
+    "time_tolerance": null,
+    "time_scale_to_seconds": 0.001,
+    "strict_domains": true,
+    "strict_identity": true,
+    "allow_row_order_alignment": false,
+    "minimum_alignment_coverage": 0.9,
+    "output_prefix": "5108_12m_pairwise_reliability"
+  },
+  "column_mapping_a": {},
+  "column_mapping_b": {},
+  "value_mapping_a": {},
+  "value_mapping_b": {},
+  "validation": {
+    "shared_domains": [
+      "toy",
+      "looking"
+    ],
+    "alignment_method": "nearest_video_time",
+    "alignment_key": "video_time",
+    "time_tolerance": 17.0,
+    "median_step_a": 33.0,
+    "median_step_b": 33.0,
+    "inferred_a": {
+      "participant_id": "5108",
+      "age_months": 12
+    },
+    "inferred_b": {
+      "participant_id": "5108",
+      "age_months": 12
+    },
+    "age_months": 12,
+    "pair_id": "5108_12m"
+  },
+  "alignment": {
+    "method": "nearest_video_time",
+    "key": "video_time",
+    "time_tolerance": 17.0,
+    "median_step_a": 33.0,
+    "median_step_b": 33.0,
+    "candidate_rows_a": 18548,
+    "candidate_rows_b": 18548,
+    "aligned_rows": 18548,
+    "overlap_coverage_a": 1.0,
+    "overlap_coverage_b_unique": 1.0,
+    "full_file_coverage_a": 0.9999460887379373,
+    "full_file_coverage_b_unique": 0.9955984970477724,
+    "reused_file_b_rows": 0,
+    "maximum_alignment_delta": 1.0
+  },
+  "warnings": [],
+  "domain_summaries": [
+    {
+      "pair_id": "5108_12m",
+      "domain": "toy",
+      "file_a": "5108_12m_OIX_Felix.csv",
+      "file_b": "5108_12m_OIX_Tayah.csv",
+      "alignment_method": "nearest_video_time",
+      "time_tolerance": 17.0,
+      "aligned_rows": 18548,
+      "eligible_rows": 18547,
+      "excluded_missing_count": 1,
+      "excluded_special_count": 0,
+      "excluded_total_count": 1,
+      "agreement_count": 18539,
+      "disagreement_count": 8,
+      "agreement_pct": 99.956866,
+      "disagreement_pct": 0.043134,
+      "expected_agreement": 0.15931158,
+      "cohen_kappa": 0.999486925,
+      "kappa_status": "ok"
+    },
+    {
+      "pair_id": "5108_12m",
+      "domain": "looking",
+      "file_a": "5108_12m_OIX_Felix.csv",
+      "file_b": "5108_12m_OIX_Tayah.csv",
+      "alignment_method": "nearest_video_time",
+      "time_tolerance": 17.0,
+      "aligned_rows": 18548,
+      "eligible_rows": 18547,
+      "excluded_missing_count": 1,
+      "excluded_special_count": 0,
+      "excluded_total_count": 1,
+      "agreement_count": 16517,
+      "disagreement_count": 2030,
+      "agreement_pct": 89.054834,
+      "disagreement_pct": 10.945166,
+      "expected_agreement": 0.715830157,
+      "cohen_kappa": 0.614837162,
+      "kappa_status": "ok"
+    }
+  ],
+  "output_paths": {
+    "summary": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_summary.csv",
+    "disagreement_log": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_disagreement_log.csv",
+    "toy_summary": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_toy_summary.csv",
+    "toy_disagreement_log": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_toy_disagreement_log.csv",
+    "looking_summary": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_looking_summary.csv",
+    "looking_disagreement_log": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_looking_disagreement_log.csv",
+    "metadata": "/Users/namomac/esd-redcap-metadata-watcher/projects/Reliability Coding/reliability_outputs/5108_12m_pairwise_reliability_metadata.json"
+  }
+}
