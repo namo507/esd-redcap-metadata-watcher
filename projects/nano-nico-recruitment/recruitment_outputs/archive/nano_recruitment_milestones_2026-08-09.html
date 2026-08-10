@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recruitment Milestones</title>
+<style>
+:root {
+  --page-bg: #eef2f6;
+  --card-bg: #ffffff;
+  --card-border: #d5dbe3;
+  --title-bg: #7b7f86;
+  --band-blue: #5f8fbd;
+  --band-grey: #d9d9d9;
+  --band-light: #efefef;
+  --band-red: #c0392b;
+  --band-orange: #f6a821;
+  --grid: #b9c1cb;
+  --text: #18314f;
+  --muted: #6b7787;
+  --ok: #2e7d32;
+  --warn: #c0392b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Segoe UI, Arial, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(95, 143, 189, 0.16), transparent 28%),
+    linear-gradient(180deg, #f7f9fb 0%, var(--page-bg) 100%);
+  color: var(--text);
+}
+.page-shell {
+  max-width: 1800px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.page-header {
+  margin-bottom: 18px;
+}
+.page-header h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+}
+.page-header p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.report-stack {
+  display: grid;
+  gap: 24px;
+}
+.report-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(38, 57, 77, 0.08);
+  padding: 14px;
+  overflow-x: auto;
+}
+.recruitment-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--grid);
+}
+.recruitment-table td {
+  border: 1px solid var(--grid);
+  padding: 7px 10px;
+  font-size: 12px;
+  text-align: center;
+}
+.recruitment-table .title {
+  background: var(--title-bg);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.recruitment-table .notice-provisional {
+  background: var(--band-grey);
+  color: #000;
+  font-weight: 700;
+}
+.recruitment-table .notice-pending {
+  background: var(--band-red);
+  color: #fff;
+  font-weight: 700;
+}
+.recruitment-table .milestone-label,
+.recruitment-table .year,
+.recruitment-table .month,
+.recruitment-table .row-label {
+  background: var(--band-blue);
+  color: #fff;
+  font-weight: 700;
+}
+.recruitment-table .milestone-label {
+  min-width: 360px;
+  vertical-align: middle;
+}
+.recruitment-table .row-label {
+  text-align: left;
+  white-space: nowrap;
+}
+.recruitment-table .month {
+  text-decoration: underline;
+  min-width: 86px;
+}
+.recruitment-table .current {
+  background: var(--band-orange) !important;
+  color: #000 !important;
+}
+.recruitment-table .value.prev {
+  background: var(--band-light);
+  font-weight: 700;
+  color: #000;
+}
+.recruitment-table .value.curr,
+.recruitment-table .value.actual,
+.recruitment-table .value.ratio,
+.recruitment-table .value.status {
+  background: #fff;
+  font-weight: 700;
+  color: #000;
+}
+.recruitment-table .value.status.ok { color: var(--ok); }
+.recruitment-table .value.status.warn { color: var(--warn); }
+.recruitment-table .value.status.pending { color: #6b4c00; }
+.recruitment-table .value.status.na { color: #8a9099; }
+.recruitment-table .spacer td {
+  height: 10px;
+  padding: 0;
+  background: #c9c9c9;
+  border-color: #fff;
+}
+.recruitment-footnote {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 900px) {
+  .page-shell { padding: 14px; }
+  .page-header h1 { font-size: 23px; }
+  .report-card { padding: 10px; }
+  .recruitment-table .milestone-label { min-width: 260px; }
+}
+</style>
+</head>
+<body>
+  <main class="page-shell">
+    <header class="page-header">
+      <h1>Recruitment Milestones</h1>
+      <p>Read-only REDCap validation for NANO and NICO; published milestone values are preserved and unavailable values remain N/A. Report cut-off: 2026-08-09. Source endpoint: https://redcap.research.sc.edu/api/.</p>
+    </header>
+    <div class="report-stack"><section class="report-card"><table class="recruitment-table"><tr><td colspan="15" class="title">Recruitment Milestones for MH132925 - The Role of Autonomic Regulation of Attention in the Emergence of ASD</td></tr><tr><td colspan="15" class="notice-provisional">Reference targets and published actuals are reproduced unchanged; no protocol-confirmed enrollment status/date mapping is available.</td></tr><tr><td rowspan="2" class="milestone-label">Tri Yearly Milestones</td><td colspan="2" class="year">2024</td><td colspan="3" class="year">2025</td><td colspan="3" class="year">2026</td><td colspan="3" class="year">2027</td><td colspan="3" class="year">2028</td></tr><tr><td class="month">Aug 1</td><td class="month">Dec 1</td><td class="month">Apr 1</td><td class="month">Aug 1</td><td class="month">Dec 1</td><td class="month">Apr 1</td><td class="month">Aug 1</td><td class="month current">Dec 1</td><td class="month">Apr 1</td><td class="month">Aug 1</td><td class="month">Dec 1</td><td class="month">Apr 1</td><td class="month">Aug 1</td><td class="month">Dec 1</td></tr><tr class="spacer"><td colspan="15"></td></tr><tr><td class="row-label">Previous Target: Total Recruitment</td><td class="value prev">90</td><td class="value prev">110</td><td class="value prev">130</td><td class="value prev">150</td><td class="value prev">170</td><td class="value prev">190</td><td class="value prev">200</td><td class="value prev current">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">160</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td></tr><tr><td class="row-label">Current Target: Total Recruitment</td><td class="value curr">5</td><td class="value curr">10</td><td class="value curr">110</td><td class="value curr">120</td><td class="value curr">130</td><td class="value curr">140</td><td class="value curr">150</td><td class="value curr current">160</td><td class="value curr">170</td><td class="value curr">180</td><td class="value curr">190</td><td class="value curr">200</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td></tr><tr><td class="row-label">Actual: Total Recruitment</td><td class="value actual">63</td><td class="value actual">108</td><td class="value actual">128</td><td class="value actual">151</td><td class="value actual">172</td><td class="value actual">219</td><td class="value actual">&nbsp;</td><td class="value actual current">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td></tr><tr><td class="row-label">Actual/Target Ratio: Total Recruitment</td><td class="value ratio">1260%</td><td class="value ratio">1080%</td><td class="value ratio">116%</td><td class="value ratio">126%</td><td class="value ratio">132%</td><td class="value ratio">156%</td><td class="value ratio">N/A</td><td class="value ratio current">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td></tr><tr><td class="row-label">Status: Total Recruitment</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status plain">&nbsp;</td><td class="value status current pending">📋</td><td class="value status plain">&nbsp;</td><td class="value status plain">&nbsp;</td><td class="value status plain">&nbsp;</td><td class="value status plain">&nbsp;</td><td class="value status na">N/A</td><td class="value status na">N/A</td></tr><tr class="spacer"><td colspan="15"></td></tr><tr><td class="row-label">Previous Target: Racial Minority Recruitment</td><td class="value prev">36</td><td class="value prev">44</td><td class="value prev">52</td><td class="value prev">60</td><td class="value prev">68</td><td class="value prev">76</td><td class="value prev">84</td><td class="value prev current">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">32</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td></tr><tr><td class="row-label">Current Target: Racial Minority Recruitment</td><td class="value curr">1</td><td class="value curr">2</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr current">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">40</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td></tr><tr><td class="row-label">Actual: Racial Minority Recruitment</td><td class="value actual">25</td><td class="value actual">48</td><td class="value actual">59</td><td class="value actual">84</td><td class="value actual">96</td><td class="value actual">99</td><td class="value actual">&nbsp;</td><td class="value actual current">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td></tr><tr><td class="row-label">Actual/Target Ratio: Racial Minority Recruitment</td><td class="value ratio">2500%</td><td class="value ratio">2400%</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio current">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td></tr><tr><td class="row-label">Status: Racial Minority Recruitment</td><td class="value status ok">✅</td><td class="value status ok">✅</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status current na">N/A</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status plain">&nbsp;</td><td class="value status na">N/A</td><td class="value status na">N/A</td></tr><tr class="spacer"><td colspan="15"></td></tr><tr><td class="row-label">Previous Target: Hispanic Ethnicity Recruitment</td><td class="value prev">3</td><td class="value prev">5</td><td class="value prev">7</td><td class="value prev">9</td><td class="value prev">11</td><td class="value prev">13</td><td class="value prev">14</td><td class="value prev current">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">7</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td><td class="value prev">&nbsp;</td></tr><tr><td class="row-label">Current Target: Hispanic Ethnicity Recruitment</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td><td class="value curr">1</td><td class="value curr">&nbsp;</td><td class="value curr">1</td><td class="value curr">&nbsp;</td><td class="value curr">1</td><td class="value curr current">&nbsp;</td><td class="value curr">1</td><td class="value curr">&nbsp;</td><td class="value curr">1</td><td class="value curr">10</td><td class="value curr">&nbsp;</td><td class="value curr">&nbsp;</td></tr><tr><td class="row-label">Actual: Hispanic Ethnicity Recruitment</td><td class="value actual">5</td><td class="value actual">5</td><td class="value actual">7</td><td class="value actual">8</td><td class="value actual">11</td><td class="value actual">16</td><td class="value actual">&nbsp;</td><td class="value actual current">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td><td class="value actual">&nbsp;</td></tr><tr><td class="row-label">Actual/Target Ratio: Hispanic Ethnicity Recruitment</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">700%</td><td class="value ratio">N/A</td><td class="value ratio">1100%</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio current">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td><td class="value ratio">N/A</td></tr><tr><td class="row-label">Status: Hispanic Ethnicity Recruitment</td><td class="value status na">N/A</td><td class="value status na">N/A</td><td class="value status ok">✅</td><td class="value status na">N/A</td><td class="value status ok">✅</td><td class="value status na">N/A</td><td class="value status plain">&nbsp;</td><td class="value status current na">N/A</td><td class="value status plain">&nbsp;</td><td class="value status na">N/A</td><td class="value status plain">&nbsp;</td><td class="value status plain">&nbsp;</td><td class="value status na">N/A</td><td class="value status na">N/A</td></tr></table><div class="recruitment-footnote">Actual/Target Ratio = Actual / Current Target x 100. N/A appears when an actual or target is unavailable, or the target is 0. Report cut-off: 2026-08-09. No protocol-confirmed enrollment status/date field is configured. Published actuals are preserved and are not overwritten by the live record inventory.</div></section></div>
+  </main>
+</body>
+</html>
