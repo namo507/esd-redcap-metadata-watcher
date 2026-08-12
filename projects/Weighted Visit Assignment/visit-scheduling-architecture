@@ -2,212 +2,325 @@
 
 ## 1. Overview
 
-This document formalizes the coordinator/grad-student visit-assignment logic referenced in the ESD Lab Slack discussion (placeholder project, Aug 12 2026), combining hard constraints observed in real scheduling cases (e.g., the 5034/5035 twins case) with a weighted scoring model inspired by the existing CSBS scoring-clinician assignment rule.
+This document formalizes the visit-assignment logic discussed in the ESD lab workflow, combining hard constraints observed in real scheduling cases (for example, the 5034/5035 twins scenario) with a weighted scoring model inspired by the CSBS clinician-assignment rule.
 
-The system operates in three sequential layers:
+The policy operates in three sequential layers:
 
-1.  **Hard Constraint Filtering** — eliminate ineligible candidates
-2.  **Weighted Scoring** — rank remaining eligible candidates
-3.  **Tie-Breaking & Manual Override** — resolve ties, preserve human judgment for sensitive cases
+1. Hard-constraint filtering
+2. Weighted ranking
+3. Tie-breaking and manual escalation
 
-------------------------------------------------------------------------
+These layers ensure that no assignment is made unless the candidate is both eligible and appropriately ranked, while preserving human judgment for sensitive or high-risk cases.
 
-## 2. End-to-End Workflow Diagram
+---
 
-``` mermaid
+## 2. Notation and Symbol Definitions
+
+Let:
+
+- $i \in \mathcal{C}$ denote a candidate
+- $v \in \mathcal{V}$ denote a visit request
+- $f$ denote the family associated with the visit
+- $\Delta t_i$ denote the number of days since candidate $i$'s most recent assignment
+- $n_{i,f}$ denote the number of prior visits candidate $i$ has completed with family $f$
+- $\sigma_f \in \{-1, +1\}$ denote the family-specific continuity preference flag
+- $d_{i,v}$ denote the estimated round-trip travel distance for candidate $i$ to visit $v$
+- $v_i^{(\text{period})}$ denote candidate $i$'s visit count in the current review period
+- $v_{\max}^{(\text{period})}$ denote the maximum visit count among active candidates in that period
+- $\epsilon$ denote the score-tolerance threshold for tie detection
+
+The assignment policy is defined over the eligible candidate set $\mathcal{E}_v$.
+
+---
+
+## 3. End-to-End Workflow
+
+```mermaid
 flowchart TD
     A[New Visit Request<br/>Family ID, Visit Type, Date Window] --> B[Layer 1: Hard Constraints]
 
-    B --> B1[Availability Filter<br/>Candidate has open slot in date window]
-    B1 --> B2[Relationship Exclusion Filter<br/>Remove candidates on family's exclusion list]
-    B2 --> B3[Role/Certification Filter<br/>Only certified roles for this visit type]
-    B3 --> B4[Logistics Feasibility Filter<br/>Van-certified if shared vehicle required]
+    B --> B1[Availability Check<br/>candidate has open slot in the date window]
+    B1 --> B2[Relationship Exclusion Check<br/>remove family-excluded candidates]
+    B2 --> B3[Role/Certification Check<br/>candidate meets required visit type credential]
+    B3 --> B4[Logistics Feasibility Check<br/>vehicle / transport requirement satisfied]
 
-    B4 --> C{Any Eligible<br/>Candidates Remain?}
-    C -- No --> C1[Escalate to Coordinator<br/>Manual Rescheduling]
+    B4 --> C{Any eligible candidates remain?}
+    C -- No --> C1[Escalate to Coordinator<br/>manual rescheduling]
     C -- Yes --> D[Layer 2: Weighted Scoring]
 
-    D --> D1[Compute Recency Score R]
-    D --> D2[Compute Family-History Score F]
-    D --> D3[Compute Travel/Distance Score D]
-    D --> D4[Compute Workload-Balance Score L]
-    D --> D5[Compute Continuity Bonus C]
+    D --> D1[Compute $R_{i,v}$]
+    D --> D2[Compute $F_{i,f}$]
+    D --> D3[Compute $D_{i,v}$]
+    D --> D4[Compute $L_i$]
+    D --> D5[Compute $C_{i,f}$]
 
-    D1 --> E[Composite Score S = w1R + w2F + w3D + w4L + w5C]
+    D1 --> E[Composite score<br/>$S_{i,v} = \sum_k w_k x_k$]
     D2 --> E
     D3 --> E
     D4 --> E
     D5 --> E
 
-    E --> F{Tie in Top Score?}
-    F -- Yes --> F1[Layer 3: Tie-Break<br/>Prefer least total interaction with family<br/>unless continuity flag overrides]
-    F -- No --> G[Assign Top-Scoring Candidate]
+    E --> F{Top two scores within $\epsilon$?}
+    F -- Yes --> F1[Layer 3: Tie-break rule<br/>minimize or maximize family history depending on $\sigma_f$]
+    F -- No --> G[Select top-scoring candidate]
     F1 --> G
 
-    G --> H{Sensitive Case Flag?<br/>e.g., dual relationship, PI hold}
-    H -- Yes --> H1[Route to PI/Coordinator<br/>for Manual Confirmation]
-    H -- No --> I[Auto-Confirm Assignment]
+    G --> H{Sensitive case? <br/>dual relationship, PI hold, or family preference}
+    H -- Yes --> H1[Route to PI / Coordinator<br/>for manual confirmation]
+    H -- No --> I[Auto-confirm assignment]
 
-    H1 --> J[Log Assignment to Tracker]
+    H1 --> J[Log assignment]
     I --> J
-    J --> K[Update Recency, Workload,<br/>Family-History Records]
+    J --> K[Update recency, workload,<br/>and family-history records]
 ```
 
-------------------------------------------------------------------------
+---
 
-## 3. Layer 1: Hard Constraints (Elimination Logic)
+## 4. Layer 1: Hard Constraints
 
-Each candidate ( i ) is evaluated against a boolean eligibility function before any scoring occurs:
+A candidate is eligible only if all required conditions pass:
 
-\[ \text{Eligible}(i, v) = A(i,v) \land \lnot E(i, fam_v) \land R(i, v) \land G(i, v) \]
+$$
+\operatorname{Eligible}(i,v)
+=
+A_{i,v}
+\land
+\neg E_{i,f}
+\land
+R_{i,v}
+\land
+G_{i,v}
+$$
 
-Where, for visit ( v ) and candidate ( i ):
+where:
 
--   ( A(i,v) ) — availability indicator (1 if candidate's calendar has an open slot overlapping visit window, else 0)
--   ( E(i, fam_v) ) — exclusion indicator (1 if candidate is on the family's exclusion list, e.g., dual-relationship case)
--   ( R(i, v) ) — role/certification match indicator (1 if candidate holds required certification for visit type)
--   ( G(i, v) ) — logistics feasibility indicator (1 if candidate can fulfill transport requirements, e.g., van certification)
+- $A_{i,v}$ = availability indicator, equal to $1$ if candidate $i$ has an open slot overlapping the visit window, else $0$
+- $E_{i,f}$ = exclusion indicator, equal to $1$ if candidate $i$ is on family $f$'s exclusion list, else $0$
+- $R_{i,v}$ = role/certification match indicator, equal to $1$ if candidate $i$ meets the required certification for visit type $v$, else $0$
+- $G_{i,v}$ = logistics feasibility indicator, equal to $1$ if the candidate can satisfy transport or vehicle requirements, else $0$
 
-Only candidates where ( \text{Eligible}(i, v) = \text{True} ) proceed to Layer 2.
+Only candidates satisfying
 
-**Example (Twins Case, 5034/5035):**
+$$
+\operatorname{Eligible}(i,v)=\text{True}
+$$
 
-| Candidate | Available? | Excluded? | Certified? | Van OK? | Eligible? |
-|------------|------------|------------|------------|------------|------------|
-| Emma | Yes | **Yes** (dual relationship) | Yes | Yes | **No** |
-| Kali | Yes | No | Yes | Yes | **Yes** |
-| Axie | No (no overlap) | No | Yes | Yes | **No** |
+may proceed to the weighted-scoring stage.
 
-Only Kali passes Layer 1 — consistent with the actual outcome where Sanjana scheduled Kali for both twins after mom's comfort was confirmed.
+### Example: Twins Case (5034/5035)
 
-------------------------------------------------------------------------
+| Candidate | Available | Excluded | Certified | Van OK | Eligible |
+|---|---:|---:|---:|---:|---:|
+| Emma | Yes | Yes | Yes | Yes | No |
+| Kali | Yes | No | Yes | Yes | Yes |
+| Axie | No | No | Yes | Yes | No |
 
-## 4. Layer 2: Weighted Composite Scoring
+Only Kali remains after Layer 1, consistent with the real scheduling outcome where the family comfort issue was resolved and Kali was retained for both twin visits.
 
-For each eligible candidate ( i ) and visit ( v ), compute:
+---
 
-\[ S\_{i,v} = w_1 \cdot R\_{i,v} + w_2 \cdot F\_{i,fam} + w_3 \cdot D\_{i,v} + w_4 \cdot L\_{i} + w_5 \cdot C\_{i,fam} \]
+## 5. Layer 2: Weighted Composite Score
 
-subject to:
+For each eligible candidate $i$ and visit $v$, compute:
 
-\[ \sum\_{k=1}\^{5} w_k = 1, \quad w_k \geq 0 \]
+$$
+S_{i,v}
+=
+w_1 R_{i,v} + w_2 F_{i,f} + w_3 D_{i,v} + w_4 L_i + w_5 C_{i,f}
+$$
 
-The candidate with the highest ( S\_{i,v} ) among eligible candidates is selected.
+with
 
-### 4.1 Component Definitions
+$$
+\sum_{k=1}^{5} w_k = 1, \qquad w_k \ge 0
+$$
 
-**Recency Score ( R\_{i,v} )** — rewards candidates who have not been assigned recently (any family), mirroring the CSBS logic of preferring whoever's last interaction is furthest away in time:
+The selected candidate is
 
-\[ R\_{i,v} = \frac{\min(\Delta t_i, \, T_{cap})}{T_{cap}} \]
+$$
+\hat{i}_v = \arg\max_{i \in \mathcal{E}_v} S_{i,v}
+$$
 
-where ( \Delta t_i ) = days since candidate ( i )'s last visit assignment (any family), and ( T\_{cap} ) = normalization cap (e.g., 90 days) to prevent unbounded scaling.
+where $\mathcal{E}_v$ is the set of eligible candidates for visit $v$.
 
-**Family-History Score ( F\_{i,fam} )** — signed term; sign depends on a per-family continuity flag ( \sigma\_{fam} \in {+1, -1} ):
+### 5.1 Recency Score
 
-\[ F\_{i,fam} = \sigma\_{fam} \cdot \frac{1}{1 + n_{i,fam}} \]
+This rewards candidates whose last assignment is furthest in the past, mirroring the CSBS logic of reducing assignment repetition.
 
-where ( n\_{i,fam} ) = number of prior visits candidate ( i ) has completed with this family.
+$$
+R_{i,v} = \frac{\min(\Delta t_i, T_{\text{cap}})}{T_{\text{cap}}}
+$$
 
--   If ( \sigma\_{fam} = -1 ) (novelty preferred, default for scoring-clinician-style tasks): score decreases as prior interactions increase.
--   If ( \sigma\_{fam} = +1 ) (continuity preferred, e.g., families who bonded with a specific clinician): score increases with prior interactions.
+where $T_{\text{cap}}$ is a normalization cap, such as $90$ days.
 
-**Travel/Distance Score ( D\_{i,v} )** — penalizes higher mileage burden, normalized against the fleet-wide monthly average (\~1,508.5 miles/month observed):
+### 5.2 Family-History Score
 
-\[ D\_{i,v} = 1 - \frac{d_{i,v}}{d_{max}} \]
+This term captures prior interaction with the family and can be oriented toward novelty or continuity depending on the family flag.
 
-where ( d\_{i,v} ) = estimated round-trip distance for candidate ( i ) to visit ( v ), and ( d\_{max} ) = the largest distance among eligible candidates for this visit.
+$$
+F_{i,f}=\sigma_f \cdot \frac{1}{1+n_{i,f}}
+$$
 
-**Workload-Balance Score ( L_i )** — favors less-loaded candidates in the current period (week/month):
+with:
 
-\[ L_i = 1 - \frac{v_i^{period}}{v_{max}^{period}} \]
+- $\sigma_f = -1$ for novelty preference
+- $\sigma_f = +1$ for continuity preference
 
-where ( v_i\^{period} ) = number of visits candidate ( i ) has completed this period, and ( v\_{max}\^{period} ) = the maximum visit count among all active candidates this period.
+Interpretation:
 
-**Continuity Bonus ( C\_{i,fam} )** — small additive bonus for maintaining the same assignee across a longitudinal study's checkpoint visits (e.g., 9m/12m/15m/18m/24m):
+- If $\sigma_f=-1$, more prior visits lower the score.
+- If $\sigma_f=+1$, more prior visits increase the score.
 
-\[ C\_{i,fam} =
+### 5.3 Travel / Distance Score
 
-\begin{cases} \gamma, & \text{if } i \text{ was assigned to } fam\text{'s immediately preceding checkpoint} \\ 0, & \text{otherwise} \end{cases}
+This penalizes heavier travel burden by comparing the candidate's distance to the largest eligible distance.
 
-\]
+$$
+D_{i,v} = 1 - \frac{d_{i,v}}{d_{\max}}
+$$
 
-where ( \gamma ) is a small fixed bonus (e.g., 0.05), kept modest so it does not override workload/travel considerations at scale.
+where $d_{\max} = \max_{j \in \mathcal{E}_v} d_{j,v}$.
 
-### 4.2 Worked Numerical Example
+### 5.4 Workload-Balance Score
 
-Visit request: Family 5035, 12-month checkpoint. Eligible candidates after Layer 1: Kali, Sam.
+This favors candidates with lower assignment volume during the current period.
 
-Assume weights (to be finalized by PI): ( w_1=0.30, w_2=0.25, w_3=0.20, w_4=0.15, w_5=0.10 )
+$$
+L_i = 1 - \frac{v_i^{(\text{period})}}{v_{\max}^{(\text{period})}}
+$$
+
+where $v_{\max}^{(\text{period})} = \max_{j \in \mathcal{C}} v_j^{(\text{period})}$.
+
+### 5.5 Continuity Bonus
+
+This adds a modest bonus when a candidate was assigned to the immediately preceding checkpoint visit for the same family.
+
+$$
+C_{i,f} =
+\begin{cases}
+\gamma, & \text{if } i \text{ was assigned to the immediately preceding checkpoint for } f, \\
+0, & \text{otherwise}
+\end{cases}
+$$
+
+with $\gamma$ a small constant, such as $0.05$.
+
+---
+
+## 6. Worked Numerical Example
+
+Assume the visit is family 5035 at the 12-month checkpoint, with eligible candidates $\{\text{Kali}, \text{Sam}\}$ and weights:
+
+$$
+(w_1,w_2,w_3,w_4,w_5)=(0.30,0.25,0.20,0.15,0.10)
+$$
 
 | Metric | Kali | Sam |
-|------------------------|------------------------|------------------------|
-| Days since last assignment ((\Delta t)) | 5 | 20 |
-| ( R ) (cap=90) | 0.056 | 0.222 |
-| Prior visits with 5035 ((n)) | 1 (twin 5034 completed) | 0 |
-| (\sigma\_{fam}) (continuity preferred, mom comfortable with Kali) | +1 | +1 |
-| ( F ) | 0.500 | 1.000 |
-| Distance (miles) | 8 | 22 |
-| ( D ) (d_max=22) | 0.636 | 0.000 |
-| Current period visit count | 6 | 3 |
-| ( L ) (v_max=6) | 0.000 | 0.500 |
-| Prior checkpoint assignee match | Yes (assigned to twin's prior visit) | No |
-| ( C ) | 0.05 | 0.00 |
+|---|---:|---:|
+| $\Delta t$ (days) | 5 | 20 |
+| $R_{i,v}$ | $0.056$ | $0.222$ |
+| $n_{i,f}$ | 1 | 0 |
+| $\sigma_f$ | $+1$ | $+1$ |
+| $F_{i,f}$ | $0.500$ | $1.000$ |
+| $d_{i,v}$ (miles) | 8 | 22 |
+| $D_{i,v}$ | $0.636$ | $0.000$ |
+| $v_i^{(\text{period})}$ | 6 | 3 |
+| $L_i$ | $0.000$ | $0.500$ |
+| prior checkpoint match | Yes | No |
+| $C_{i,f}$ | $0.050$ | $0.000$ |
 
-Composite scores:
+Then:
 
-\[ S\_{Kali} = 0.30(0.056) + 0.25(0.500) + 0.20(0.636) + 0.15(0.000) + 0.10(0.05) = 0.0168 + 0.125 + 0.1272 + 0 + 0.005 = 0.274 \]
+$$
+S_{\text{Kali},v}
+=0.30(0.056)+0.25(0.500)+0.20(0.636)+0.15(0.000)+0.10(0.050)
+=0.274
+$$
 
-\[ S\_{Sam} = 0.30(0.222) + 0.25(1.000) + 0.20(0.000) + 0.15(0.500) + 0.10(0.00) = 0.0666 + 0.25 + 0 + 0.075 + 0 = 0.3916 \]
+$$
+S_{\text{Sam},v}
+=0.30(0.222)+0.25(1.000)+0.20(0.000)+0.15(0.500)+0.10(0.000)
+=0.392
+$$
 
-Despite Kali's continuity advantage, Sam scores higher overall here because Kali is heavily loaded this period and lives farther away in this hypothetical — illustrating why **all five factors must be weighed jointly** rather than defaulting to continuity alone. In the actual Slack case, Sanjana's decision to keep Kali was driven by the family's explicit comfort level, which in this model would be captured by making ( \sigma\_{fam} ) strongly positive or by adding a hard "family-preferred assignee" override in Layer 1 rather than relying purely on Layer 2 scoring.
+Thus, in this hypothetical example, Sam ranks higher overall because the workload and travel burden dominate despite Kali's continuity advantage. This illustrates why the composite score must combine all five terms concurrently, rather than relying on continuity alone.
 
-------------------------------------------------------------------------
+In the real Slack example, the family comfort preference was treated as a stronger behavioral override; in the formal model, that would be captured by a high positive continuity flag $\sigma_f$ or by a hard family-preference override in Layer 1.
 
-## 5. Layer 3: Tie-Breaking Logic
+---
 
-If ( \|S\_{i,v} - S\_{j,v}\| \< \epsilon ) for the top two candidates (tolerance ( \epsilon ), e.g., 0.01):
+## 7. Layer 3: Tie-Breaking Logic
 
-\[ \text{Winner} = \arg\min*{i} , n*{i,fam} \]
+If the top two candidates are effectively tied, the system resolves ambiguity using family-history information.
 
-i.e., prefer whoever has interacted with the family the least, matching the CSBS scoring-clinician rule — unless the family's continuity flag ( \sigma\_{fam} = +1 ), in which case:
+$$
+|S_{i,v}-S_{j,v}| < \epsilon
+$$
 
-\[ \text{Winner} = \arg\max*{i} , n*{i,fam} \]
+Then the winner is selected by:
 
-------------------------------------------------------------------------
+$$
+\text{Winner} =
+\begin{cases}
+\arg\min_{i} n_{i,f}, & \sigma_f = -1, \\
+\arg\max_{i} n_{i,f}, & \sigma_f = +1.
+\end{cases}
+$$
 
-## 6. Sensitivity & Escalation Rules
+This means:
 
-``` mermaid
+- when novelty is preferred, the system favors the candidate with the least prior interaction with the family;
+- when continuity is preferred, the system favors the candidate with the most prior interaction with the family.
+
+A practical implementation should also flag a low-margin case when the score difference is small but not strictly tied, because these assignments often require human review.
+
+---
+
+## 8. Sensitivity and Escalation Rules
+
+```mermaid
 flowchart LR
-    A[Composite Score Computed] --> B{Family has<br/>dual-relationship flag?}
-    B -- Yes --> C[Auto-exclude flagged candidate<br/>in Layer 1, no scoring needed]
-    B -- No --> D{PI hold flag<br/>on family record?}
-    D -- Yes --> E[Pause auto-assignment<br/>Route to PI for manual decision]
-    D -- No --> F[Proceed with Layer 2 scoring<br/>and auto-confirm]
+    A[Composite score computed] --> B{Family has dual-relationship flag?}
+    B -- Yes --> C[Auto-exclude flagged candidate<br/>no scoring allowed]
+    B -- No --> D{PI hold flag on family record?}
+    D -- Yes --> E[Pause auto-assignment<br/>route to PI for manual decision]
+    D -- No --> F[Proceed with scoring<br/>and auto-confirm]
 ```
 
-This mirrors the real workflow where Jessica Bradshaw explicitly paused finalizing a day/time for the twins' family until the dual-relationship issue was resolved manually.
+This mirrors the real workflow in which a family relationship concern required explicit human intervention before the visit could be finalized.
 
-------------------------------------------------------------------------
+---
 
-## 7. Data Model Requirements
+## 9. Data Model Requirements
 
-| Table | Key Fields | Purpose |
-|------------------------|------------------------|------------------------|
-| `availability` | candidate_id, date_start, date_end | Layer 1 filter input |
-| `family_exclusions` | family_id, excluded_candidate_id, reason | Layer 1 filter input |
-| `certifications` | candidate_id, visit_type, certified (bool) | Layer 1 filter input |
-| `visit_history` | visit_id, family_id, candidate_id, date, visit_type | Feeds ( R, F, C ) |
-| `distance_matrix` | candidate_id, family_id, distance_miles | Feeds ( D ) |
-| `workload_period` | candidate_id, period, visit_count | Feeds ( L ) |
-| `family_continuity_flag` | family_id, sigma (+1/-1), preferred_candidate_id | Sets ( \sigma\_{fam} ), optional hard override |
-| `scoring_weights` | w1, w2, w3, w4, w5, effective_date | PI-controlled configuration, versioned |
+| Table | Key fields | Purpose |
+|---|---|---|
+| `availability` | `candidate_id`, `date_start`, `date_end` | Layer 1 eligibility input |
+| `family_exclusions` | `family_id`, `excluded_candidate_id`, `reason` | Hard exclusion logic |
+| `certifications` | `candidate_id`, `visit_type`, `certified` | Role/certification match |
+| `visit_history` | `visit_id`, `family_id`, `candidate_id`, `date`, `visit_type` | Feeds $R_{i,v}$, $F_{i,f}$, $C_{i,f}$ |
+| `distance_matrix` | `candidate_id`, `family_id`, `distance_miles` | Feeds $D_{i,v}$ |
+| `workload_period` | `candidate_id`, `period`, `visit_count` | Feeds $L_i$ |
+| `family_continuity_flag` | `family_id`, `sigma`, `preferred_candidate_id` | Sets $\sigma_f$ and optional override |
+| `scoring_weights` | `w1`, `w2`, `w3`, `w4`, `w5`, `effective_date` | Versioned scoring configuration |
 
-------------------------------------------------------------------------
+---
 
-## 8. Implementation Notes
+## 10. Implementation Notes
 
--   Weights ( w_1 )–( w_5 ) should be stored as a versioned configuration table so the PI/lab manager can adjust them without code changes, and so past assignments can be audited against the weights active at assignment time.
--   Layer 1 filters must run first and are non-negotiable — no weight combination should be able to override an exclusion flag, matching the lab's actual practice of treating dual-relationship cases as hard stops.
--   The composite score formula is linear and interpretable by design (rather than a black-box model), so coordinators can explain to the PI exactly why a given candidate was recommended.
--   Recommend a "confidence margin" alert: if the top two candidates' scores differ by less than ( \epsilon ), flag the assignment for a coordinator's quick manual glance even if not a strict tie, since close scores often indicate genuinely ambiguous cases (as in the worked example above).
+- Weights $w_1$ through $w_5$ should be stored in a versioned configuration table so the PI or lab manager can modify the policy without changing code.
+- Layer 1 filters are non-negotiable and cannot be overridden by a composite score.
+- The scoring model is intentionally interpretable and linear, making it easy to explain the recommendation to coordinators and the PI.
+- A confidence-margin alert is recommended: when the top two candidate scores are within $\epsilon$, flag the assignment for coordinator review even if it is not a strict tie.
+
+A concise summary of the end-to-end decision rule is:
+
+$$
+\text{Assignment}(v) =
+\begin{cases}
+\text{manual escalation}, & \text{if } \mathcal{E}_v = \varnothing, \\
+\arg\max_{i \in \mathcal{E}_v} S_{i,v}, & \text{otherwise.}
+\end{cases}
+$$
+
+This makes the architecture explicit: no assignment is generated without a feasible candidate pool, and no feasible candidate is chosen without a transparent, auditable score. 
