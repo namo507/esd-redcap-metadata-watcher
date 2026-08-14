@@ -6,6 +6,6 @@ R4,Within-block response SD at/below clean 1st percentile,"{""feat_sd_likert_4""
 R5,Exact ordered Likert fingerprint duplicate,0.8,minimum answered fraction before hashing
 R6,At least 3 submissions in clean-derived short window,60.0,seconds; bounded clean 1st-percentile inter-arrival
 R7,Near-duplicate open text,0.9,TF-IDF cosine similarity
-R8,Logical family-information inconsistency,logical,autistic-child follow-ups or impossible age-band count
+R8,Logical family-information inconsistency,logical,"autistic-child follow-ups, branching contradictions, or impossible age-band count"
 R9,Impossible demographic combination,logical,"age, ZIP, and first-birth plausibility"
 R10,"4797 instrument-native anti-fraud gate (validation-only, not tier-defining)",logical,knee/age/email; email available=False

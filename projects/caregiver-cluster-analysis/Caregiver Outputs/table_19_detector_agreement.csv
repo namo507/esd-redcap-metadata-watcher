@@ -1,8 +1,8 @@
 method_a,method_b,cohen_kappa,overlap_n,jaccard_overlap
-rule_high_suspicion_or_invalid,isolation,0.16242546570115513,313,0.2686695278969957
-rule_high_suspicion_or_invalid,lof,0.028748655177713522,91,0.08280254777070063
-rule_high_suspicion_or_invalid,mahalanobis,-0.02173564293288388,9,0.008356545961002786
-rule_high_suspicion_or_invalid,pu_classifier,0.2933355554727125,1001,0.6030120481927711
+rule_high_suspicion_or_invalid,isolation,0.15930558282872398,313,0.2672929120409906
+rule_high_suspicion_or_invalid,lof,0.027772004470500544,91,0.08235294117647059
+rule_high_suspicion_or_invalid,mahalanobis,-0.021838190372051036,9,0.008310249307479225
+rule_high_suspicion_or_invalid,pu_classifier,0.29467840532732015,1006,0.6056592414208308
 isolation,lof,0.2895921790848308,105,0.22483940042826553
 isolation,mahalanobis,0.09149817384290504,29,0.06605922551252848
 isolation,pu_classifier,0.06808160286523812,400,0.24345709068776628

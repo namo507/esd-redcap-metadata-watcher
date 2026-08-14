@@ -43,6 +43,57 @@ fraud_rules:
     - 10minutemail.com
     - temp-mail.org
     - yopmail.com
+  branching_audit:
+    mutually_exclusive_pairs:
+      - label: prenatal_testing_mutually_exclusive_pair
+        source_projects:
+          - dirty_4581
+        fields:
+          - field: fif_prenatal_preg
+            gating_fields:
+              - fif_pregnant
+            expected_branching_logic: '([fif_pregnant] <> "" and [fif_pregnant]=1)'
+          - field: fif_prenatal_no_preg
+            gating_fields:
+              - fif_pregnant
+            expected_branching_logic: '([fif_pregnant] <> "" and [fif_pregnant]=0)'
+    orphaned_followups:
+      - label: prenatal_tested_reason_without_prenatal_yes
+        source_projects:
+          - dirty_4581
+        dependent_field: fif_tested_reason
+        expected_branching_logic: '([fif_prenatal_no_preg] <> "" and [fif_prenatal_no_preg]=1) or ([fif_prenatal_preg] <> "" and [fif_prenatal_preg]=1)'
+        allowed_when_any:
+          - field: fif_prenatal_no_preg
+            equals: 1
+          - field: fif_prenatal_preg
+            equals: 1
+      - label: prenatal_not_tested_reason_without_prenatal_no
+        source_projects:
+          - dirty_4581
+        dependent_field: fif_not_tested_reason
+        expected_branching_logic: '([fif_prenatal_no_preg] <> "" and [fif_prenatal_no_preg]=0) or ([fif_prenatal_preg] <> "" and [fif_prenatal_preg]=0)'
+        allowed_when_any:
+          - field: fif_prenatal_no_preg
+            equals: 0
+          - field: fif_prenatal_preg
+            equals: 0
+      - label: earlier_diagnosis_yes_reason_without_yes_gate
+        source_projects:
+          - dirty_4581
+        dependent_field: fif_diag_early_yes
+        expected_branching_logic: '([fif_diag_earlier] <> "" and [fif_diag_earlier]=1)'
+        allowed_when_any:
+          - field: fif_diag_earlier
+            equals: 1
+      - label: earlier_diagnosis_no_reason_without_no_gate
+        source_projects:
+          - dirty_4581
+        dependent_field: fif_diag_early_no
+        expected_branching_logic: '([fif_diag_earlier] <> "" and [fif_diag_earlier]=0)'
+        allowed_when_any:
+          - field: fif_diag_earlier
+            equals: 0
 
 detectors:
   isolation_forest_estimators: 500

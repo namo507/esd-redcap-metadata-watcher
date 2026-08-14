@@ -482,6 +482,74 @@ def _nonempty(frame: pd.DataFrame, fields: list[str]) -> pd.DataFrame:
     return frame[fields].fillna("").astype(str).apply(lambda col: col.str.strip().ne(""))
 
 
+def _normalize_branching_logic(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _metadata_row_by_field(metadata: pd.DataFrame) -> dict[str, pd.Series]:
+    if metadata.empty:
+        return {}
+    indexed = metadata.drop_duplicates("field_name", keep="first").set_index("field_name")
+    return {str(field): indexed.loc[field] for field in indexed.index}
+
+
+def _resolve_export_columns(
+    frame: pd.DataFrame,
+    metadata_lookup: dict[str, pd.Series],
+    field_name: str,
+) -> tuple[list[str], bool]:
+    if field_name in frame:
+        field_type = str(metadata_lookup.get(field_name, {}).get("field_type", ""))
+        return [field_name], field_type == "checkbox"
+    checkbox_columns = sorted(
+        column for column in frame if column.startswith(f"{field_name}___")
+    )
+    if checkbox_columns:
+        return checkbox_columns, True
+    return [], False
+
+
+def _any_answered(
+    frame: pd.DataFrame, fields: list[str], *, checkbox: bool
+) -> pd.Series:
+    if not fields:
+        return pd.Series(False, index=frame.index)
+    if checkbox:
+        return frame[fields].apply(pd.to_numeric, errors="coerce").eq(1).any(axis=1)
+    return _nonempty(frame, fields).any(axis=1)
+
+
+def _branch_condition_mask(frame: pd.DataFrame, condition: dict) -> pd.Series:
+    field = str(condition["field"])
+    numeric = _numeric(frame, field)
+    if "equals" in condition:
+        return numeric.eq(float(condition["equals"]))
+    if "not_equals" in condition:
+        return numeric.ne(float(condition["not_equals"]))
+    if condition.get("nonzero"):
+        return numeric.ne(0)
+    if condition.get("present"):
+        return numeric.notna()
+    raise RuntimeError(f"Unsupported branching-audit condition for field {field}")
+
+
+def _validate_expected_branching_logic(
+    metadata_lookup: dict[str, pd.Series],
+    field_name: str,
+    expected: str,
+) -> None:
+    row = metadata_lookup.get(field_name)
+    if row is None:
+        raise RuntimeError(f"Metadata row missing for branching-audit field {field_name}")
+    observed = _normalize_branching_logic(row.get("branching_logic", ""))
+    if observed != _normalize_branching_logic(expected):
+        raise RuntimeError(
+            f"Branching logic drift for {field_name}: observed {observed!r}, expected {expected!r}"
+        )
+
+
 def _age_checkbox_columns(frame: pd.DataFrame) -> list[str]:
     return sorted(column for column in frame if column.startswith("fif_childrens_ages___"))
 
@@ -602,6 +670,7 @@ def engineer_behavioral_features_and_rules(
     features["source_project"] = combined["source_project"]
     features["project_id"] = combined["project_id"]
     features["record_id"] = combined["record_id"].astype(str)
+    metadata_lookup = _metadata_row_by_field(combined_meta)
 
     rules_cfg = config["fraud_rules"]
     completed_clean = (
@@ -684,6 +753,50 @@ def engineer_behavioral_features_and_rules(
     )
 
     rule_r8 = pd.Series(False, index=combined.index)
+    branching_audit_rows: list[dict] = []
+
+    def add_branching_audit_rows(
+        mask: pd.Series,
+        *,
+        family: str,
+        violation_type: str,
+        dependent_field: str,
+        gating_logic: str,
+        gating_fields: list[str],
+        observed_fields: list[str],
+    ) -> None:
+        hit_index = combined.index[mask.fillna(False)]
+        if not len(hit_index):
+            return
+        for uid in hit_index:
+            row = combined.loc[uid]
+            observed_values = {
+                field: row.get(field, "")
+                for field in observed_fields
+                if str(row.get(field, "")).strip() != ""
+            }
+            gating_values = {
+                field: row.get(field, "")
+                for field in gating_fields
+                if field in combined.columns
+            }
+            branching_audit_rows.append(
+                {
+                    "uid": uid,
+                    "source_project": row["source_project"],
+                    "project_id": row["project_id"],
+                    "record_id": str(row["record_id"]),
+                    "family": family,
+                    "violation_type": violation_type,
+                    "dependent_field": dependent_field,
+                    "gating_fields": ", ".join(gating_fields),
+                    "gating_logic": gating_logic,
+                    "observed_fields": ", ".join(observed_fields),
+                    "gating_values": json.dumps(gating_values, sort_keys=True),
+                    "observed_values": json.dumps(observed_values, sort_keys=True),
+                }
+            )
+
     followup_fields = []
     for row in combined_meta.itertuples(index=False):
         branching = str(getattr(row, "branching_logic", ""))
@@ -692,7 +805,89 @@ def engineer_behavioral_features_and_rules(
             followup_fields.append(field)
     zero_autistic = _numeric(combined, "fif_num_autistic").eq(0)
     if followup_fields:
-        rule_r8 |= zero_autistic & _nonempty(combined, followup_fields).any(axis=1)
+        autistic_followup_mask = zero_autistic & _nonempty(combined, followup_fields).any(axis=1)
+        rule_r8 |= autistic_followup_mask
+        add_branching_audit_rows(
+            autistic_followup_mask,
+            family="autistic_child_followup_hidden_answer",
+            violation_type="orphaned_followup",
+            dependent_field="metadata rows containing [fif_num_autistic]",
+            gating_logic="[fif_num_autistic] must not equal 0 when dependent follow-up fields are answered",
+            gating_fields=["fif_num_autistic"],
+            observed_fields=followup_fields,
+        )
+
+    branching_cfg = rules_cfg.get("branching_audit", {})
+    for pair_cfg in branching_cfg.get("mutually_exclusive_pairs", []):
+        label = str(pair_cfg["label"])
+        fields_cfg = pair_cfg.get("fields", [])
+        source_projects = {str(value) for value in pair_cfg.get("source_projects", [])}
+        resolved_fields: list[str] = []
+        gating_fields: set[str] = set()
+        for field_cfg in fields_cfg:
+            field_name = str(field_cfg["field"])
+            _validate_expected_branching_logic(
+                metadata_lookup,
+                field_name,
+                str(field_cfg["expected_branching_logic"]),
+            )
+            resolved, _ = _resolve_export_columns(combined, metadata_lookup, field_name)
+            if not resolved:
+                raise RuntimeError(f"No export columns found for branching-audit field {field_name}")
+            resolved_fields.extend(resolved)
+            gating_fields.update(str(field) for field in field_cfg.get("gating_fields", []))
+        pair_mask = _nonempty(combined, resolved_fields).sum(axis=1).ge(2)
+        if source_projects:
+            pair_mask &= combined["source_project"].isin(source_projects)
+        rule_r8 |= pair_mask
+        add_branching_audit_rows(
+            pair_mask,
+            family=label,
+            violation_type="mutually_exclusive_conditional_pair",
+            dependent_field=", ".join(str(field_cfg["field"]) for field_cfg in fields_cfg),
+            gating_logic=" | ".join(
+                str(field_cfg["expected_branching_logic"]) for field_cfg in fields_cfg
+            ),
+            gating_fields=sorted(gating_fields),
+            observed_fields=resolved_fields,
+        )
+
+    for followup_cfg in branching_cfg.get("orphaned_followups", []):
+        label = str(followup_cfg["label"])
+        dependent_field = str(followup_cfg["dependent_field"])
+        source_projects = {str(value) for value in followup_cfg.get("source_projects", [])}
+        _validate_expected_branching_logic(
+            metadata_lookup,
+            dependent_field,
+            str(followup_cfg["expected_branching_logic"]),
+        )
+        dependent_columns, is_checkbox = _resolve_export_columns(
+            combined, metadata_lookup, dependent_field
+        )
+        if not dependent_columns:
+            raise RuntimeError(
+                f"No export columns found for branching-audit dependent field {dependent_field}"
+            )
+        answered = _any_answered(combined, dependent_columns, checkbox=is_checkbox)
+        allowed_mask = pd.Series(False, index=combined.index)
+        gating_fields: list[str] = []
+        for condition in followup_cfg.get("allowed_when_any", []):
+            gating_fields.append(str(condition["field"]))
+            allowed_mask |= _branch_condition_mask(combined, condition).fillna(False)
+        orphan_mask = answered & ~allowed_mask
+        if source_projects:
+            orphan_mask &= combined["source_project"].isin(source_projects)
+        rule_r8 |= orphan_mask
+        add_branching_audit_rows(
+            orphan_mask,
+            family=label,
+            violation_type="orphaned_followup",
+            dependent_field=dependent_field,
+            gating_logic=str(followup_cfg["expected_branching_logic"]),
+            gating_fields=sorted(set(gating_fields)),
+            observed_fields=dependent_columns,
+        )
+
     age_checkbox_columns = _age_checkbox_columns(combined)
     if age_checkbox_columns:
         selected_age_bands = combined[age_checkbox_columns].apply(
@@ -700,8 +895,40 @@ def engineer_behavioral_features_and_rules(
         ).eq(1).sum(axis=1)
         child_count = _numeric(combined, "fif_num_children")
         # Multiple children may share an age band, so only selected bands > count is impossible.
-        rule_r8 |= child_count.notna() & selected_age_bands.gt(child_count)
+        age_band_mask = child_count.notna() & selected_age_bands.gt(child_count)
+        rule_r8 |= age_band_mask
+        add_branching_audit_rows(
+            age_band_mask,
+            family="child_age_band_count_exceeds_child_count",
+            violation_type="impossible_count",
+            dependent_field="fif_childrens_ages___*",
+            gating_logic="selected child age-band checkboxes must not exceed fif_num_children",
+            gating_fields=["fif_num_children"],
+            observed_fields=["fif_num_children", *age_checkbox_columns],
+        )
     rules["rule_R8"] = rule_r8
+    branching_audit = pd.DataFrame(branching_audit_rows)
+    if branching_audit.empty:
+        branching_audit = pd.DataFrame(
+            columns=[
+                "uid",
+                "source_project",
+                "project_id",
+                "record_id",
+                "family",
+                "violation_type",
+                "dependent_field",
+                "gating_fields",
+                "gating_logic",
+                "observed_fields",
+                "gating_values",
+                "observed_values",
+            ]
+        )
+    else:
+        branching_audit = branching_audit.sort_values(
+            ["source_project", "family", "record_id", "violation_type"]
+        ).reset_index(drop=True)
 
     rule_r9 = pd.Series(False, index=combined.index)
     caregiver_age = _numeric(combined, "age_check_demo")
@@ -784,7 +1011,7 @@ def engineer_behavioral_features_and_rules(
             ["R5", "Exact ordered Likert fingerprint duplicate", rules_cfg["duplicate_min_answer_fraction"], "minimum answered fraction before hashing"],
             ["R6", "At least 3 submissions in clean-derived short window", burst_window_seconds, "seconds; bounded clean 1st-percentile inter-arrival"],
             ["R7", "Near-duplicate open text", rules_cfg["open_text_similarity_threshold"], "TF-IDF cosine similarity"],
-            ["R8", "Logical family-information inconsistency", "logical", "autistic-child follow-ups or impossible age-band count"],
+            ["R8", "Logical family-information inconsistency", "logical", "autistic-child follow-ups, branching contradictions, or impossible age-band count"],
             ["R9", "Impossible demographic combination", "logical", "age, ZIP, and first-birth plausibility"],
             ["R10", "4797 instrument-native anti-fraud gate (validation-only, not tier-defining)", "logical", f"knee/age/email; email available={email_component_available}"],
         ],
@@ -810,6 +1037,7 @@ def engineer_behavioral_features_and_rules(
         "verified_human_index": reference_index,
         "burst_window_seconds": burst_window_seconds,
         "email_component_available": email_component_available,
+        "branching_audit": branching_audit,
     }
     return features, rules, rule_definitions, false_positive, context
 
@@ -3545,6 +3773,7 @@ def run_upgrade(project_dir: Path) -> dict:
     decision_summary = _decision_summary(
         sensitivity, contamination_summary, tipping, regression_checks
     )
+    branching_audit = feature_context["branching_audit"]
     data_quality = _data_quality_summary(
         bundle,
         features,
@@ -3654,6 +3883,7 @@ def run_upgrade(project_dir: Path) -> dict:
         "table_31_upgrade_data_quality.csv": data_quality,
         "table_32_color_accessibility_check.csv": color_accessibility,
         "table_33_figure_map.csv": chart_map,
+        "table_34_branching_logic_audit.csv": branching_audit,
     }
     manifest = _export_tables(
         project_dir, tables, record_flags.reset_index(drop=True), chart_map
@@ -3691,6 +3921,7 @@ def run_upgrade(project_dir: Path) -> dict:
         "fits": fits,
         "frames": frames,
         "feature_context": feature_context,
+        "branching_audit": branching_audit,
         "detector_context": detector_context,
         "latent_context": latent_context,
     }
