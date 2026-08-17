@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+data/
+logs/
+reports/
+deck/math/
+deck/preview/
+deck/math_dims.json
+
+# Calendar credentials. Never commit these.
+config/calendar.env
+config/calendar-map.json
