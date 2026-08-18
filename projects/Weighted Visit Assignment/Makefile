@@ -1,7 +1,7 @@
 PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
-        serve serve-quiet \
+        serve serve-quiet static publish \
         install-automation uninstall-automation deck clean
 
 help:
@@ -11,6 +11,8 @@ help:
 	@echo "  make demo                 synthetic lab, score + assign a week, log it all"
 	@echo "  make test                 run every test suite (engine, privacy, API)"
 	@echo "  make serve                start the Visitboard on http://127.0.0.1:8765"
+	@echo "  make static               build the public, backend-free copy into dist-static/"
+	@echo "  make publish              build it and deploy to Netlify"
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make drift                weekly drift metrics to stdout"
@@ -32,9 +34,17 @@ test:
 	$(PY) tests/test_engine.py
 	$(PY) tests/test_graph_privacy.py
 	$(PY) backend/tests/test_api.py
+	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
 serve:
 	$(PY) -m backend.server
+
+static:
+	$(PY) -m backend.build_static
+	$(PY) tests/test_static_board.py
+
+publish: static
+	netlify deploy --prod --dir dist-static
 
 serve-quiet:
 	$(PY) -m backend.server --no-browser
@@ -74,5 +84,5 @@ deck:
 	$(PY) deck/qa.py
 
 clean:
-	rm -rf data reports logs deck/math deck/_tex deck/math_dims.json
+	rm -rf data reports logs dist-static deck/math deck/_tex deck/math_dims.json
 	find . -name '__pycache__' -type d -exec rm -rf {} +

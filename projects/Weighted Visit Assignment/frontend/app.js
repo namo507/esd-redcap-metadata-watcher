@@ -12,7 +12,20 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+/* One entry point for both modes. With the Python backend present these are
+ * real HTTP calls; on the public build StaticBoard answers the same routes from
+ * a snapshot the engine produced. The rendering code below does not know or
+ * care which it is talking to. */
+let STATIC = false;
+
 async function api(path, opts) {
+  if (STATIC) {
+    try {
+      return window.StaticBoard.route(path, opts);
+    } catch (err) {
+      throw new Error(err.message);
+    }
+  }
   const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
@@ -342,7 +355,21 @@ async function refresh() {
   drawKpis(); drawQueue(); drawFairness(); drawActivity(); drawFooter();
 }
 
+async function detectMode() {
+  // A backend answering /api/health means the live board; anything else means
+  // the static build. Deciding by probe rather than by build flag keeps one
+  // copy of the frontend for both.
+  try {
+    const res = await fetch("/api/health", { cache: "no-store" });
+    if (res.ok) return false;
+  } catch (err) { /* no backend here */ }
+  await window.StaticBoard.load();
+  return true;
+}
+
 async function boot() {
+  STATIC = await detectMode();
+  if (STATIC) document.body.classList.add("is-static");
   $("filter-search").addEventListener("input", (e) => { S.search = e.target.value; drawQueue(); });
   $("filter-status").querySelectorAll(".chip").forEach((chip) =>
     chip.addEventListener("click", () => {

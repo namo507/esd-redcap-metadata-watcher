@@ -4,6 +4,9 @@ Fair and efficient assignment of coordinators to home visits, for the NICO and
 NANO protocols. Three-layer policy, four-criterion score, and a full audit trail
 so the weights can be validated rather than asserted.
 
+**Live board:** <https://esd-visitboard.netlify.app> — public, no login, no
+backend. Demonstration data.
+
 **Start here:** [`ESD-Visit-Scheduling-v3-SPEC.md`](ESD-Visit-Scheduling-v3-SPEC.md)
 is the specification and operating manual.
 [`ESD-Visit-Scheduling-v3.pptx`](ESD-Visit-Scheduling-v3.pptx) is the deck for
@@ -11,8 +14,10 @@ the lab meeting.
 
 ```bash
 make serve     # the Visitboard at http://127.0.0.1:8765
+make static    # build the public, backend-free copy into dist-static/
+make publish   # build it and deploy to Netlify
 make demo      # synthetic lab (real roster names, synthetic attributes)
-make test      # 56 anchors across engine, privacy and API, under twenty seconds
+make test      # 66 anchors across engine, privacy, API and the static build
 make debrief   # reports/debrief-<week>.md and .html
 ```
 
@@ -51,7 +56,8 @@ backend/                stdlib HTTP API over the engine (no dependencies)
 frontend/               one page, no framework, no build step
   index.html            structure
   styles.css            ESD design tokens
-  app.js                fetch, render, assign
+  app.js                fetch, render, assign (talks to the API or to StaticBoard)
+  static-board.js       answers the same routes offline, for the public build
   assets/               lab and UofSC logos
 
 tests/test_engine.py    correctness anchors, incl. the hand-computed reference case
@@ -62,6 +68,19 @@ config/engine.json      the live parameter set (versioned, fingerprinted)
 data/                   audit database (gitignored)
 reports/                generated debriefs (gitignored)
 ```
+
+## Two ways to run it
+
+`make serve` runs the full stack: the Python engine answers every request live,
+and assignments are written to the append-only audit log.
+
+`make static` freezes the engine's answers into `dist-static/board.json` and
+ships a copy that needs no backend at all — that is what is deployed publicly.
+The frontend is the same files in both modes; it probes `/api/health` on boot
+and falls back to `static-board.js`, which serves the identical routes from the
+snapshot. The only thing the browser recomputes is the burden term, because
+assigning a visit changes a coordinator's committed hours;
+`tests/test_static_board.py` pins that against the engine.
 
 ## The model in one screen
 

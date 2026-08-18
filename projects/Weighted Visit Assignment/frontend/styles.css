@@ -78,6 +78,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .hero h1 { color: #fff; }
 .hero-sub { color: #FFFFFF; max-width: 46ch; margin-top: .7rem; font-size: 1.02rem; }
 
+.demo-note {
+  margin-top: 1rem; padding: .6rem .9rem; border-radius: var(--r-sm);
+  background: rgba(0,0,0,.16); color: #fff; font-size: .84rem; max-width: 62ch;
+}
+.demo-note b { font-weight: 800; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .9rem; margin-top: 1.8rem; }
 .kpi { background: rgba(0,0,0,.12); border-radius: var(--r-card); padding: 1rem 1.1rem; }
 .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -.03em; }

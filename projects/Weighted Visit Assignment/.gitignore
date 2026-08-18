@@ -13,3 +13,7 @@ config/calendar-map.json
 
 # Visitboard runtime
 data/visitboard*.db*
+
+# Static publish build (regenerate with `make static`)
+dist-static/
+.netlify/
