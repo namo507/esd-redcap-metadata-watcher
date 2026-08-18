@@ -256,6 +256,12 @@ class LabSession:
                     }
                 )
 
+            # The first candidate a human can actually take. The UI gives this
+            # person the primary button; anyone past them is an override.
+            recommended_id = next(
+                (c["id"] for c in ranked if c["assignable"]), None
+            )
+
             excluded = [
                 {
                     "id": c.coordinator_id,
@@ -273,6 +279,10 @@ class LabSession:
                 "named_preference": sorted(family.preferred_coordinators),
                 "required_attributes": sorted(family.required_attributes),
                 "candidates": ranked,
+                "recommended_id": recommended_id,
+                "top_rank_blocked": bool(
+                    ranked and not ranked[0]["assignable"] and recommended_id
+                ),
                 "excluded": excluded,
                 "review_band": round(pool.epsilon_used, 3),
                 "close_call": bool(ranked and ranked[0]["review_band"]),
@@ -355,7 +365,19 @@ class LabSession:
             )
             if chosen is None:
                 raise ValueError("That coordinator is not eligible for this visit.")
-            is_override = chosen.rank_position != 1
+            # An override is choosing past the best option a human could
+            # actually take, not past rank 1. When a fairness veto blocks the
+            # top-ranked person, the next assignable candidate IS the board's
+            # recommendation; the engine already records that skip as a system
+            # constraint rather than a human override, and demanding a reason
+            # for it would both mislabel the decision and pollute the override
+            # log that weight re-elicitation depends on.
+            assignable = [
+                c for c in pool.candidates
+                if not fairness_violations(c.coordinator_id, c, self.state, self.cfg, self.now)
+            ]
+            recommended = assignable[0].coordinator_id if assignable else None
+            is_override = recommended is not None and coordinator_id != recommended
             if is_override and not reason_code:
                 raise ValueError(
                     "Choosing past the top suggestion needs a reason. "

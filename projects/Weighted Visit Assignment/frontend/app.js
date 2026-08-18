@@ -130,8 +130,12 @@ function whyLine(c) {
   return bits.join(" &middot; ");
 }
 
-function candidateCard(c, canAssign) {
-  const best = c.rank === 1 && c.assignable;
+function candidateCard(c, canAssign, recommendedId) {
+  // "Best match" belongs to the person the board would actually send. If a
+  // fairness veto blocks rank 1, the next assignable candidate carries the
+  // primary action and says so, rather than hiding behind "choose instead".
+  const best = c.id === recommendedId;
+  const demoted = c.rank === 1 && !c.assignable;
   return `<article class="cand ${best ? "is-best" : ""} ${c.assignable ? "" : "is-blocked"}">
     <div class="cand-top">
       <div class="avatar">${esc(c.initials)}</div>
@@ -140,17 +144,18 @@ function candidateCard(c, canAssign) {
         <div class="cand-sub">${c.slot ? "Free " + esc(c.slot) : "Availability unverified"}</div>
       </div>
       <div class="cand-right">
-        <span class="rank-pill">${c.rank === 1 ? "Best match" : "Option " + c.rank}</span>
+        <span class="rank-pill">${best ? (c.rank === 1 ? "Best match" : "Best available") : "Option " + c.rank}</span>
         <div class="confidence">${esc(c.confidence)}</div>
       </div>
     </div>
     ${contributionBar(c)}
     <p class="why">Leads on <b>${esc(c.leads_on)}</b> &middot; ${whyLine(c)}</p>
-    ${c.blocked_by.length ? `<p class="blocked-line">Cannot be assigned: ${esc(c.blocked_by.join("; "))}</p>` : ""}
+    ${c.blocked_by.length ? `<p class="blocked-line">Cannot be assigned: ${esc(c.blocked_by.join("; "))}${demoted ? ". The next person down carries the recommendation." : ""}</p>` : ""}
     ${canAssign && c.assignable
       ? `<div class="assign-row" style="margin-top:.8rem">
            <button class="btn ${best ? "" : "btn-ghost"}" type="button"
-             data-assign="${esc(c.id)}" data-rank="${c.rank}" data-name="${esc(c.name)}">
+             data-assign="${esc(c.id)}" data-recommended="${best ? "1" : "0"}"
+             data-name="${esc(c.name)}">
              ${best ? "Assign " + esc(c.name) : "Choose " + esc(c.name) + " instead"}
            </button>
          </div>` : ""}
@@ -212,22 +217,23 @@ function drawDetail() {
         <p class="eyebrow">Who the board would send</p>
         <h2>${d.close_call ? "Close call &mdash; two good options" : "Ranked by fit"}</h2>
       </div></div>
-      <div class="cands">${d.candidates.map((c) => candidateCard(c, !assigned)).join("")
+      <div class="cands">${d.candidates.map((c) => candidateCard(c, !assigned, d.recommended_id)).join("")
         || '<p class="note">Nobody passed the eligibility checks.</p>'}</div>
       ${excluded}
       ${assignBlock}
     </div>`;
 
   $("detail").querySelectorAll("[data-assign]").forEach((b) =>
-    b.addEventListener("click", () => onAssignClick(b.dataset.assign, Number(b.dataset.rank), b.dataset.name)));
+    b.addEventListener("click", () =>
+      onAssignClick(b.dataset.assign, b.dataset.recommended === "1", b.dataset.name)));
   const undo = $("btn-undo");
   if (undo) undo.addEventListener("click", () => unassign(v.id));
 }
 
 /* --------------------------------------------------------------- actions */
 
-function onAssignClick(coordinatorId, rank, name) {
-  if (rank === 1) { doAssign(coordinatorId, null, null); return; }
+function onAssignClick(coordinatorId, isRecommended, name) {
+  if (isRecommended) { doAssign(coordinatorId, null, null); return; }
   const slot = $("reason-slot");
   if (!slot) return;
   const codes = S.board.reason_codes;

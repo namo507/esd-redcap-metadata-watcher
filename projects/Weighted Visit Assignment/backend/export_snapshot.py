@@ -96,6 +96,11 @@ export type VisitDetail = {
   named_preference: string[];
   required_attributes: string[];
   candidates: Candidate[];
+  /* The first candidate a human can actually take. Differs from rank 1 when a
+     fairness veto blocks the top-scoring person. The client recomputes this
+     after assignments; the baked value is the opening state. */
+  recommended_id: string | null;
+  top_rank_blocked: boolean;
   excluded: { id: string; name: string; reason: string }[];
   review_band: number;
   close_call: boolean;

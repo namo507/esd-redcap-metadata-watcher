@@ -158,6 +158,52 @@ def test_override_without_a_reason_is_refused():
     call("POST", "/api/unassign", {"visit_id": vid})
 
 
+def test_recommended_is_the_first_assignable_not_merely_rank_one():
+    """The board's recommendation is the best option a human can actually take.
+
+    When a fairness veto blocks the top-scoring person, rank 2 IS the
+    recommendation. Taking them must not be treated as an override: the engine
+    records that skip as a system constraint, and demanding a reason would both
+    mislabel the decision and pollute the override log that weight
+    re-elicitation depends on.
+    """
+    _, board = call("GET", "/api/board")
+    for v in board["queue"]:
+        _, detail = call("GET", f"/api/visit?id={v['id']}")
+        assignable = [c for c in detail["candidates"] if c["assignable"]]
+        expected = assignable[0]["id"] if assignable else None
+        expect(detail["recommended_id"] == expected,
+               f"{v['id']}: recommended_id {detail['recommended_id']} != first "
+               f"assignable {expected}")
+        if detail["candidates"] and not detail["candidates"][0]["assignable"]:
+            expect(detail["top_rank_blocked"] is True,
+                   f"{v['id']}: rank 1 is blocked but top_rank_blocked is False")
+
+
+def test_assigning_the_recommendation_never_needs_a_reason():
+    """Fill the week greedily. Every assignment takes the recommended person,
+    and none of them may be refused for a missing reason, even once vetoes
+    start demoting rank 1."""
+    call("POST", "/api/reset")
+    _, board = call("GET", "/api/board")
+    assigned = 0
+    for v in board["queue"]:
+        _, detail = call("GET", f"/api/visit?id={v['id']}")
+        rec = detail["recommended_id"]
+        if not rec:
+            continue
+        status, body = call("POST", "/api/assign",
+                            {"visit_id": v["id"], "coordinator_id": rec})
+        expect(status == 200,
+               f"{v['id']}: assigning the recommendation was refused: {body}")
+        expect(body["assignment"]["override"] is False,
+               f"{v['id']}: recommendation recorded as an override")
+        assigned += 1
+    expect(assigned >= len(board["queue"]) - 1,
+           f"only {assigned} of {len(board['queue'])} visits could be filled")
+    call("POST", "/api/reset")
+
+
 def test_bad_reason_code_is_refused():
     _, board = call("GET", "/api/board")
     vid = next(v["id"] for v in board["queue"] if v["status"] != "assigned")

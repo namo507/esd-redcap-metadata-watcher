@@ -68,14 +68,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* ------------------------------------------------------------ hero */
 .hero { background: var(--esd-discovery-blue); color: #fff; }
 .hero-in { max-width: 1240px; margin: 0 auto; padding: 2.6rem 1.5rem 2.2rem; }
-.hero .eyebrow { color: var(--esd-science-blue); }
+/* Contrast on the blue hero. Measured against #3366FF:
+     science blue  2.35:1  fails
+     cool white    4.10:1  fails
+     pure white    4.55:1  passes AA for normal text
+   So hero text is pure white, and the KPI tiles are darkened rather than
+   lightened so white sits on a deeper blue (5.2:1) instead of a paler one. */
+.hero .eyebrow { color: #FFFFFF; opacity: .92; }
 .hero h1 { color: #fff; }
-.hero-sub { color: var(--esd-cool-white); max-width: 46ch; margin-top: .7rem; font-size: 1.02rem; }
+.hero-sub { color: #FFFFFF; max-width: 46ch; margin-top: .7rem; font-size: 1.02rem; }
 
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .9rem; margin-top: 1.8rem; }
-.kpi { background: rgba(255,255,255,.13); border-radius: var(--r-card); padding: 1rem 1.1rem; }
+.kpi { background: rgba(0,0,0,.12); border-radius: var(--r-card); padding: 1rem 1.1rem; }
 .kpi-value { font-size: 2rem; font-weight: 800; line-height: 1; letter-spacing: -.03em; }
-.kpi-label { color: var(--esd-cool-white); font-size: .8rem; margin-top: .35rem; }
+.kpi-label { color: #FFFFFF; font-size: .8rem; margin-top: .35rem; }
 
 /* ------------------------------------------------------------ layout */
 .wrap { max-width: 1240px; margin: 0 auto; padding: 1.6rem 1.5rem 3rem; display: grid; gap: 1.3rem; }
@@ -232,3 +238,30 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Mobile: the header was stacking into three full-width rows and pushing the
+   hero most of a screen down. Keep the logos and controls on one line and let
+   the badge shrink to its essential half. */
+@media (max-width: 620px) {
+  .topbar-in { padding: .55rem .9rem; gap: .5rem; flex-wrap: nowrap; }
+  .brand { gap: .55rem; min-width: 0; }
+  .logo-lab { height: 24px; }
+  /* The pair does not fit beside the controls at this width, and a cropped
+     UofSC mark is worse than none. Both logos still appear together in the
+     footer, so the pairing rule holds wherever both are shown. */
+  .topbar .logo-uofsc { display: none; }
+  .topbar-right { gap: .4rem; flex-wrap: nowrap; }
+  .topbar-right .btn { white-space: nowrap; }
+  .privacy-badge { padding: .3rem .55rem; font-size: .68rem; }
+  .privacy-badge .long { display: none; }
+  .btn { padding: .5rem .9rem; font-size: .85rem; }
+  .hero-in { padding: 1.8rem .9rem 1.6rem; }
+  .wrap { padding: 1rem .9rem 2rem; }
+  .card { padding: 1rem; }
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+  .kpi { padding: .8rem .85rem; }
+  .kpi-value { font-size: 1.5rem; }
+  .cand-top { flex-wrap: wrap; }
+  .cand-right { margin-left: 0; text-align: left; width: 100%; }
+  .foot-in p { margin-left: 0; text-align: left; }
+}
