@@ -10,3 +10,6 @@ deck/math_dims.json
 # Calendar credentials. Never commit these.
 config/calendar.env
 config/calendar-map.json
+
+# Visitboard runtime
+data/visitboard*.db*

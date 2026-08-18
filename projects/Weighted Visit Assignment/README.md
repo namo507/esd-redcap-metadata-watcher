@@ -10,10 +10,18 @@ is the specification and operating manual.
 the lab meeting.
 
 ```bash
+make serve     # the Visitboard at http://127.0.0.1:8765
 make demo      # synthetic lab (real roster names, synthetic attributes)
-make test      # 44 correctness and privacy anchors, under ten seconds
+make test      # 56 anchors across engine, privacy and API, under twenty seconds
 make debrief   # reports/debrief-<week>.md and .html
 ```
+
+## The board
+
+`make serve` starts the whole stack on one port. There is nothing to install:
+the backend is stdlib Python over the same engine, and the frontend is one HTML
+file with no bundler. Pick a visit, see who the board would send and why, see
+who was ruled out and why, assign, and record a reason if you disagree.
 
 ## What is here
 
@@ -35,6 +43,16 @@ esd_scheduler/          the engine (pure standard library)
   ingest_outlook_pdf.py month-view PDF ingester (Tier 3, day-level only)
   graphcheck.py         the privacy break-it probes
   cli.py                command line
+
+backend/                stdlib HTTP API over the engine (no dependencies)
+  server.py             routes, static serving, path-traversal guard
+  session.py            one lab state; turns engine output into screen language
+  tests/test_api.py     boots a real server and talks HTTP to it
+frontend/               one page, no framework, no build step
+  index.html            structure
+  styles.css            ESD design tokens
+  app.js                fetch, render, assign
+  assets/               lab and UofSC logos
 
 tests/test_engine.py    correctness anchors, incl. the hand-computed reference case
 tests/test_graph_privacy.py  free/busy-only guards on the Graph path

@@ -194,6 +194,11 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
         window_start = (now + timedelta(days=start_offset)).replace(
             hour=8, minute=0, second=0, microsecond=0
         )
+        # Home visits are weekday work. Layer 1 would filter a weekend window
+        # down to the weekdays inside it anyway, but a queue that advertises a
+        # Saturday visit reads as a scheduling error to anyone looking at it.
+        while window_start.weekday() >= 5:
+            window_start += timedelta(days=1)
         seq = checkpoints[fam.protocol]
         visits.append(
             Visit(
