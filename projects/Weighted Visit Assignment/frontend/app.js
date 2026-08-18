@@ -6,7 +6,7 @@
  */
 "use strict";
 
-const S = { board: null, detail: null, selected: null, status: "all", search: "" };
+const S = { board: null, detail: null, selected: null, status: "all", search: "", view: "list" };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -44,13 +44,16 @@ function toast(message, bad) {
 /* ------------------------------------------------------------------ KPIs */
 
 function drawKpis() {
-  const f = S.board.fairness;
-  const toAssign = S.board.queue.filter((v) => v.status !== "assigned").length;
+  // Three numbers, each of which changes what someone does next. "Coordinators
+  // on call" never moved, and "busiest vs average" is the fairness panel's job
+  // to show properly rather than compress into a ratio nobody can act on.
+  const queue = S.board.queue;
+  const toAssign = queue.filter((v) => v.status !== "assigned").length;
+  const attention = queue.filter((v) => v.needs_attention).length;
   const items = [
-    [toAssign, toAssign === 1 ? "visit to assign" : "visits to assign"],
-    [f.assigned + " of " + f.total, "assigned this week"],
-    [S.board.roster.length, "coordinators on call"],
-    [f.imbalance.toFixed(2) + "×", "busiest vs average"],
+    [toAssign, toAssign === 1 ? "visit still to assign" : "visits still to assign"],
+    [queue.length - toAssign, "assigned so far"],
+    [attention, attention === 1 ? "needs a closer look" : "need a closer look"],
   ];
   $("kpis").innerHTML = items.map(([v, k]) =>
     `<div class="kpi"><div class="kpi-value">${esc(v)}</div><div class="kpi-label">${esc(k)}</div></div>`
@@ -92,6 +95,7 @@ function drawQueue() {
 
   $("queue").querySelectorAll("[data-visit]").forEach((b) =>
     b.addEventListener("click", () => selectVisit(b.dataset.visit)));
+  if (S.view === "calendar") drawCalendar();
   const clear = $("clear-filters");
   if (clear) clear.addEventListener("click", () => {
     S.search = ""; S.status = "all"; $("filter-search").value = "";
@@ -99,6 +103,98 @@ function drawQueue() {
       c.classList.toggle("is-on", c.dataset.status === "all"));
     drawQueue();
   });
+}
+
+
+/* --------------------------------------------------------------- calendar */
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+function isoDay(iso) {
+  // Parse as a local date. new Date("2026-08-19") is UTC midnight, which lands
+  // on the previous day west of Greenwich and shifts the whole grid by one.
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function mondayOf(date) {
+  const d = new Date(date);
+  const shift = (d.getDay() + 6) % 7; // Monday = 0
+  d.setDate(d.getDate() - shift);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function drawCalendar() {
+  const visits = visibleQueue();
+  if (!visits.length) {
+    $("calendar").innerHTML = '<p class="note" style="padding:1rem">No visits match that filter.</p>';
+    $("calendar-title").textContent = "Nothing to show";
+    $("calendar-note").textContent = "";
+    return;
+  }
+
+  // Group by ISO date, then lay the weeks out Monday to Friday. Home visits are
+  // weekday work, so a weekend column would be five empty cells every row.
+  const byDay = {};
+  visits.forEach((v) => { (byDay[v.date] = byDay[v.date] || []).push(v); });
+
+  const days = Object.keys(byDay).sort();
+  const first = mondayOf(isoDay(days[0]));
+  const last = mondayOf(isoDay(days[days.length - 1]));
+  const weeks = [];
+  for (let w = new Date(first); w <= last; w.setDate(w.getDate() + 7)) {
+    weeks.push(new Date(w));
+  }
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const head = `<div class="cal-row cal-head">${DAY_NAMES.map((d) =>
+    `<div class="cal-hcell">${d}</div>`).join("")}</div>`;
+
+  const body = weeks.map((monday) => {
+    const cells = DAY_NAMES.map((_, i) => {
+      const day = new Date(monday); day.setDate(day.getDate() + i);
+      const iso = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      const items = byDay[iso] || [];
+      const isToday = day.getTime() === today.getTime();
+      const cards = items.map((v) => {
+        const state = v.status === "assigned" ? "done" : v.needs_attention ? "attn" : "todo";
+        const who = v.status === "assigned" ? esc(v.assigned_to) : "Needs someone";
+        return `<button class="cal-card cal-${state} ${v.id === S.selected ? "is-on" : ""}"
+            type="button" data-visit="${esc(v.id)}"
+            title="${esc(v.family_label)} — ${esc(v.title)}">
+          <span class="cal-fam">${esc(v.family_label)}</span>
+          <span class="cal-meta">${esc(v.title)}</span>
+          <span class="cal-who">${who}</span>
+        </button>`;
+      }).join("");
+      return `<div class="cal-cell ${isToday ? "is-today" : ""} ${items.length ? "" : "is-empty"}">
+        <div class="cal-date">${day.getDate()} ${day.toLocaleString("en-GB", { month: "short" })}</div>
+        ${cards}
+      </div>`;
+    }).join("");
+    return `<div class="cal-row">${cells}</div>`;
+  }).join("");
+
+  $("calendar").innerHTML = head + body;
+  $("calendar").querySelectorAll("[data-visit]").forEach((b) =>
+    b.addEventListener("click", () => selectVisit(b.dataset.visit)));
+
+  const unassigned = visits.filter((v) => v.status !== "assigned").length;
+  $("calendar-title").textContent =
+    `${visits.length} visit${visits.length === 1 ? "" : "s"} across ${weeks.length} week${weeks.length === 1 ? "" : "s"}`;
+  $("calendar-note").innerHTML = unassigned
+    ? `<b>${unassigned}</b> still need${unassigned === 1 ? "s" : ""} someone. Pick a day to open it.`
+    : "Every visit on the board has someone assigned.";
+}
+
+function setView(view) {
+  S.view = view;
+  document.querySelectorAll(".viewbtn").forEach((b) =>
+    b.classList.toggle("is-on", b.dataset.view === view));
+  $("calendar-card").hidden = view !== "calendar";
+  if (view === "calendar") drawCalendar();
 }
 
 /* ---------------------------------------------------------------- detail */
@@ -117,17 +213,25 @@ function contributionBar(c) {
   // Every criterion is listed, including the ones that scored nothing. A
   // missing row reads as "not considered"; a zero reads as "considered, earned
   // nothing", which is the true statement.
+  // Words, not decimals. "0.19" means nothing to a reader; the bar already
+  // shows how much each reason contributed, and greying the ones that earned
+  // nothing keeps them visible as considered-and-not-met rather than dropping
+  // them, which would read as never considered. The number stays in the title
+  // for anyone auditing.
   const legend = c.contributions
     .slice()
     .sort((a, b) => b.contribution - a.contribution)
-    .map((x) => `<span title="${esc(x.help)}" class="${x.contribution > 0.001 ? "" : "is-zero"}">
-      <i class="seg-${x.key}"></i>${esc(x.label)} <b>${x.contribution.toFixed(2)}</b></span>`)
+    .map((x) => `<span class="${x.contribution > 0.001 ? "" : "is-zero"}"
+      title="${esc(x.help)} Contributed ${x.contribution.toFixed(2)} of ${c.score.toFixed(2)}."
+      >${x.contribution > 0.001 ? `<i class="seg-${x.key}"></i>` : ""}${esc(x.label)}</span>`)
     .join("");
-  return `<div class="bar" title="Match ${c.score.toFixed(2)} out of a possible 1.00">
+  // No 0-to-1 score on the face of the card. The bar shows how much of a
+  // possible fit was earned and the legend names what earned it; the number
+  // itself is in the tooltip for anyone who wants to audit it.
+  return `<div class="bar" title="Fit ${c.score.toFixed(2)} of a possible 1.00">
       <div class="bar-fill" style="width:${fill.toFixed(1)}%">${segs}</div>
     </div>
-    <div class="legend"><span class="score-read">Match <b>${c.score.toFixed(2)}</b>
-      <span class="of">of 1.00</span></span>${legend}</div>`;
+    <div class="legend">${legend}</div>`;
 }
 
 function whyLine(c) {
@@ -162,7 +266,7 @@ function candidateCard(c, canAssign, recommendedId) {
       </div>
     </div>
     ${contributionBar(c)}
-    <p class="why">Leads on <b>${esc(c.leads_on)}</b> &middot; ${whyLine(c)}</p>
+    <p class="why">Strongest reason: <b>${esc(c.leads_on)}</b> &middot; ${whyLine(c)}</p>
     ${c.blocked_by.length ? `<p class="blocked-line">Cannot be assigned: ${esc(c.blocked_by.join("; "))}${demoted ? ". The next person down carries the recommendation." : ""}</p>` : ""}
     ${canAssign && c.assignable
       ? `<div class="assign-row" style="margin-top:.8rem">
@@ -219,8 +323,7 @@ function drawDetail() {
       <div class="facts">
         <div class="fact"><div class="fact-k">Visit length</div><div class="fact-v">${v.duration_hours} h</div></div>
         <div class="fact"><div class="fact-k">Where</div><div class="fact-v">Home visit</div></div>
-        <div class="fact"><div class="fact-k">Eligible</div><div class="fact-v">${d.candidates.length} of ${d.candidates.length + d.excluded.length}</div></div>
-        <div class="fact"><div class="fact-k">Review band</div><div class="fact-v">${d.review_band.toFixed(3)}</div></div>
+        <div class="fact"><div class="fact-k">Who can go</div><div class="fact-v">${d.candidates.length} of ${d.candidates.length + d.excluded.length}</div></div>
       </div>
       ${notices}
     </div>
@@ -378,6 +481,8 @@ async function boot() {
       chip.classList.add("is-on");
       drawQueue();
     }));
+  document.querySelectorAll(".viewbtn").forEach((b) =>
+    b.addEventListener("click", () => setView(b.dataset.view)));
   $("btn-reset").addEventListener("click", async () => {
     if (!confirm("Reset the board? This clears the assignments made in this session.")) return;
     await api("/api/reset", { method: "POST" });

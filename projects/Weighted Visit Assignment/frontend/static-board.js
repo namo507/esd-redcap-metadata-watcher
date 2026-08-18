@@ -41,8 +41,8 @@ window.StaticBoard = (function () {
     return DATA.roster.find((r) => r.id === id);
   }
 
-  /** The visit detail, re-scored against the work this board has created. */
-  function visitDetail(visitId) {
+  /** Candidates re-scored against the work this board has created. */
+  function rankRows(visitId) {
     const base = DATA.visits.find((v) => v.visit.id === visitId);
     if (!base) return null;
     const extra = extraHours();
@@ -97,15 +97,30 @@ window.StaticBoard = (function () {
       rows[0].review_band = true;
       rows[1].review_band = true;
     }
-    const recommended = rows.find((r) => r.assignable);
+    return { base, rows, recommended: rows.find((r) => r.assignable) };
+  }
 
-    return Object.assign({}, base, {
+  /** True when this visit will not resolve itself: nobody can go, or the top
+   *  two are close enough that picking between them is a judgement call.
+   *  Recomputed rather than read from the snapshot, because assigning work
+   *  changes who is still free and the header counts these. */
+  function needsAttention(visitId) {
+    if (assignments[visitId]) return false;
+    const r = rankRows(visitId);
+    if (!r) return false;
+    return !r.recommended || Boolean(r.rows.length >= 2 && r.rows[0].review_band);
+  }
+
+  function visitDetail(visitId) {
+    const r = rankRows(visitId);
+    if (!r) return null;
+    return Object.assign({}, r.base, {
       visit: visitSummary(visitId),
-      candidates: rows,
-      recommended_id: recommended ? recommended.id : null,
-      top_rank_blocked: Boolean(rows.length && !rows[0].assignable && recommended),
+      candidates: r.rows,
+      recommended_id: r.recommended ? r.recommended.id : null,
+      top_rank_blocked: Boolean(r.rows.length && !r.rows[0].assignable && r.recommended),
       review_band: DATA.meta.reviewBand,
-      close_call: Boolean(rows.length >= 2 && rows[0].review_band),
+      close_call: Boolean(r.rows.length >= 2 && r.rows[0].review_band),
       assigned: assignments[visitId] || null,
     });
   }
@@ -115,6 +130,7 @@ window.StaticBoard = (function () {
     const a = assignments[visitId];
     return Object.assign({}, base, {
       status: a ? "assigned" : "needs_assignment",
+      needs_attention: false,   // filled in by the queue, which has the rows
       assigned_to: a ? a.coordinator_name : null,
       assigned_id: a ? a.coordinator_id : null,
       provisional: Boolean(a && a.provisional),
@@ -209,7 +225,9 @@ window.StaticBoard = (function () {
       case "/api/board":
         return {
           health: DATA.meta.health, roster: DATA.roster,
-          queue: DATA.visits.map((v) => visitSummary(v.visit.id)),
+          queue: DATA.visits.map((v) => Object.assign(visitSummary(v.visit.id), {
+            needs_attention: needsAttention(v.visit.id),
+          })),
           fairness: fairness(), reason_codes: DATA.reasonCodes,
           activity: activity.slice(0, 12),
         };

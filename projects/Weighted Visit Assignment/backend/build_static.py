@@ -55,10 +55,23 @@ def build() -> str:
         json.dump(payload, fh, separators=(",", ":"), default=str)
 
     # Netlify: everything is static, and the board is a single page.
+    # Scripts and data must revalidate. A redeploy changes app.js, board.json
+    # and static-board.js together, and a browser holding a cached script
+    # against fresh data shows numbers that do not match the board's own logic.
+    # Caught locally: a stale static-board.js kept reporting a visit as needing
+    # attention after it had been assigned. Images are content-stable, so they
+    # keep the default long cache.
     with open(os.path.join(OUT, "_headers"), "w", encoding="utf-8") as fh:
-        fh.write("/*\n  X-Content-Type-Options: nosniff\n"
-                 "  Referrer-Policy: no-referrer\n"
-                 "  X-Frame-Options: SAMEORIGIN\n")
+        fh.write(
+            "/*\n"
+            "  X-Content-Type-Options: nosniff\n"
+            "  Referrer-Policy: no-referrer\n"
+            "  X-Frame-Options: SAMEORIGIN\n"
+            "\n/index.html\n  Cache-Control: no-cache\n"
+            "\n/*.js\n  Cache-Control: no-cache\n"
+            "\n/*.css\n  Cache-Control: no-cache\n"
+            "\n/board.json\n  Cache-Control: no-cache\n"
+        )
     # No _redirects file on purpose. The board is a single page with no client
     # routing, so a catch-all would only turn a missing asset into a 200 that
     # serves HTML - which hides exactly the kind of build mistake worth seeing.

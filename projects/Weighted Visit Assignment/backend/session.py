@@ -29,17 +29,21 @@ from esd_scheduler.engine import (
 )
 from esd_scheduler.store import OVERRIDE_REASON_CODES, AuditStore
 
+# The four criteria, named the way a coordinator would say them out loud.
+# The engine's own names (continuity, burden relief, protocol continuity) are
+# precise but they are analyst vocabulary, and a board that has to be explained
+# before it can be used is a board nobody uses.
 CRITERION_LABEL = {
-    "phi": "Continuity",
-    "omega": "Family preference",
-    "psi": "Burden relief",
-    "p": "Protocol continuity",
+    "phi": "Knows the family",
+    "omega": "Family's choice",
+    "psi": "Has room this week",
+    "p": "Did the last visit",
 }
 CRITERION_HELP = {
-    "phi": "How well this coordinator already knows the family, faded by how long ago.",
-    "omega": "What the family asked for. Neutral when nothing is on record.",
-    "psi": "How much room is left in their week, counting travel as work.",
-    "p": "Did this person run the family's previous checkpoint.",
+    "phi": "Has visited this family before, and how recently.",
+    "omega": "Whether the family asked for this person.",
+    "psi": "How much of their week is still free, counting travel as work.",
+    "p": "Ran this family's previous visit in the same study.",
 }
 FAIL_REASON_TEXT = {
     "family_exclusion": "Family exclusion on file",
@@ -98,6 +102,7 @@ class LabSession:
                 blocks=getattr(self.state, "demo_blocks", {}), clock=lambda: self.now
             )
             self.assignments: Dict[str, dict] = {}
+            self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
                 try:
@@ -183,11 +188,37 @@ class LabSession:
             ),
             "duration_hours": v.duration_hours,
             "status": "assigned" if assigned else "needs_assignment",
+            "needs_attention": self._needs_attention(visit_id),
             "assigned_to": assigned["coordinator_name"] if assigned else None,
             "assigned_id": assigned["coordinator_id"] if assigned else None,
             "provisional": bool(assigned and assigned.get("provisional")),
             "was_override": bool(assigned and assigned.get("override")),
         }
+
+    def _needs_attention(self, visit_id: str) -> bool:
+        """True when this visit will not resolve itself.
+
+        Either nobody can go, or the top two are so close that picking between
+        them is a judgement call rather than a ranking. These are the only
+        visits worth pulling someone's eye toward, so they are the only ones the
+        header counts.
+        """
+        if visit_id in self.assignments:
+            return False
+        cached = self._attention_cache.get(visit_id)
+        if cached is not None:
+            return cached
+        visit = self.visits[visit_id]
+        pool = score_visit(visit, self.state, self.cfg, self.now)
+        assignable = [
+            c for c in pool.candidates
+            if not fairness_violations(c.coordinator_id, c, self.state, self.cfg, self.now)
+        ]
+        flag = (not assignable) or (
+            len(pool.candidates) >= 2 and pool.candidates[0].review_band_flag
+        )
+        self._attention_cache[visit_id] = flag
+        return flag
 
     def queue(self) -> List[dict]:
         with self._lock:
@@ -421,6 +452,7 @@ class LabSession:
                 "notes": notes,
             }
             self.assignments[visit_id] = record
+            self._attention_cache.clear()
             label = self.visit_summary(visit_id)["family_label"]
             if is_override:
                 self._log(
@@ -434,6 +466,7 @@ class LabSession:
     def unassign(self, visit_id: str) -> None:
         with self._lock:
             record = self.assignments.pop(visit_id, None)
+            self._attention_cache.clear()
             if not record:
                 return
             pending = self.state.pending.get(record["coordinator_id"], [])
