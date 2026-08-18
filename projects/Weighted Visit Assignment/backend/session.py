@@ -20,6 +20,7 @@ from esd_scheduler.calendarsync import MockProvider
 from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
 from esd_scheduler.drift import weekly_drift
+from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
     commit_assignment,
     fairness_violations,
@@ -138,6 +139,12 @@ class LabSession:
             ):
                 committed = self.state.committed(c.coordinator_id)
                 capacity = max(1e-6, c.capacity_hours_week)
+                # Contract capacity is what a person is paid for; effective
+                # capacity is what the engine actually scores against, reduced
+                # during onboarding by the capacity ramp. Both are exported: the
+                # first is what a coordinator recognises, the second is what the
+                # burden term used, and confusing them silently changes scores.
+                effective = ramped_capacity(c, self.cfg)
                 out.append(
                     {
                         "id": c.coordinator_id,
@@ -145,6 +152,7 @@ class LabSession:
                         "initials": "".join(p[0] for p in c.name.split()[:2]).upper(),
                         "credentials": sorted(c.credentials),
                         "capacity_hours": round(c.capacity_hours_week, 1),
+                        "effective_capacity_hours": round(effective, 3),
                         "committed_hours": round(committed, 1),
                         "utilization": round(min(1.5, committed / capacity), 3),
                         "visits_this_week": self.state.visits_this_week(
