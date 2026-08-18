@@ -42,8 +42,11 @@ def exception_register(
     cands = store.candidates_for(run_ids)
     outcomes = {o["run_id"]: o for o in store.outcomes_for(run_ids)}
     by_run: Dict[str, List] = {}
+    names: Dict[str, str] = {}
     for c in cands:
         by_run.setdefault(c["run_id"], []).append(c)
+        if c["coordinator_name"]:
+            names[c["coordinator_id"]] = c["coordinator_name"]
 
     rows: List[Dict[str, str]] = []
     for run in runs:
@@ -86,8 +89,11 @@ def exception_register(
                 "family_id": run["family_id"],
                 "checkpoint": run["checkpoint"] or "",
                 "kinds": ", ".join(kinds),
-                "assigned": (outcome["assigned_coordinator_id"] if outcome else None)
-                or "unassigned",
+                "assigned": names.get(
+                    (outcome["assigned_coordinator_id"] if outcome else None) or "",
+                    (outcome["assigned_coordinator_id"] if outcome else None)
+                    or "unassigned",
+                ),
                 "reason": (outcome["override_reason_code"] if outcome else None) or "",
                 "note": note,
             }
@@ -104,7 +110,8 @@ def _waterfall_sentence(chosen, suggested) -> str:
         diff = (chosen[f"contrib_{key}"] or 0.0) - (suggested[f"contrib_{key}"] or 0.0)
         if abs(diff) < 0.005:
             continue
-        who = chosen["coordinator_id"] if diff > 0 else suggested["coordinator_id"]
+        winner = chosen if diff > 0 else suggested
+        who = winner["coordinator_name"] or winner["coordinator_id"]
         parts.append(f"{who} led on {CRITERION_LABEL[key]} {abs(diff):+.3f}")
     net = (chosen["final_score"] or 0.0) - (suggested["final_score"] or 0.0)
     return "; ".join(parts) + f"; net {net:+.3f}"
@@ -141,8 +148,8 @@ def override_waterfalls(
         out.append(
             {
                 "visit_id": run["visit_id"],
-                "suggested": pool[0]["coordinator_id"],
-                "chosen": chosen["coordinator_id"],
+                "suggested": pool[0]["coordinator_name"] or pool[0]["coordinator_id"],
+                "chosen": chosen["coordinator_name"] or chosen["coordinator_id"],
                 "class": outcome["override_reason_class"] or "",
                 "code": outcome["override_reason_code"] or "",
                 "text": outcome["override_reason_text"] or "",
@@ -193,8 +200,9 @@ def render_markdown(
     a("|---|---:|---:|---:|---:|---:|")
     for row in rep.fairness:
         a(
-            f"| {row.coordinator_id} | {row.visits} | {row.burden_hours:.1f} | "
-            f"{row.travel_minutes:.0f} | {row.capacity_hours:.1f} | {row.utilization:.2f} |"
+            f"| {row.coordinator_name or row.coordinator_id} | {row.visits} | "
+            f"{row.burden_hours:.1f} | {row.travel_minutes:.0f} | "
+            f"{row.capacity_hours:.1f} | {row.utilization:.2f} |"
         )
     a("")
     g, lo, hi = rep.gini_utilization

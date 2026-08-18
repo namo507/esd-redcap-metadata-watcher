@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "coordinator_id -> Outlook mailbox address. Copy to config/calendar-map.json",
+    "and fill in the real addresses; that file is gitignored.",
+    "Ids match esd_scheduler/demo.py and the audit log. The calendar owner",
+    "(Shrivastava, Namit) is the signed-in user under delegated auth and is not",
+    "a visit coordinator, so no id is assigned."
+  ],
+  "C01": "margaret.bell@example.sc.edu",
+  "C02": "lauren.puttock@example.sc.edu",
+  "C03": "sanjana.oak@example.sc.edu",
+  "C04": "sofia.tous@example.sc.edu",
+  "C05": "morgan.soto@example.sc.edu",
+  "C06": "ramiro.lucas-mariano@example.sc.edu"
+}

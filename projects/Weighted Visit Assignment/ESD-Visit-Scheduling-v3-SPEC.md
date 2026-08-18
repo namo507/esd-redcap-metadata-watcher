@@ -77,6 +77,50 @@ API call, closes the fifteen-minute race that causes double-booking), and a
 circuit breaker that halts the whole run if more than 20% of the team is
 unverifiable.
 
+### Layer 0a — privacy floor (free/busy only)
+
+Delegated auth, read-only, free/busy only. The engine refuses to start on
+anything else.
+
+$$\text{scopes}(token) \subseteq \{\texttt{Calendars.Read.Shared}\}
+\quad\wedge\quad \text{roles}(token) = \emptyset$$
+
+`calendarsync.assert_least_privilege` decodes the token and fails closed on
+either condition. A `roles` claim means application permissions are live, and
+app-only calendar access **cannot be reduced to free/busy**: Microsoft publishes
+no calendar app role below `Calendars.Read`, which reads subject and body. Mail
+has a `ReadBasic` variant; calendars do not.
+
+Whether `subject` arrives at all is decided by the Exchange **calendar sharing
+level**, not by the OAuth scope. At the tenant default (`AvailabilityOnly`) the
+server omits it; at `LimitedDetails` it sends it. The engine therefore strips
+`subject`, `location` and `isPrivate` at ingestion **regardless of what
+arrives**, so a sharing change made by one person cannot quietly widen what the
+lab holds. Nothing sensitive reaches `BusyBlock`, and therefore nothing reaches
+the audit log.
+
+Verification is a command, not a promise:
+
+```bash
+make verify-graph        # T1-T9 probes against a live token
+```
+
+Full reasoning, the IT ticket, and the ten-test break-it protocol are in
+[`ESD-Graph-Privacy-RESEARCH-REPORT.md`](ESD-Graph-Privacy-RESEARCH-REPORT.md).
+
+**Two corrections that came out of the research.**
+
+`availabilityView` is `0` = free, `1` = tentative, `2` = busy, `3` = out of
+office. A widely-circulated Copilot answer states the reverse ("busy is zero,
+available is three"); building on it inverts the scheduler and books visits into
+exactly the slots people are busy. Pinned by test.
+
+`workingHours` arrives in the same `getSchedule` response, so **blank is not
+free**. An empty 19:00 is outside the working envelope and is not availability;
+an empty 10:00 is inside it and is. Free time now requires *digit 0 **and**
+inside `workingHours`*, with Outlook's envelope taking precedence over the
+locally configured pattern.
+
 ### Layer 1 — hard eligibility
 
 $$F(c,v) = W \wedge A \wedge \neg X \wedge \neg E \wedge K \wedge \text{Cal} \wedge \text{Ramp}$$
@@ -310,8 +354,31 @@ makes it tradeable against everything else, which is exactly what fairness is
 supposed to prevent. So it lives in `engine.fairness_violations` as a veto:
 
 - reject if the assignment would push utilisation above 1.0
-- reject if the coordinator's rolling 4-week travel share exceeds 1.4 × their
-  capacity share
+- reject a **long drive** for someone already over their travel share: the
+  prospective 4-week travel share exceeds 1.4 × their capacity share **and** the
+  trip is longer than the team's typical recent trip
+
+The second rule went through two wrong versions before it worked, and both
+failures are worth recording because they look correct in code review.
+
+*Veto anyone already over their share* is a **ratchet**. Every visit is refused,
+including the short ones that would bring their average down, so the only escape
+is waiting for the rolling window to move. In the first pilot run it starved one
+coordinator of all work for a week.
+
+*Veto only if this trip pushes the share up* fails the opposite way. If one
+person holds nearly all the recent travel their share is already ≈1.0, no
+further trip can raise it, and the cap silently stops firing exactly when it is
+most needed.
+
+Comparing the trip against the team's typical trip avoids both. It also states
+in one sentence a coordinator can act on: **when you are over your share of the
+driving, you keep getting work, but you stop getting the long drives.**
+
+The cap will not fire at all below `travel_cap_min_trips` (8) logged trips across
+`travel_cap_min_coordinators` (3) people in the window. A constraint that can
+deny someone work must not fire on two or three observations, where the "typical
+trip" is just whatever the last person happened to drive.
 
 A veto is a **system event**, not a human override. The audit log records it as
 `system_constraint_veto` with class `system`, so it never inflates the override
@@ -406,7 +473,7 @@ be replayed under new weights without re-querying a single calendar.
 | Group | Columns | Purpose |
 |---|---|---|
 | Identity | `candidate_id`, `run_id`, `coordinator_id`, `coordinator_name` | |
-| Layer 1 | `l1_window_match`, `l1_open_slot`, `l1_no_calendar_clash`, `l1_no_family_conflict`, `l1_credential_match`, `l1_calendar_fresh`, `l1_ramp_ok`, `l1_pass`, `l1_fail_reason`, `missing_credentials` | Answers "why wasn't Kali offered?" in one query |
+| Layer 1 | `l1_window_match`, `l1_open_slot`, `l1_no_calendar_clash`, `l1_no_family_conflict`, `l1_credential_match`, `l1_calendar_fresh`, `l1_ramp_ok`, `l1_pass`, `l1_fail_reason`, `missing_credentials` | Answers "why wasn't Sanjana offered?" in one query |
 | Calendar | `calendar_status`, `calendar_cache_age_s`, `soft_flags`, `slot_start`, `slot_end` | SLO panel; correlates errors with cache age |
 | Raw inputs | `k_prior_visits`, `days_since_family_contact` (**NULL when k=0, never 0**), `committed_hours`, `capacity_hours`, `travel_minutes`, `burden_hours`, `utilization`, `prior_checkpoint_flag`, `n_c_total_visits`, `is_cold_start` | Full replay without re-querying anything |
 | Derived | `phi_continuity`, `phi_raw_R`, `omega_preference`, `psi_burden_relief`, `p_checkpoint` | |
@@ -505,7 +572,7 @@ emailed PDF.
 
 ```bash
 make init        # write config/engine.json, create the append-only audit db
-make demo        # synthetic lab: 8 coordinators, 12 families, 20 visits
+make demo        # synthetic lab: 7 coordinators, 12 families, 16 visits
 make test        # 25 correctness anchors incl. the hand-computed reference case
 make week        # greedy vs optimiser with measured regret
 make debrief     # reports/debrief-<week>.md and .html

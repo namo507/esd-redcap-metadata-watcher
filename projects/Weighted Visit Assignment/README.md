@@ -10,8 +10,8 @@ is the specification and operating manual.
 the lab meeting.
 
 ```bash
-make demo      # synthetic lab, score + assign a week, log every decision
-make test      # 25 correctness anchors, under ten seconds
+make demo      # synthetic lab (real roster names, synthetic attributes)
+make test      # 44 correctness and privacy anchors, under ten seconds
 make debrief   # reports/debrief-<week>.md and .html
 ```
 
@@ -31,10 +31,13 @@ esd_scheduler/          the engine (pure standard library)
   drift.py              weekly fairness and drift metrics
   sensitivity.py        AHP, DEMATEL, conditional logit, OAT, criticality
   report.py             the weekly debrief
-  demo.py               deterministic synthetic lab
+  demo.py               deterministic synthetic lab (roster from the shared calendar)
+  ingest_outlook_pdf.py month-view PDF ingester (Tier 3, day-level only)
+  graphcheck.py         the privacy break-it probes
   cli.py                command line
 
 tests/test_engine.py    correctness anchors, incl. the hand-computed reference case
+tests/test_graph_privacy.py  free/busy-only guards on the Graph path
 automation/             launchd agents: 5-min sync, nightly reconcile, weekly debrief
 deck/                   math renders, deck build, rasteriser, brand QA
 config/engine.json      the live parameter set (versioned, fingerprinted)

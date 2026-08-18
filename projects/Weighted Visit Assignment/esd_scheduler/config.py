@@ -137,6 +137,17 @@ class EngineConfig:
     unsyncable_halt_fraction: float = 0.20
     require_write_time_recheck: bool = True
 
+    # Delegated auth is the only mode that satisfies the lab's privacy
+    # constraint: the app inherits the signed-in person's view, so at the tenant
+    # default sharing level Exchange never sends event subjects. Application-only
+    # auth cannot be reduced to free/busy at all, because Microsoft publishes no
+    # calendar app role below Calendars.Read, which reads subject and body.
+    # Reaching that mode therefore requires an explicit, recorded acknowledgement
+    # rather than a config typo.
+    graph_auth_mode: str = "delegated"          # delegated | application
+    allow_app_only_ack: Optional[str] = None    # who accepted the risk, and when
+    display_timezone: str = "America/New_York"  # exports print none; state it once
+
     # --- optimiser ----------------------------------------------------------
     optimizer_mode: str = "greedy"  # greedy | dp | mcmf | shadow
     shadow_optimizer: bool = True
@@ -147,6 +158,13 @@ class EngineConfig:
 
     # --- fairness constraints (constraints, not criteria) -------------------
     travel_share_cap: float = 1.4   # rolling 4-week travel share vs capacity share
+    # Minimum evidence before the travel cap may veto anyone. A constraint that
+    # can deny someone work must not fire on two or three logged trips: with a
+    # sample that small the "typical trip" is whatever the last person happened
+    # to drive. Same principle as refusing to fit the shrinkage prior from a
+    # handful of coordinators.
+    travel_cap_min_trips: int = 8
+    travel_cap_min_coordinators: int = 3
     utilization_hard_cap: float = 1.0
 
     # --- drift thresholds ---------------------------------------------------
@@ -158,6 +176,18 @@ class EngineConfig:
 
     def validate(self) -> None:
         self.weights.validate()
+        if self.graph_auth_mode not in ("delegated", "application"):
+            raise ValueError(
+                f"graph_auth_mode must be 'delegated' or 'application', "
+                f"got {self.graph_auth_mode!r}"
+            )
+        if self.graph_auth_mode == "application" and not self.allow_app_only_ack:
+            raise ValueError(
+                "graph_auth_mode='application' grants Calendars.Read, which reads "
+                "event subjects and bodies for every mailbox in scope. There is no "
+                "lesser calendar app role. Set allow_app_only_ack to the name and "
+                "date of whoever accepted that, or use delegated auth."
+            )
         if self.kappa_visits <= 0 or self.tau_days <= 0:
             raise ValueError("kappa_visits and tau_days must be positive")
         if self.gamma_travel < 0:

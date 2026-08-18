@@ -175,18 +175,52 @@ def fairness_violations(
     if candidate.components.utilization > cfg.utilization_hard_cap:
         out.append("over_capacity")
 
+    # Travel equity. The rule, in one sentence a coordinator can act on:
+    #
+    #   when you are over your share of the driving, you keep getting work,
+    #   but you stop getting the long drives.
+    #
+    # The obvious implementation - veto anyone already over their share - is a
+    # ratchet. Every visit is refused, including the short ones that would bring
+    # their average back down, and the only way out is to wait for the rolling
+    # window to move. In the pilot run that starved one coordinator of all work
+    # for a week while the constraint sat there looking correct.
+    #
+    # A purely directional test (does this push the share up?) is no better: if
+    # one person holds nearly all the recent travel their share is already ~1.0
+    # and no further trip can raise it, so the cap silently stops firing exactly
+    # when it is most needed. Comparing the trip against the team's typical trip
+    # avoids both failure modes.
     team_travel = {
         c.coordinator_id: state.rolling_travel_minutes(c.coordinator_id, now)
         for c in state.active_coordinators()
     }
     total_travel = sum(team_travel.values())
     total_capacity = sum(c.capacity_hours_week for c in state.active_coordinators())
-    if total_travel > 0 and total_capacity > 0:
+    recent = [
+        h for h in state.history
+        if h.travel_minutes > 0 and (now - h.when).days <= 28
+    ]
+    trips = [h.travel_minutes for h in recent]
+    drivers = {h.coordinator_id for h in recent}
+    # Not enough evidence to call anyone a travel hog yet. Stay silent rather
+    # than veto on noise; the drift report still shows the raw travel spread.
+    enough_evidence = (
+        len(trips) >= cfg.travel_cap_min_trips
+        and len(drivers) >= cfg.travel_cap_min_coordinators
+    )
+    if total_travel > 0 and total_capacity > 0 and trips and enough_evidence:
         coordinator = state.coordinators[coordinator_id]
-        travel_share = team_travel.get(coordinator_id, 0.0) / total_travel
         capacity_share = coordinator.capacity_hours_week / total_capacity
-        if capacity_share > 0 and travel_share > cfg.travel_share_cap * capacity_share:
-            out.append("travel_share_cap")
+        if capacity_share > 0:
+            this_trip = candidate.components.travel_minutes
+            mine = team_travel.get(coordinator_id, 0.0)
+            prospective_share = (mine + this_trip) / (total_travel + this_trip)
+            typical_trip = sum(trips) / len(trips)
+            over_cap = prospective_share > cfg.travel_share_cap * capacity_share
+            is_a_long_drive = this_trip > typical_trip
+            if over_cap and is_a_long_drive:
+                out.append("travel_share_cap")
     return out
 
 

@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: help init demo test week drift debrief calibrate sensitivity sync \
+.PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
         install-automation uninstall-automation deck clean
 
 help:
@@ -15,6 +15,7 @@ help:
 	@echo "  make debrief              write reports/debrief-<week>.md and .html"
 	@echo "  make calibrate            recalibrate the review band from the audit log"
 	@echo "  make sensitivity          OAT, criticality, redundancy, revealed preference"
+	@echo "  make verify-graph         run the Graph privacy probes (needs ESD_CAL_TOKEN)"
 	@echo "  make install-automation   load the launchd agents (5 min sync, weekly debrief)"
 	@echo "  make deck                 rebuild the v3 slide deck (math, build, preview, brand QA)"
 	@echo "  make clean                remove generated data, reports and logs"
@@ -27,6 +28,7 @@ demo: init
 
 test:
 	$(PY) tests/test_engine.py
+	$(PY) tests/test_graph_privacy.py
 
 week:
 	$(PY) -m esd_scheduler plan-week --verbose
@@ -45,6 +47,9 @@ calibrate:
 
 sensitivity:
 	$(PY) -m esd_scheduler sensitivity
+
+verify-graph:
+	$(PY) -m esd_scheduler verify-graph --out reports/graph-verification.txt
 
 install-automation:
 	@chmod +x automation/*.sh

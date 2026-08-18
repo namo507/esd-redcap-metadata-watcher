@@ -1,7 +1,10 @@
 """Deterministic synthetic lab, for the pilot dry run and the tests.
 
-Shaped to be awkward on purpose: two overloaded coordinators, one brand new hire
-with an empty history, one family with a hard exclusion, one family that wants a
+The coordinator NAMES are the real roster from the shared Outlook calendar
+view; every attribute attached to them is synthetic. See the note on ``specs``.
+
+Shaped to be awkward on purpose: two overloaded coordinators, one example
+coordinator with an empty history, one family with a hard exclusion, one family that wants a
 fresh face, one family that names a coordinator, one Spanish-language
 requirement, credential gaps that bite differently on NICO and NANO, and travel
 correlated with zone so the burden term is signal rather than noise.
@@ -33,16 +36,27 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     state = LabState()
 
     # --- coordinators -------------------------------------------------------
+    # The NAMES are the real lab roster, taken from the shared Outlook view
+    # (Calendar - Shrivastava, Namit), so the demo, the dashboard and the audit
+    # log all refer to the same six people.
+    #
+    # EVERY ATTRIBUTE BELOW IS SYNTHETIC. Credentials, capacity, completed-visit
+    # counts, zones and language attributes are invented to exercise the engine
+    # and describe nobody's actual qualifications or workload. Replace them from
+    # the real roster before the pilot.
+    #
+    # The seventh row is a deliberate placeholder rather than a real person: the
+    # cold-start path needs someone with no history, and labelling a named
+    # colleague "brand new hire" would be a fabricated claim about them.
     specs = [
-        # name,            credentials,                        cap,  done, zone, attrs
-        ("Kali",  {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 61, 1, {"spanish"}),
-        ("Sam",   {"CONSENT", "DRIVING", "EEG"},                20.0, 48, 2, set()),
-        ("Axie",  {"ADOS", "CONSENT", "DRIVING"},               20.0, 55, 1, set()),
-        ("Emma",  {"ADOS", "CONSENT", "DRIVING", "PHLEBOTOMY"}, 20.0, 72, 3, set()),
-        ("Jonah", {"CONSENT", "DRIVING"},                       10.0, 33, 2, {"spanish"}),
-        ("Priya", {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 40, 4, set()),
-        ("Tomas", {"CONSENT", "EEG"},                           15.0, 26, 3, set()),
-        ("Nia",   {"CONSENT", "DRIVING", "EEG"},                20.0,  0, 2, set()),  # new hire
+        # name,                     credentials,                        cap,  done, zone, attrs
+        ("Margaret Bell",           {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 61, 1, {"spanish"}),
+        ("Lauren Puttock",          {"CONSENT", "DRIVING", "EEG"},                20.0, 48, 2, set()),
+        ("Sanjana Oak",             {"ADOS", "CONSENT", "DRIVING"},               20.0, 55, 1, set()),
+        ("Sofia Tous",              {"ADOS", "CONSENT", "DRIVING", "PHLEBOTOMY"}, 20.0, 72, 3, set()),
+        ("Morgan Soto",             {"CONSENT", "DRIVING"},                       10.0, 33, 2, {"spanish"}),
+        ("Ramiro Lucas-Mariano",    {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 40, 4, set()),
+        ("New Coordinator (example)", {"CONSENT", "DRIVING", "EEG"},              20.0,  0, 2, set()),
     ]
     for i, (name, creds, cap, done, zone, attrs) in enumerate(specs):
         cid = f"C{i + 1:02d}"
@@ -58,11 +72,14 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
         )
     ids = sorted(state.coordinators)
 
-    # Two people are already heavily booked this period.
+    # Two people are already heavily booked this period, so the burden term bites.
     state.committed_hours = {cid: round(rng.uniform(3.0, 9.0), 1) for cid in ids}
-    state.committed_hours[ids[0]] = 17.0   # Kali, nearly full
-    state.committed_hours[ids[3]] = 18.5   # Emma, full
-    state.committed_hours[ids[7]] = 0.0    # Nia, brand new
+    # Busy, not capped. Starting anyone above the utilisation ceiling turns the
+    # whole run into a demonstration of the fairness veto and hides the ranking,
+    # which is the part that needs looking at.
+    state.committed_hours["C01"] = 13.0   # busiest
+    state.committed_hours["C04"] = 12.0   # second busiest
+    state.committed_hours["C07"] = 0.0    # the example new coordinator
 
     # --- families -----------------------------------------------------------
     for i in range(12):
@@ -75,7 +92,7 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             sigma=1,
         )
     # The twins case: a family comfort issue became a hard exclusion.
-    state.families["F5034"].hard_exclusions = {"C04"}   # Emma excluded
+    state.families["F5034"].hard_exclusions = {"C04"}   # Sofia Tous excluded
     state.families["F5035"].hard_exclusions = {"C04"}
     # One family wants a fresh face after a difficult visit.
     state.families["F5037"].sigma = -1
@@ -88,8 +105,8 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     # --- travel: correlated with zone distance ------------------------------
     for cid in ids:
         czone = state.coordinators[cid].coordinator_id
-        czone_num = {"C01": 1, "C02": 2, "C03": 1, "C04": 3, "C05": 2, "C06": 4,
-                     "C07": 3, "C08": 2}[czone]
+        czone_num = {"C01": 1, "C02": 2, "C03": 1, "C04": 3,
+                     "C05": 2, "C06": 4, "C07": 2}[czone]
         for fid, fam in state.families.items():
             base = 18 + 22 * abs(czone_num - fam.zone)
             state.travel_minutes[(cid, fid)] = round(base + rng.uniform(-6, 10), 1)
@@ -161,13 +178,16 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             blocks=cal,
         )
     # One coordinator's calendar is stale enough to make the assignment provisional.
-    state.calendars["C07"].fetched_at = now - timedelta(minutes=40)
+    state.calendars["C06"].fetched_at = now - timedelta(minutes=40)
     state.demo_blocks = blocks  # type: ignore[attr-defined]
 
     # --- open visits --------------------------------------------------------
     visits: List[Visit] = []
     family_ids = sorted(state.families)
-    for i in range(20):
+    # Sized to the roster: six working coordinators, two of them already nearly
+    # full, and one part-time. Twenty open visits saturates that and the run
+    # becomes a demonstration of the fairness vetoes rather than of the ranking.
+    for i in range(16):
         fid = family_ids[i % len(family_ids)]
         fam = state.families[fid]
         start_offset = 2 + (i % 10)
