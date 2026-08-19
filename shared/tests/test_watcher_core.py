@@ -196,6 +196,7 @@ class ProjectSummaryTests(unittest.TestCase):
         )
         self.assertEqual(summary["design_field_count"], 0)
         self.assertEqual(summary["export_field_count"], 0)
+        self.assertEqual(summary["required_field_count"], 0)
         self.assertIsNone(summary["event_count"])
         self.assertFalse(summary["is_longitudinal"])
 

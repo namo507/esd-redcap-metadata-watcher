@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install development dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile Python sources
+        run: >-
+          python -m compileall -q
+          app.py charts.py exports.py redcap_client.py recruitment_reports.py
+          watcher_core.py tests
+
+      - name: Check secret hygiene
+        run: python -m pytest -q tests/test_secret_hygiene.py
+
+      - name: Run test suite
+        run: python -m pytest -q --ignore=tests/test_secret_hygiene.py

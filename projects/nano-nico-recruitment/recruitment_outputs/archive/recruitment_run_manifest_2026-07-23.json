@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-23T20:27:46.693997+00:00",
+  "report_date": "2026-07-23",
+  "api_url": "https://redcap.research.sc.edu/api/",
+  "counting_policy": "all unique records counted; ineligible/unenrolled and quality issues flagged",
+  "public_count_policy": "Participant-derived cells from 1 through 9 are shown as <10; diagnostic and temporally complementary cumulative counts are banded.",
+  "date_policy": "No candidate field is treated as verified protocol enrollment; current live counts are kept in a separate as-of column.",
+  "projects": {
+    "NANO": {
+      "project_id": 4218,
+      "project_title": "NANO Study Surveys",
+      "raw_exported_rows": 1188,
+      "live_counts": {
+        "Total": 219,
+        "Minority": 99,
+        "Hispanic": 16
+      },
+      "data_quality": {
+        "Flagged for review": "30–39",
+        "Would be excluded under strict policy": "10–19",
+        "Race missing": "<10",
+        "Race unknown/other": "<10",
+        "Ethnicity missing/unknown": "10–19",
+        "Dual-enrolled in NANO": 0
+      },
+      "date_candidates": [
+        {
+          "Project": "NANO",
+          "Field": "visit_date",
+          "Description": "Visit date",
+          "Participants with valid date": "210–219",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": "190–199",
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        },
+        {
+          "Project": "NANO",
+          "Field": "bsrc_doe",
+          "Description": "Data-sharing consent date",
+          "Participants with valid date": "200–209",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": 0,
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        },
+        {
+          "Project": "NANO",
+          "Field": "papf_parent_date",
+          "Description": "Optional media/advertising form date",
+          "Participants with valid date": "210–219",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": 0,
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        },
+        {
+          "Project": "NANO",
+          "Field": "fif_doe",
+          "Description": "Family information evaluation date",
+          "Participants with valid date": "200–209",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": "40–49",
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        }
+      ],
+      "targets_state": "provisional / unverified",
+      "targets_source": "Prior reporting configuration; not reconciled to the NIH-approved plan",
+      "demographics_state": "configured; pending study-owner policy confirmation",
+      "demographics_note": "Codes match the exported data dictionary; minority/Hispanic reporting rules still require study-owner approval",
+      "qa_checks": [
+        {
+          "Project": "NANO",
+          "Check": "Configured REDCap project identity",
+          "Passed": true,
+          "Detail": "PID 4218"
+        },
+        {
+          "Project": "NANO",
+          "Check": "One audit row per participant",
+          "Passed": true,
+          "Detail": "Audit keys are unique"
+        },
+        {
+          "Project": "NANO",
+          "Check": "Cumulative total reconciles to audit",
+          "Passed": true,
+          "Detail": "Matches calculated live count"
+        },
+        {
+          "Project": "NANO",
+          "Check": "Demographic categories do not exceed total",
+          "Passed": true,
+          "Detail": "Both category counts are within the live total"
+        },
+        {
+          "Project": "NANO",
+          "Check": "No unverified enrollment date inferred",
+          "Passed": true,
+          "Detail": "All date fields are diagnostic candidates only"
+        }
+      ]
+    },
+    "NICO": {
+      "project_id": 3836,
+      "project_title": "NICO Study",
+      "raw_exported_rows": 111,
+      "live_counts": {
+        "Total": 82,
+        "Minority": 53,
+        "Hispanic": "<10"
+      },
+      "data_quality": {
+        "Flagged for review": "50–59",
+        "Would be excluded under strict policy": "<10",
+        "Race missing": 0,
+        "Race unknown/other": 0,
+        "Ethnicity missing/unknown": "50–59",
+        "Dual-enrolled in NANO": "<10"
+      },
+      "date_candidates": [
+        {
+          "Project": "NICO",
+          "Field": "visit_date",
+          "Description": "Visit date",
+          "Participants with valid date": "10–19",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": 0,
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        },
+        {
+          "Project": "NICO",
+          "Field": "dob",
+          "Description": "Infant date of birth (not enrollment)",
+          "Participants with valid date": "80–89",
+          "Participants with invalid date": 0,
+          "Participants with multiple dates": 0,
+          "Interpretation": "Diagnostic candidate; not used as enrollment date"
+        }
+      ],
+      "targets_state": "missing",
+      "targets_source": "NIH milestone dates and targets were not supplied",
+      "demographics_state": "provisional",
+      "demographics_note": "Race code 4 and two ethnicity sources are unioned for observed Hispanic/Latino; race code 7 is treated as unknown/other",
+      "qa_checks": [
+        {
+          "Project": "NICO",
+          "Check": "Configured REDCap project identity",
+          "Passed": true,
+          "Detail": "PID 3836"
+        },
+        {
+          "Project": "NICO",
+          "Check": "One audit row per participant",
+          "Passed": true,
+          "Detail": "Audit keys are unique"
+        },
+        {
+          "Project": "NICO",
+          "Check": "Cumulative total reconciles to audit",
+          "Passed": true,
+          "Detail": "Matches calculated live count"
+        },
+        {
+          "Project": "NICO",
+          "Check": "Demographic categories do not exceed total",
+          "Passed": true,
+          "Detail": "Both category counts are within the live total"
+        },
+        {
+          "Project": "NICO",
+          "Check": "No unverified enrollment date inferred",
+          "Passed": true,
+          "Detail": "All date fields are diagnostic candidates only"
+        }
+      ]
+    }
+  }
+}
