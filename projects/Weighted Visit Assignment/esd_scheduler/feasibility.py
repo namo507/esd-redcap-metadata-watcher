@@ -36,14 +36,29 @@ from .models import (
 
 
 def _working_intervals(
-    coordinator: Coordinator, window_start: datetime, window_end: datetime
+    coordinator: Coordinator,
+    window_start: datetime,
+    window_end: datetime,
+    snapshot: Optional[CalendarSnapshot] = None,
 ) -> List[Tuple[datetime, datetime]]:
-    """Expand the coordinator's weekly working pattern across the visit window."""
-    if not coordinator.working_blocks:
-        # No declared pattern: assume standard weekday business hours.
-        pattern = [(d, 8.0, 17.0) for d in range(5)]
-    else:
+    """Expand the coordinator's weekly working pattern across the visit window.
+
+    Precedence: the working hours Outlook reported, then the locally configured
+    pattern, then standard weekday business hours. Outlook wins because it is the
+    person's own declared envelope rather than our guess about it.
+
+    This is what makes "nothing on the calendar" mean something. An empty 19:00
+    is outside the envelope and is not availability; an empty 10:00 is inside it
+    and is. Without this, a free/busy view with no entries reads as "free all
+    day, every day" and the engine offers people evening visits.
+    """
+    if snapshot is not None and snapshot.working_hours is not None:
+        pattern = snapshot.working_hours.as_blocks()
+    elif coordinator.working_blocks:
         pattern = coordinator.working_blocks
+    else:
+        # No declared pattern anywhere: assume standard weekday business hours.
+        pattern = [(d, 8.0, 17.0) for d in range(5)]
 
     out: List[Tuple[datetime, datetime]] = []
     day = window_start.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -93,7 +108,9 @@ def find_slot(
     engine will happily schedule two visits forty minutes apart across town.
     """
     need = timedelta(hours=visit.duration_hours) + timedelta(minutes=travel_minutes)
-    working = _working_intervals(coordinator, visit.window_start, visit.window_end)
+    working = _working_intervals(
+        coordinator, visit.window_start, visit.window_end, snapshot
+    )
     if not working:
         return None
     hard = snapshot.hard_blocks() if snapshot else []
@@ -150,7 +167,9 @@ def evaluate(
         return res
 
     # --- W: date window match ----------------------------------------------
-    working = _working_intervals(coordinator, visit.window_start, visit.window_end)
+    working = _working_intervals(
+        coordinator, visit.window_start, visit.window_end, snapshot
+    )
     res.window_match = bool(working)
     if not res.window_match:
         res.fail_reason = "no_working_hours_in_window"
@@ -164,6 +183,8 @@ def evaluate(
     if slot is None:
         # Distinguish "no free block at all" from "free time exists but the
         # calendar eats it" so the failure is actionable.
+        # Snapshot dropped on purpose: this asks "is there working time at all?",
+        # separating "no free block exists" from "the calendar ate it".
         free_ignoring_calendar = find_slot(coordinator, visit, None, travel)
         if free_ignoring_calendar is None:
             res.fail_reason = "no_open_slot"

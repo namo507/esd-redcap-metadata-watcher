@@ -36,7 +36,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .config import EngineConfig
-from .models import BusyBlock, CalendarSnapshot
+from .models import BusyBlock, CalendarSnapshot, WorkingHours
 
 FRESH = "fresh"
 STALE = "stale"
@@ -158,22 +158,114 @@ def _post_json(url: str, payload: dict, headers: Dict[str, str], timeout: int = 
         return json.loads(resp.read().decode("utf-8"))
 
 
-_GRAPH_STATUS = {
+# availabilityView digit -> status, per the Microsoft Graph scheduleInformation
+# reference. Note the two traps:
+#   * 2 is BUSY and 0 is FREE. A widely-circulated Copilot answer states the
+#     reverse ("busy is zero, available is three"). Building on that inverts the
+#     whole scheduler: it books visits into exactly the slots people are busy,
+#     and the output still looks like a plausible schedule.
+#   * workingElsewhere is folded into 0 for backward compatibility, so it is
+#     NOT distinguishable from free in the view string. Where that distinction
+#     matters, read scheduleItems[].status instead.
+_AVAILABILITY_VIEW = {
     "0": "free",
     "1": "tentative",
     "2": "busy",
     "3": "oof",
-    "4": "workingElsewhere",
+    "4": "workingElsewhere",  # legacy; current tenants emit 0
 }
+
+# Fields getSchedule may return that this tool must never see, store or render.
+# Whether they arrive at all is decided by the Exchange calendar sharing level,
+# not by our OAuth scope: at the tenant default of AvailabilityOnly the server
+# omits them, and at LimitedDetails it sends them. We drop them either way, so
+# that a sharing change made by one person cannot quietly widen what the lab's
+# scheduling tool holds. See ESD-Graph-Privacy-RESEARCH-REPORT.md.
+FORBIDDEN_EVENT_FIELDS = ("subject", "location", "isPrivate")
+
+# The only scope this tool is permitted to run under. Delegated, read-only, and
+# evaluated by Exchange against what the signed-in person can already see.
+ALLOWED_SCOPES = frozenset({"Calendars.Read.Shared"})
+
+
+class ScopeViolation(RuntimeError):
+    """Raised at startup when a token grants more than free/busy reading."""
+
+
+def _decode_jwt_claims(token: str) -> dict:
+    """Read a JWT payload without verifying it.
+
+    Verification is the token issuer's job and needs its signing keys. All we
+    need here is to see what the token *claims* to grant, so we can refuse to
+    run on an over-broad one. A forged token would fail at Graph anyway.
+    """
+    import base64
+
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload))
+    except (IndexError, ValueError, UnicodeDecodeError) as exc:
+        raise ScopeViolation(f"could not read token claims: {exc}") from exc
+
+
+def assert_least_privilege(token: str, allowed: Optional[frozenset] = None) -> dict:
+    """Fail closed unless the token is delegated and free/busy only.
+
+    Two checks, and the second is the one that matters most:
+
+      * ``scp`` (delegated scopes) must be a subset of ALLOWED_SCOPES.
+      * ``roles`` must be absent. A ``roles`` claim means application
+        permissions are live, and app-only calendar access cannot be reduced
+        below Calendars.Read, which reads subject and body. There is no
+        Application Calendars.ReadBasic role.
+
+    Returns the decoded claims so the caller can log the audit trail.
+    """
+    allowed = allowed or ALLOWED_SCOPES
+    claims = _decode_jwt_claims(token)
+
+    roles = claims.get("roles") or []
+    if roles:
+        raise ScopeViolation(
+            "token carries application permissions "
+            f"({', '.join(sorted(roles))}). App-only calendar access cannot be "
+            "restricted to free/busy; refusing to run. Use delegated auth."
+        )
+
+    granted = set((claims.get("scp") or "").split())
+    if not granted:
+        raise ScopeViolation("token carries no delegated scopes (no 'scp' claim)")
+    excess = granted - allowed
+    if excess:
+        raise ScopeViolation(
+            f"token grants more than free/busy reading: {', '.join(sorted(excess))}. "
+            f"Permitted: {', '.join(sorted(allowed))}."
+        )
+    return claims
+
+
+def strip_event_details(entry: dict) -> dict:
+    """Remove subject, location and isPrivate before anything downstream sees them."""
+    return {k: v for k, v in entry.items() if k not in FORBIDDEN_EVENT_FIELDS}
 
 
 @dataclass
 class GraphProvider(CalendarProvider):
-    """Microsoft Graph ``getSchedule``.
+    """Microsoft Graph ``getSchedule``, free/busy only.
 
-    Needs an app registration with Calendars.Read (application permission) and a
-    bearer token supplied by ``token_provider``. Nothing here caches the token;
-    pass a callable that handles refresh.
+    Auth is **delegated**: the app acts as the signed-in person and therefore
+    sees exactly what they already see in Outlook. Under the tenant default
+    sharing level (AvailabilityOnly) Exchange does not put event subjects in the
+    response at all, so titles are absent from the payload rather than merely
+    ignored by this code.
+
+    Application-only auth is deliberately unsupported. Microsoft publishes no
+    calendar app role below ``Calendars.Read``, which reads subject and body, so
+    app-only cannot satisfy the lab's constraint. ``enforce_scope`` refuses such
+    a token at the first call.
+
+    Pass a ``token_provider`` callable that handles refresh; nothing is cached here.
     """
 
     token_provider: Callable[[], str]
@@ -182,12 +274,22 @@ class GraphProvider(CalendarProvider):
     availability_view_interval: int = 15
     name: str = "msgraph"
     endpoint: str = "https://graph.microsoft.com/v1.0"
+    enforce_scope: bool = True
+    on_scope_checked: Optional[Callable[[dict], None]] = None
 
     def fetch(self, coordinator_ids, start, end):
         now = datetime.now(timezone.utc)
+        token = self.token_provider()
+        if self.enforce_scope:
+            # Fail closed, and fail loudly. A scope problem is a privacy
+            # problem, not a degraded-service problem, so it must not be
+            # swallowed into a sync_ok=False snapshot.
+            claims = assert_least_privilege(token)
+            if self.on_scope_checked:
+                self.on_scope_checked(claims)
         url = f"{self.endpoint}/users/{self.organizer}/calendar/getSchedule"
         headers = {
-            "Authorization": f"Bearer {self.token_provider()}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Prefer": 'outlook.timezone="UTC"',
         }
@@ -227,17 +329,23 @@ class GraphProvider(CalendarProvider):
                 )
                 continue
             blocks = []
-            for entry in item.get("scheduleItems", []):
-                status = entry.get("status", "busy")
+            for raw_entry in item.get("scheduleItems", []):
+                entry = strip_event_details(raw_entry)
                 blocks.append(
                     BusyBlock(
                         start=_parse_graph_dt(entry["start"]),
                         end=_parse_graph_dt(entry["end"]),
-                        status=status,
+                        status=entry.get("status", "busy"),
                     )
                 )
             out[cid] = CalendarSnapshot(
-                coordinator_id=cid, provider=self.name, fetched_at=now, blocks=blocks
+                coordinator_id=cid,
+                provider=self.name,
+                fetched_at=now,
+                blocks=blocks,
+                # Free time only counts inside the declared working envelope.
+                # getSchedule returns this in the same call, at no extra cost.
+                working_hours=WorkingHours.from_graph(item.get("workingHours")),
             )
         return out
 

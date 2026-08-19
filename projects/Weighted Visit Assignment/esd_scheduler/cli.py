@@ -10,6 +10,7 @@
     python -m esd_scheduler calibrate     calibrate the review band from the log
     python -m esd_scheduler sensitivity   OAT, criticality, redundancy
     python -m esd_scheduler ahp FILE      derive weights from pairwise judgments
+    python -m esd_scheduler verify-graph  run the privacy probes against a live token
 """
 
 from __future__ import annotations
@@ -401,6 +402,42 @@ def cmd_sensitivity(args) -> int:
     return 0
 
 
+def cmd_verify_graph(args) -> int:
+    """Run the break-it protocol from ESD-Graph-Privacy-RESEARCH-REPORT.md."""
+    from .graphcheck import render, run_probes
+
+    token = os.environ.get("ESD_CAL_TOKEN")
+    map_path = os.environ.get("ESD_CAL_MAP")
+    if not token:
+        print("ESD_CAL_TOKEN is not set. Get a delegated token from Graph "
+              "Explorer or your sign-in flow and export it.", file=sys.stderr)
+        return 2
+    mailboxes = {}
+    if map_path and os.path.exists(map_path):
+        with open(map_path, "r", encoding="utf-8") as fh:
+            mailboxes = json.load(fh)
+    elif args.mailbox:
+        mailboxes = {m: m for m in args.mailbox}
+    else:
+        print("Set ESD_CAL_MAP or pass --mailbox at least once.", file=sys.stderr)
+        return 2
+
+    if args.allow_write_probe:
+        print("WARNING: the write probe attempts to create a real calendar event")
+        print("on another person's mailbox. If the privacy guarantee is broken,")
+        print("an event WILL be created (and then deleted). Only run this against")
+        print("a mailbox you are authorised to test.\n")
+
+    report = run_probes(token, mailboxes, allow_write_probe=args.allow_write_probe)
+    print(render(report))
+    if args.out:
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+        with open(args.out, "w", encoding="utf-8") as fh:
+            fh.write(render(report))
+        print(f"\nwrote {args.out}")
+    return 0 if report.ok else 1
+
+
 def cmd_ahp(args) -> int:
     """Input: JSON {"names": [...], "matrices": [[[...]]]} one matrix per respondent."""
     with open(args.file, "r", encoding="utf-8") as fh:
@@ -472,6 +509,15 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("ahp")
     s.add_argument("file")
     s.set_defaults(func=cmd_ahp)
+
+    s = sub.add_parser("verify-graph")
+    s.add_argument("--mailbox", action="append",
+                   help="mailbox to probe; repeatable. Overridden by ESD_CAL_MAP")
+    s.add_argument("--allow-write-probe", action="store_true",
+                   help="also attempt an event create (T5). Off by default: it "
+                        "writes to a real mailbox if the guarantee is broken")
+    s.add_argument("--out", help="also write the report to this path")
+    s.set_defaults(func=cmd_verify_graph)
     return p
 
 

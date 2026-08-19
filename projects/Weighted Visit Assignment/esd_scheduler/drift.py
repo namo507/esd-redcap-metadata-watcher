@@ -139,6 +139,7 @@ def permutation_cv_test(
 @dataclass
 class FairnessRow:
     coordinator_id: str
+    coordinator_name: str = ""
     visits: int = 0
     burden_hours: float = 0.0
     travel_minutes: float = 0.0
@@ -235,7 +236,11 @@ def weekly_drift(
         for r in rows:
             if r["l1_pass"]:
                 row = loads.setdefault(
-                    r["coordinator_id"], FairnessRow(coordinator_id=r["coordinator_id"])
+                    r["coordinator_id"],
+                    FairnessRow(
+                        coordinator_id=r["coordinator_id"],
+                        coordinator_name=r["coordinator_name"] or r["coordinator_id"],
+                    ),
                 )
                 row.capacity_hours = r["capacity_hours"] or row.capacity_hours
         outcome = outcomes.get(run["run_id"])
@@ -245,7 +250,13 @@ def weekly_drift(
         rep.n_assigned += 1
         cid = outcome["assigned_coordinator_id"]
         chosen = next((r for r in rows if r["coordinator_id"] == cid), None)
-        row = loads.setdefault(cid, FairnessRow(coordinator_id=cid))
+        row = loads.setdefault(
+            cid,
+            FairnessRow(
+                coordinator_id=cid,
+                coordinator_name=(chosen["coordinator_name"] if chosen else "") or cid,
+            ),
+        )
         row.visits += 1
         if chosen:
             row.travel_minutes += chosen["travel_minutes"] or 0.0

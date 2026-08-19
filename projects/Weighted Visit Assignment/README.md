@@ -4,16 +4,29 @@ Fair and efficient assignment of coordinators to home visits, for the NICO and
 NANO protocols. Three-layer policy, four-criterion score, and a full audit trail
 so the weights can be validated rather than asserted.
 
+**Live board:** <https://esd-visitboard.netlify.app> — public, no login, no
+backend. Demonstration data.
+
 **Start here:** [`ESD-Visit-Scheduling-v3-SPEC.md`](ESD-Visit-Scheduling-v3-SPEC.md)
 is the specification and operating manual.
 [`ESD-Visit-Scheduling-v3.pptx`](ESD-Visit-Scheduling-v3.pptx) is the deck for
 the lab meeting.
 
 ```bash
-make demo      # synthetic lab, score + assign a week, log every decision
-make test      # 25 correctness anchors, under ten seconds
+make serve     # the Visitboard at http://127.0.0.1:8765
+make static    # build the public, backend-free copy into dist-static/
+make publish   # build it and deploy to Netlify
+make demo      # synthetic lab (real roster names, synthetic attributes)
+make test      # 66 anchors across engine, privacy, API and the static build
 make debrief   # reports/debrief-<week>.md and .html
 ```
+
+## The board
+
+`make serve` starts the whole stack on one port. There is nothing to install:
+the backend is stdlib Python over the same engine, and the frontend is one HTML
+file with no bundler. Pick a visit, see who the board would send and why, see
+who was ruled out and why, assign, and record a reason if you disagree.
 
 ## What is here
 
@@ -31,16 +44,43 @@ esd_scheduler/          the engine (pure standard library)
   drift.py              weekly fairness and drift metrics
   sensitivity.py        AHP, DEMATEL, conditional logit, OAT, criticality
   report.py             the weekly debrief
-  demo.py               deterministic synthetic lab
+  demo.py               deterministic synthetic lab (roster from the shared calendar)
+  ingest_outlook_pdf.py month-view PDF ingester (Tier 3, day-level only)
+  graphcheck.py         the privacy break-it probes
   cli.py                command line
 
+backend/                stdlib HTTP API over the engine (no dependencies)
+  server.py             routes, static serving, path-traversal guard
+  session.py            one lab state; turns engine output into screen language
+  tests/test_api.py     boots a real server and talks HTTP to it
+frontend/               one page, no framework, no build step
+  index.html            structure
+  styles.css            ESD design tokens
+  app.js                fetch, render, assign (talks to the API or to StaticBoard)
+  static-board.js       answers the same routes offline, for the public build
+  assets/               lab and UofSC logos
+
 tests/test_engine.py    correctness anchors, incl. the hand-computed reference case
+tests/test_graph_privacy.py  free/busy-only guards on the Graph path
 automation/             launchd agents: 5-min sync, nightly reconcile, weekly debrief
 deck/                   math renders, deck build, rasteriser, brand QA
 config/engine.json      the live parameter set (versioned, fingerprinted)
 data/                   audit database (gitignored)
 reports/                generated debriefs (gitignored)
 ```
+
+## Two ways to run it
+
+`make serve` runs the full stack: the Python engine answers every request live,
+and assignments are written to the append-only audit log.
+
+`make static` freezes the engine's answers into `dist-static/board.json` and
+ships a copy that needs no backend at all — that is what is deployed publicly.
+The frontend is the same files in both modes; it probes `/api/health` on boot
+and falls back to `static-board.js`, which serves the identical routes from the
+snapshot. The only thing the browser recomputes is the burden term, because
+assigning a visit changes a coordinator's committed hours;
+`tests/test_static_board.py` pins that against the engine.
 
 ## The model in one screen
 

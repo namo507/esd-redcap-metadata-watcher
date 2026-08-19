@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence
@@ -217,16 +218,33 @@ class AuditStore:
         parent = os.path.dirname(os.path.abspath(path))
         if parent:
             os.makedirs(parent, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        # check_same_thread=False plus one lock, because the Visitboard serves
+        # each HTTP request on its own thread while sharing one store. SQLite
+        # handles that fine; what it does not tolerate is two threads
+        # interleaving on a single connection, so every statement goes through
+        # _exec / _commit / query, and those are the only places that touch it.
+        self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(SCHEMA)
-        self.conn.commit()
+        self._lock = threading.RLock()
+        with self._lock:
+            self.conn.executescript(SCHEMA)
+            self._commit()
+
+    # -- serialised access ---------------------------------------------------
+
+    def _exec(self, sql: str, params: Sequence[Any] = ()) -> None:
+        with self._lock:
+            self.conn.execute(sql, params)
+
+    def _commit(self) -> None:
+        with self._lock:
+            self.conn.commit()
 
     # -- config --------------------------------------------------------------
 
     def record_config(self, cfg: EngineConfig) -> None:
         w = cfg.weights
-        self.conn.execute(
+        self._exec(
             """INSERT OR REPLACE INTO weight_vector VALUES
                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
@@ -252,7 +270,7 @@ class AuditStore:
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     # -- decisions -----------------------------------------------------------
 
@@ -264,7 +282,7 @@ class AuditStore:
         most_constrained_rank: Optional[int] = None,
     ) -> str:
         run_id = str(uuid.uuid4())
-        self.conn.execute(
+        self._exec(
             """INSERT INTO scoring_run VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 run_id,
@@ -292,13 +310,13 @@ class AuditStore:
         )
         for cand in pool.all_rows():
             self._insert_candidate(run_id, cand)
-        self.conn.commit()
+        self._commit()
         return run_id
 
     def _insert_candidate(self, run_id: str, cand: CandidateScore) -> None:
         f = cand.feasibility
         c = cand.components
-        self.conn.execute(
+        self._exec(
             "INSERT INTO candidate_score VALUES ("
             + ",".join(["?"] * 48)
             + ")",
@@ -386,7 +404,7 @@ class AuditStore:
                 "system_write_time_conflict" if write_time_conflict else "system_constraint_veto"
             )
             reason_class = "system"
-        self.conn.execute(
+        self._exec(
             """INSERT OR REPLACE INTO assignment_outcome
                (run_id, assigned_coordinator_id, assigned_rank, was_override,
                 override_reason_code, override_reason_class, override_reason_text,
@@ -409,7 +427,7 @@ class AuditStore:
                 (decided_at or datetime.now()).isoformat(timespec="seconds"),
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     def record_sync(
         self,
@@ -422,7 +440,7 @@ class AuditStore:
         error_code: Optional[str] = None,
         events_changed: Optional[int] = None,
     ) -> None:
-        self.conn.execute(
+        self._exec(
             "INSERT INTO calendar_sync_log VALUES (?,?,?,?,?,?,?,?,?)",
             (
                 str(uuid.uuid4()),
@@ -436,10 +454,10 @@ class AuditStore:
                 events_changed,
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     def record_shadow(self, report, period_start: str, period_end: str, rounds: int = 1) -> None:
-        self.conn.execute(
+        self._exec(
             "INSERT INTO optimizer_shadow VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 str(uuid.uuid4()),
@@ -456,12 +474,13 @@ class AuditStore:
                 datetime.now().isoformat(timespec="seconds"),
             ),
         )
-        self.conn.commit()
+        self._commit()
 
     # -- reads ---------------------------------------------------------------
 
     def query(self, sql: str, params: Sequence[Any] = ()) -> List[sqlite3.Row]:
-        return list(self.conn.execute(sql, params))
+        with self._lock:
+            return list(self.conn.execute(sql, params))
 
     def runs_between(self, start: datetime, end: datetime) -> List[sqlite3.Row]:
         return self.query(
@@ -487,4 +506,5 @@ class AuditStore:
         )
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()

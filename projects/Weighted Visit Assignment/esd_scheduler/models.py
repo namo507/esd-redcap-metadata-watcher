@@ -134,6 +134,74 @@ class BusyBlock:
         return self.start < end and start < self.end
 
 
+@dataclass(frozen=True)
+class WorkingHours:
+    """A coordinator's declared working envelope, as Outlook reports it.
+
+    This is the answer to "does an empty calendar mean available?". It does not.
+    An empty slot at 19:00 is outside the working envelope and is not
+    availability; an empty slot at 10:00 is. Graph returns this object alongside
+    the free/busy view in the same getSchedule call, so it costs nothing extra.
+    """
+
+    days_of_week: FrozenSet[int] = frozenset({0, 1, 2, 3, 4})  # Monday = 0
+    start_hour: float = 8.0
+    end_hour: float = 17.0
+    time_zone: Optional[str] = None
+
+    _DAY_INDEX = {
+        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+        "friday": 4, "saturday": 5, "sunday": 6,
+    }
+
+    @classmethod
+    def from_graph(cls, node: Optional[dict]) -> Optional["WorkingHours"]:
+        if not node:
+            return None
+        days = frozenset(
+            cls._DAY_INDEX[d.lower()]
+            for d in node.get("daysOfWeek", [])
+            if d.lower() in cls._DAY_INDEX
+        )
+        tz = (node.get("timeZone") or {}).get("name")
+        return cls(
+            days_of_week=days or frozenset({0, 1, 2, 3, 4}),
+            start_hour=_hhmmss_to_hours(node.get("startTime"), 8.0),
+            end_hour=_hhmmss_to_hours(node.get("endTime"), 17.0),
+            time_zone=tz,
+        )
+
+    def contains(self, moment: datetime) -> bool:
+        if moment.weekday() not in self.days_of_week:
+            return False
+        hours = moment.hour + moment.minute / 60.0 + moment.second / 3600.0
+        return self.start_hour <= hours < self.end_hour
+
+    def covers(self, start: datetime, end: datetime) -> bool:
+        """True only when the whole span sits inside the working envelope."""
+        if start.date() != end.date():
+            return False
+        if start.weekday() not in self.days_of_week:
+            return False
+        s = start.hour + start.minute / 60.0
+        e = end.hour + end.minute / 60.0
+        return self.start_hour <= s and e <= self.end_hour
+
+    def as_blocks(self) -> List[Tuple[int, float, float]]:
+        """Shape expected by Coordinator.working_blocks."""
+        return [(d, self.start_hour, self.end_hour) for d in sorted(self.days_of_week)]
+
+
+def _hhmmss_to_hours(value: Optional[str], default: float) -> float:
+    if not value:
+        return default
+    try:
+        parts = value.split(":")
+        return int(parts[0]) + int(parts[1]) / 60.0
+    except (ValueError, IndexError):
+        return default
+
+
 @dataclass
 class CalendarSnapshot:
     """What we last heard from Outlook / Google for one coordinator."""
@@ -144,6 +212,7 @@ class CalendarSnapshot:
     blocks: List[BusyBlock] = field(default_factory=list)
     sync_ok: bool = True
     error_code: Optional[str] = None
+    working_hours: Optional[WorkingHours] = None
 
     def age_seconds(self, now: datetime) -> float:
         return max(0.0, (now - self.fetched_at).total_seconds())

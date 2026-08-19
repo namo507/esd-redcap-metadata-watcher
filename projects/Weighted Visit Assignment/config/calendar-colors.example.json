@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Outlook overlay colour -> coordinator_id, for the month-view PDF ingester.",
+    "The PDF export carries no legend, so this cannot be derived from the file",
+    "and must be filled in by looking at the Outlook calendar list once. The",
+    "colours are stable per Outlook profile.",
+    "",
+    "'navy' is already resolved by evidence, not by guessing: 14 of 14 titled",
+    "events in the August 2026 export are navy and 0 of 175 non-navy entries",
+    "carry a title, and only the export owner's own calendar renders titles.",
+    "",
+    "Leave a hue null rather than guessing. An unattributed entry is logged as",
+    "unattributed; a wrongly attributed one silently moves another person's load."
+  ],
+  "navy": "OWNER",
+  "grey": null,
+  "blue": null,
+  "teal": null,
+  "green": null,
+  "yellow": null,
+  "orange": null,
+  "_roster": {
+    "OWNER": "Shrivastava, Namit (calendar owner, not a visit coordinator)",
+    "C01": "Margaret Bell",
+    "C02": "Lauren Puttock",
+    "C03": "Sanjana Oak",
+    "C04": "Sofia Tous",
+    "C05": "Morgan Soto",
+    "C06": "Ramiro Lucas-Mariano"
+  }
+}

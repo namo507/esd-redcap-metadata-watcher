@@ -397,6 +397,100 @@ def test_perturbation_keeps_the_simplex():
             approx(getattr(w, name), max(0.0, min(1.0, getattr(CFG.weights, name) + delta)))
 
 
+def _travel_state(now):
+    """Five coordinators; C03 has done all the long drives lately."""
+    from esd_scheduler.models import CompletedVisit, Coordinator, LabState
+
+    state = LabState()
+    for i in range(1, 6):
+        cid = f"C{i:02d}"
+        state.coordinators[cid] = Coordinator(cid, cid, capacity_hours_week=20.0)
+    # A month of trips: C03 took the four long ones, everyone else took a short one.
+    plan = [("C03", 300.0)] * 4 + [("C01", 20.0), ("C02", 20.0),
+                                   ("C04", 20.0), ("C05", 20.0)]
+    for n, (cid, minutes) in enumerate(plan):
+        state.history.append(
+            CompletedVisit(
+                visit_id=f"H{n}", family_id="F1", coordinator_id=cid,
+                when=now - timedelta(days=3 + n), protocol="NICO",
+                checkpoint="12mo", travel_minutes=minutes,
+            )
+        )
+    return state
+
+
+def _veto_for(state, cid, travel_minutes, now):
+    from esd_scheduler.engine import fairness_violations
+    from esd_scheduler.models import CandidateScore, FeasibilityResult
+
+    cand = CandidateScore(
+        coordinator_id=cid,
+        coordinator_name=cid,
+        feasibility=FeasibilityResult(coordinator_id=cid, passed=True),
+        components=ComponentScores(travel_minutes=travel_minutes, utilization=0.3),
+    )
+    return fairness_violations(cid, cand, state, CFG, now)
+
+
+def test_travel_cap_does_not_ratchet_someone_out_of_all_work():
+    """Someone over their travel share must still be offered the SHORT trips.
+
+    The first implementation vetoed them from everything, which starved one
+    coordinator of all work for a week while the constraint looked correct.
+    """
+    state = _travel_state(NOW)
+    assert "travel_share_cap" in _veto_for(state, "C03", 300.0, NOW)
+    assert "travel_share_cap" not in _veto_for(state, "C03", 15.0, NOW)
+
+
+def test_travel_cap_leaves_everyone_else_alone():
+    state = _travel_state(NOW)
+    for cid in ("C01", "C02", "C04", "C05"):
+        assert "travel_share_cap" not in _veto_for(state, cid, 300.0, NOW)
+
+
+def test_travel_cap_stays_silent_without_enough_evidence():
+    """Two logged trips is not grounds for denying anyone work."""
+    from esd_scheduler.models import CompletedVisit, Coordinator, LabState
+
+    state = LabState()
+    for i in range(1, 4):
+        cid = f"C{i:02d}"
+        state.coordinators[cid] = Coordinator(cid, cid, capacity_hours_week=20.0)
+    for n in range(2):
+        state.history.append(
+            CompletedVisit(
+                visit_id=f"H{n}", family_id="F1", coordinator_id="C01",
+                when=NOW - timedelta(days=2), protocol="NICO",
+                checkpoint="12mo", travel_minutes=400.0,
+            )
+        )
+    assert "travel_share_cap" not in _veto_for(state, "C01", 400.0, NOW)
+
+
+def test_travel_cap_still_fires_when_one_person_holds_all_the_driving():
+    """A purely directional rule silently stops firing here: the hog's share is
+    already ~1.0, so no further trip can push it higher."""
+    from esd_scheduler.models import CompletedVisit, Coordinator, LabState
+
+    state = LabState()
+    for i in range(1, 4):
+        cid = f"C{i:02d}"
+        state.coordinators[cid] = Coordinator(cid, cid, capacity_hours_week=20.0)
+    # Eight trips across three people, but C01 drove almost all the distance.
+    plan = [("C01", 200.0)] * 6 + [("C02", 3.0), ("C03", 3.0)]
+    for n, (cid, minutes) in enumerate(plan):
+        state.history.append(
+            CompletedVisit(
+                visit_id=f"H{n}", family_id="F1", coordinator_id=cid,
+                when=NOW - timedelta(days=2 + n), protocol="NICO",
+                checkpoint="12mo", travel_minutes=minutes,
+            )
+        )
+    assert "travel_share_cap" in _veto_for(state, "C01", 400.0, NOW)
+    assert "travel_share_cap" not in _veto_for(state, "C01", 30.0, NOW)
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
