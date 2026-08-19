@@ -1,0 +1,39 @@
+domain,variable (REDCap field),cleaned-file column,plain-language construct,type,response range,n,% missing,modal answer %
+A.,tfa_intervene,How important is early intervention (early hel,Importance of early intervention (early help and support),ordinal,3 = Somewhat important  …  4 = Very important,135,0.0,97.8
+A.,tfa_wchild,How important are well-child checkups for babi,Importance of well-child checkups,ordinal,1 = Very important  …  3 = Not very important,135,0.0,96.3
+A.,tfa_track,How helpful is it to keep track of an infant's,Helpfulness of tracking infant growth and development,ordinal,1 = Very helpful  …  2 = Somewhat helpful,134,0.7,94.0
+A.,tfa_overall_help,"It turns out, this test only tells you if your","Value of a result that gives autism status only, not support needs",ordinal,"1 = Very helpful, I only need to know   …  4 = I don't want to know if my baby is",135,0.0,51.9
+B.,tfa_screen_accuracy,"  For an autism screening test for babies, how",Minimum accuracy the test would need to have,ordinal,1 = 98-100%  …  5 = I would use it even if it was less,135,0.0,41.5
+B.,tfa_future,  For you to feel okay doing the baby autism s,Certainty the test would need about how much help the child will need,ordinal,1 = Very sure - I want to know exactly  …  4 = I don't want to know how much help,135,0.0,65.2
+B.,tfa_believe_positive,How much would you believe the results?,"How much they would believe an ""is autistic"" result",ordinal,1 - 7 (unanchored slider),133,1.5,37.6
+B.,tfa_believe_negative,How much would you believe the results?.1,"How much they would believe a ""not autistic"" result",ordinal,1 - 7 (unanchored slider),131,3.0,37.4
+B.,tfa_free_screen,If YOU were offered a free autism screening te,Would you do a free autism screening test for YOUR 4-month-old?,ordinal,0 = Definitely no  …  4 = Definitely yes,131,3.0,52.7
+B.,tfa_test_choice,Should doctors screen 4-month-old babies for a,Should doctors screen 4-month-olds? (policy view),ordinal,"0 = No, the test should <b>NOT</b><u>   …  3 = Yes, but only <b>SOME</b> parents ",131,3.0,69.5
+B.,tfa_test_today,What if your pediatrician says you don't have ,"Would you do it now, earlier, later, or not at all?",ordinal,1 = I do not want the autism screening  …  5 = Wait - I will do it in the future,131,3.0,54.2
+C.,tfa_scan_any,Thinking about what is right and fair for ever,Is it ethical for paediatricians to offer infant screening to all babies?,ordinal,1 = Very ethically right (very right a  …  5 = Ethically wrong,135,0.0,50.4
+C.,tfa_scan_mine,Thinking about YOUR personal beliefs and value,Is it morally right to have a 4-month-old screened for autism?,ordinal,1 = Very morally right (a must do)  …  6 = Very morally wrong (a must NOT do),135,0.0,38.5
+D.,tfa_happy,Happy,Emotional reaction: happy,ordinal,1 - 5 (unanchored slider),128,5.2,30.5
+D.,tfa_trusting,Trusting  (confident in doctor),Emotional reaction: trusting (confident in doctor),ordinal,2 - 5 (unanchored slider),130,3.7,35.4
+D.,tfa_comfortable,Comfortable,Emotional reaction: comfortable,ordinal,1 - 5 (unanchored slider),127,5.9,32.3
+D.,tfa_scared,Scared,Emotional reaction: scared,ordinal,1 - 5 (unanchored slider),129,4.4,35.7
+D.,tfa_sad,Sad,Emotional reaction: sad,ordinal,1 - 5 (unanchored slider),129,4.4,68.2
+D.,tfa_angry,Angry,Emotional reaction: angry,ordinal,1 - 4 (unanchored slider),130,3.7,90.0
+D.,tfa_disgusted,Disgusted,Emotional reaction: disgusted,ordinal,1 - 3 (unanchored slider),131,3.0,88.5
+D.,tfa_surprised,Surprised,Emotional reaction: surprised,ordinal,1 - 5 (unanchored slider),134,0.7,27.6
+D.,tfa_gain_vs_loss,Thinking about the good and bad after being to,"After an ""is autistic"" result: gained more or lost more?",ordinal,1 - 7 (unanchored slider),134,0.7,42.5
+D.,tfa_gain_vs_loss_neg,Thinking about the good and bad from being tol,"After a ""not autistic"" result: gained more or lost more?",ordinal,1 - 7 (unanchored slider),131,3.0,38.2
+D.,tfa_regret,Do you regret doing the early autism screening,"Regret about testing, after an ""is autistic"" result",ordinal,1 - 7 (unanchored slider),133,1.5,39.8
+D.,tfa_regret_pos,Do you regret having done the baby autism scre,"Regret about testing, after a ""not autistic"" result",ordinal,1 - 7 (unanchored slider),131,3.0,38.2
+E.,tfa_difficult,How difficult would it be to spend an extra 15,Difficulty of adding 15-30 minutes to the existing visit,ordinal,1 = Very difficult  …  4 = Very easy,135,0.0,45.2
+E.,tfa_doable,How doable would it be? ,Doability of adding 15-30 minutes to the existing visit,ordinal,1 = Very doable  …  3 = Might be doable,134,0.7,63.4
+E.,tfa_separate_difficult,How difficult would it be for you and your fam,Difficulty of ONE separate specialist appointment,ordinal,1 = Very difficult  …  4 = Very easy,135,0.0,43.7
+E.,tfa_separate_doable,How doable would it be?,Doability of ONE separate specialist appointment,ordinal,1 = Very doable  …  4 = Impossible,135,0.0,43.7
+E.,tfa_series_difficult,How difficult would it be for you and your fam,Difficulty of a SERIES of specialist appointments,ordinal,1 = Very difficult  …  4 = Very easy,134,0.7,48.5
+E.,tfa_series_doable,How doable would this be?,Doability of a SERIES of specialist appointments,ordinal,1 = Very doable  …  4 = Impossible,134,0.7,44.0
+E.,tfa_mri,Brain imaging (MRI) while baby naps (2-3 hour ,Acceptability: MRI while baby naps (2-3 hours),ordinal,1 - 7 (unanchored slider),135,0.0,24.4
+E.,tfa_eeg,Brain test (EEG) while baby is awake (1 hour t,Acceptability: EEG while baby is awake (1 hour),ordinal,1 - 7 (unanchored slider),133,1.5,27.1
+E.,tfa_blood,Blood test  (10-15 minute test)  {tfa_p05_5_8},Acceptability: blood test (10-15 min),ordinal,1 - 7 (unanchored slider),128,5.2,25.8
+E.,tfa_video,Watching movies while a doctor observes/watche,Acceptability: watching movies while observed (15-30 min),ordinal,1 - 7 (unanchored slider),128,5.2,42.2
+E.,tfa_saliva,Saliva test  (5-10 minute test)  {tfa_p05_6_8},Acceptability: saliva test (5-10 min),ordinal,2 - 7 (unanchored slider),134,0.7,64.9
+E.,tfa_heart,Heart rate test (10-15 minute test)  {tfa_p05_,Acceptability: heart-rate test (10-15 min),ordinal,2 - 7 (unanchored slider),133,1.5,48.9
+E.,tfa_observe,Doctor observation of my baby's behavior  (30-,Acceptability: doctor observation of behaviour (30-60 min),ordinal,2 - 7 (unanchored slider),133,1.5,48.9
