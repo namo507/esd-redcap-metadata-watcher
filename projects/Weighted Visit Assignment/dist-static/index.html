@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESD Visitboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="assets/sunburst.png">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <img src="assets/esd-logo.png" alt="The Early Social Development Lab" class="logo-lab">
+      <img src="assets/uofsc.png" alt="University of South Carolina" class="logo-uofsc">
+    </div>
+    <div class="topbar-right">
+      <span class="privacy-badge" title="The board reads free/busy only. Event titles are never requested and never received.">
+        <span class="lock">&#128274;</span> Reads free/busy only<span class="long"> &middot; never event titles</span>
+      </span>
+      <button id="btn-reset" class="btn btn-ghost" type="button">Reset board</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-in">
+    <p class="eyebrow">Next visit assignment</p>
+    <h1>Plan the week.</h1>
+    <p class="hero-sub">Pick a visit. The board checks every calendar, rules out
+      who cannot go, and explains who it would send.</p>
+    <p class="demo-note"><b>Demonstration.</b> Coordinator names are the real
+      roster; every schedule, credential and workload figure on this page is
+      synthetic sample data, not anyone's actual calendar.</p>
+    <div class="kpis" id="kpis"></div>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <div class="viewbar" role="group" aria-label="Choose a view">
+    <button class="viewbtn is-on" data-view="list" type="button">List</button>
+    <button class="viewbtn" data-view="calendar" type="button">Calendar</button>
+  </div>
+
+  <section class="card" id="calendar-card" hidden>
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">The week</p>
+        <h2 id="calendar-title">&nbsp;</h2>
+      </div>
+      <div class="cal-key">
+        <span><i class="dot dot-todo"></i>Needs someone</span>
+        <span><i class="dot dot-done"></i>Assigned</span>
+        <span><i class="dot dot-attn"></i>Needs a closer look</span>
+      </div>
+    </div>
+    <div class="calendar" id="calendar"></div>
+    <p class="note" id="calendar-note"></p>
+  </section>
+
+  <div class="layout">
+
+    <!-- ------------------------------------------------ queue -->
+    <aside class="col-queue">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <p class="eyebrow">Visits</p>
+            <h2 id="queue-count">&nbsp;</h2>
+          </div>
+        </div>
+        <div class="filters">
+          <input id="filter-search" class="input" type="search" placeholder="Search a family" aria-label="Search visits">
+          <div class="chipbar" id="filter-status" role="group" aria-label="Filter by status">
+            <button class="chip is-on" data-status="all" type="button">All</button>
+            <button class="chip" data-status="needs_assignment" type="button">To assign</button>
+            <button class="chip" data-status="assigned" type="button">Assigned</button>
+          </div>
+        </div>
+        <ul class="queue" id="queue"></ul>
+      </div>
+    </aside>
+
+    <!-- ------------------------------------------------ detail -->
+    <section class="col-detail">
+      <div id="detail"><div class="card empty">Loading the board&hellip;</div></div>
+    </section>
+  </div>
+
+  <!-- ------------------------------------------------ fairness -->
+  <section class="card" id="fairness-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">This week</p>
+        <h2>How the work is spread</h2>
+      </div>
+      <span class="pill" id="fairness-status">&nbsp;</span>
+    </div>
+    <div class="fairness" id="fairness"></div>
+    <p class="note" id="fairness-note"></p>
+  </section>
+
+  <section class="card" id="activity-card">
+    <div class="card-head">
+      <div>
+        <p class="eyebrow">Record</p>
+        <h2>What happened on this board</h2>
+      </div>
+    </div>
+    <ul class="activity" id="activity"></ul>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <img src="assets/esd-logo.png" alt="" class="logo-lab foot-logo">
+    <img src="assets/uofsc.png" alt="" class="logo-uofsc foot-logo">
+    <p id="foot-meta"></p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="static-board.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

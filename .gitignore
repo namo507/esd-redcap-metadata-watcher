@@ -36,3 +36,6 @@ archive/restricted/
 **/csbs_redcap_outputs/csbs_workload_summary.csv
 **/csbs_redcap_outputs/IPSA_CSBS_scoring_assignments_master.csv
 **/csbs_redcap_outputs/invalid_permission_filtered_run_*/
+
+# Local Netlify folder
+.netlify
