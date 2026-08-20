@@ -41,6 +41,7 @@ from .ingest_outlook_pdf import (
     joint_day_pressure,
     load,
 )
+from datetime import date, timedelta
 from .models import CalendarBlock, CalendarSyncRun
 
 TIER_GRAPH = 1
@@ -158,6 +159,156 @@ def _norm_name(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+AVAIL_BUSY = "busy"
+AVAIL_LIGHT = "light"
+AVAIL_OPEN = "open"
+AVAIL_UNKNOWN = "unknown"
+
+# A day with this many committed items is treated as spoken for. A home visit
+# runs two to four hours including travel, so a couple of fixed commitments is
+# usually enough to rule the day out even when the gaps are not visible here.
+BUSY_ITEMS = 3
+LIGHT_ITEMS = 1
+
+
+@dataclass
+class DayAvailability:
+    """One coordinator's load on one day, as far as a month grid can show it."""
+
+    day: str
+    weekday: int
+    state: str
+    busy: int = 0
+    tentative: int = 0
+    named: int = 0
+    earliest: Optional[str] = None
+    latest: Optional[str] = None
+    truncated: bool = False
+
+    @property
+    def items(self) -> int:
+        return self.busy + self.tentative + self.named
+
+    def to_dict(self) -> dict:
+        return {
+            "day": self.day, "weekday": self.weekday, "state": self.state,
+            "busy": self.busy, "tentative": self.tentative, "named": self.named,
+            "items": self.items, "earliest": self.earliest, "latest": self.latest,
+            "truncated": self.truncated,
+        }
+
+
+@dataclass
+class PersonMonth:
+    """A month of day-level availability for one coordinator."""
+
+    coordinator_id: Optional[str]
+    name: str
+    hue: Optional[str]
+    label: str
+    days: List[DayAvailability] = field(default_factory=list)
+
+    def _count(self, state: str) -> int:
+        return sum(1 for d in self.days if d.state == state)
+
+    def to_dict(self) -> dict:
+        working = [d for d in self.days if d.weekday < 5]
+        return {
+            "coordinator_id": self.coordinator_id,
+            "name": self.name,
+            "hue": self.hue,
+            "label": self.label,
+            "days": [d.to_dict() for d in self.days],
+            "busy_days": self._count(AVAIL_BUSY),
+            "light_days": self._count(AVAIL_LIGHT),
+            "open_days": self._count(AVAIL_OPEN),
+            "unknown_days": self._count(AVAIL_UNKNOWN),
+            "working_days": len(working),
+            "open_working_days": sum(
+                1 for d in working if d.state == AVAIL_OPEN),
+            "total_items": sum(d.items for d in self.days),
+        }
+
+
+def month_availability(
+    parsed: PdfIngestResult,
+    attributed: Dict[str, Optional[str]],
+    coordinators: Optional[Dict[str, object]] = None,
+) -> List[PersonMonth]:
+    """Who looks busy, and on which days, for the month this export covers.
+
+    This is the honest ceiling of a month grid: day-level load per person. It
+    cannot say "free at 2pm" because no end time is printed. Where a day cell
+    hit the grid's row limit, a person with nothing showing is reported as
+    ``unknown`` rather than ``open`` — the rows that would have proved otherwise
+    may simply have been cut off the page.
+    """
+    signals = day_signals(parsed)
+    truncated = set(parsed.saturated_cells) | set(parsed.overflow_cells)
+    all_days = _month_days(parsed)
+
+    by_hue: Dict[str, Dict[str, DaySignal]] = {}
+    for sig in signals:
+        if sig.calendar_color_id:
+            by_hue.setdefault(sig.calendar_color_id, {})[sig.day] = sig
+
+    names = {}
+    if coordinators:
+        names = {cid: getattr(c, "name", cid) for cid, c in coordinators.items()}
+
+    out: List[PersonMonth] = []
+    for hue, cid in sorted(attributed.items(), key=lambda kv: (kv[1] is None, kv[0])):
+        if hue == "unknown":
+            continue
+        label = names.get(cid) if cid else None
+        person = PersonMonth(
+            coordinator_id=cid,
+            name=label or f"Unmatched calendar ({hue})",
+            hue=hue,
+            label=label or hue,
+        )
+        seen = by_hue.get(hue, {})
+        for day in all_days:
+            sig = seen.get(day.isoformat())
+            iso = day.isoformat()
+            if sig is None:
+                state = AVAIL_UNKNOWN if iso in truncated else AVAIL_OPEN
+                person.days.append(DayAvailability(
+                    day=iso, weekday=day.weekday(), state=state,
+                    truncated=iso in truncated))
+                continue
+            items = sig.busy_count + sig.tentative_count + sig.named_events
+            if items >= BUSY_ITEMS:
+                state = AVAIL_BUSY
+            elif items >= LIGHT_ITEMS:
+                state = AVAIL_LIGHT
+            else:
+                state = AVAIL_OPEN
+            person.days.append(DayAvailability(
+                day=iso, weekday=day.weekday(), state=state,
+                busy=sig.busy_count, tentative=sig.tentative_count,
+                named=sig.named_events, earliest=sig.earliest_start,
+                latest=sig.latest_start, truncated=iso in truncated))
+        out.append(person)
+
+    out.sort(key=lambda p: (p.coordinator_id is None, p.name))
+    return out
+
+
+def _month_days(parsed: PdfIngestResult) -> List[date]:
+    """Every day the grid covers, spill weeks included."""
+    days = sorted({e.day for e in parsed.entries})
+    if not days:
+        return []
+    first = date.fromisoformat(days[0])
+    last = date.fromisoformat(days[-1])
+    out, cur = [], first
+    while cur <= last:
+        out.append(cur)
+        cur += timedelta(days=1)
+    return out
+
+
 @dataclass
 class ImportResult:
     import_id: str
@@ -173,6 +324,10 @@ class ImportResult:
     runs: List[CalendarSyncRun] = field(default_factory=list)
     day_pressure: List[dict] = field(default_factory=list)
     per_coordinator_days: List[dict] = field(default_factory=list)
+    availability: List[dict] = field(default_factory=list)
+    legend: Dict[str, str] = field(default_factory=dict)
+    attribution_source: str = "none"   # legend | stored_map | none
+    matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
     unattributed_hues: List[str] = field(default_factory=list)
     blockers: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
@@ -209,6 +364,10 @@ class ImportResult:
             "coordinators_touched": sorted({r.coordinator_id for r in self.runs}),
             "day_pressure": self.day_pressure,
             "per_coordinator_days": self.per_coordinator_days,
+            "availability": self.availability,
+            "legend": self.legend,
+            "attribution_source": self.attribution_source,
+            "matched_names": self.matched_names,
             "unattributed_hues": self.unattributed_hues,
             "blockers": self.blockers,
             "notes": self.notes,
@@ -234,6 +393,7 @@ def import_pdf(
     color_map: Optional[ColorMap] = None,
     now: Optional[datetime] = None,
     year_hint: Optional[int] = None,
+    auto_confirm: bool = True,
 ) -> ImportResult:
     """Parse an uploaded print and emit evidence at whatever tier it earns."""
     now = now or datetime.now()
@@ -262,28 +422,51 @@ def import_pdf(
         hue = entry.calendar_color_id or "unknown"
         result.hues_seen[hue] = result.hues_seen.get(hue, 0) + 1
 
-    attributed = {h: color_map.resolve(h) for h in result.hues_seen}
-    result.unattributed_hues = sorted(h for h, cid in attributed.items() if not cid)
+    # Attribution, in order of trustworthiness. The legend Outlook prints into
+    # the header — each calendar's name drawn in that calendar's own colour — is
+    # evidence from the file itself, so it beats any stored map and needs no
+    # human to confirm it. The stored map is the fallback for exports whose
+    # header lost its colours.
+    result.legend = dict(parsed.legend)
+    attributed: Dict[str, Optional[str]] = {}
+    if parsed.legend and coordinators:
+        matches = suggest_roster_matches(list(parsed.legend), coordinators)
+        result.matched_names = dict(matches)
+        for label, hue in parsed.legend.items():
+            cid = matches.get(label)
+            if cid:
+                attributed[hue] = cid
+        if attributed:
+            result.attribution_source = "legend"
 
-    if not color_map.confirmed:
+    for hue in result.hues_seen:
+        attributed.setdefault(hue, color_map.resolve(hue))
+    if result.attribution_source == "none" and any(attributed.values()):
+        result.attribution_source = "stored_map"
+    result.unattributed_hues = sorted(
+        h for h, cid in attributed.items() if not cid and h != "unknown")
+
+    if result.attribution_source == "none":
         result.blockers.append(
-            "COLOUR MAP NOT CONFIRMED: this export overlays "
-            f"{len(result.calendar_names) or len(result.hues_seen)} calendars and Outlook "
-            "prints no legend, so no entry can be attributed to a person yet. Confirm "
-            "which coordinator owns each colour, then re-upload."
+            "NOBODY COULD BE IDENTIFIED: this export carries no usable colour "
+            "legend and no stored colour map matched, so its entries belong to "
+            "nobody. Match the colours by hand under 'Match colours to people'."
         )
     elif result.unattributed_hues:
-        result.blockers.append(
-            "UNMAPPED COLOURS: "
-            + ", ".join(result.unattributed_hues)
-            + " appear in this export but are not in the confirmed colour map. Their "
-            "entries are counted but attributed to nobody."
+        unmatched = [
+            label for label, hue in result.legend.items()
+            if hue in result.unattributed_hues
+        ]
+        result.notes.append(
+            "Not on the roster, so left unattributed: "
+            + ", ".join(unmatched or result.unattributed_hues)
+            + ". Their entries still count toward how loaded each day looks."
         )
 
     if tier == TIER_MONTH_GRID:
         _rollup_month(parsed, result, attributed, coordinators)
     else:
-        _build_runs(parsed, result, attributed, now)
+        _build_runs(parsed, result, attributed, now, auto_confirm)
 
     return result
 
@@ -295,15 +478,11 @@ def _rollup_month(parsed, result, attributed, coordinators) -> None:
         "load signal and no bookable intervals. Re-print the same range as Work Week "
         "to get times the board can schedule against."
     )
-    if parsed.overflow_cells:
-        result.blockers.append(
-            f"TRUNCATED CELLS: {len(parsed.overflow_cells)} day cells hit the month-view "
-            "row limit, so an unknown number of later events are missing from this page. "
-            "Afternoons are cut first."
-        )
-
     signals: List[DaySignal] = day_signals(parsed)
     result.day_pressure = joint_day_pressure(signals)
+    result.availability = [
+        p.to_dict() for p in month_availability(parsed, attributed, coordinators)
+    ]
 
     names = {}
     if coordinators:
@@ -333,12 +512,17 @@ def _rollup_month(parsed, result, attributed, coordinators) -> None:
     )
 
 
-def _build_runs(parsed, result, attributed, now) -> None:
-    """Timed export: one sync run per coordinator, every block awaiting review.
+def _build_runs(parsed, result, attributed, now, auto_confirm: bool = True) -> None:
+    """Timed export: one sync run per coordinator, with real intervals.
 
     Runs stay per-person even though the page was a combined overlay, because
-    that is the unit the rest of the system reasons about — and blocks arrive
-    unreviewed so an OCR-grade misread cannot silently veto anyone.
+    that is the unit the rest of the system reasons about.
+
+    These blocks commit on import. That is safe *here* in a way it would not be
+    for the image-capture path: a PDF's event boxes are vector rectangles and
+    its gutter is vector text, so the times are read exactly rather than guessed
+    at by OCR. Nothing is inferred, so there is nothing for a human to correct
+    before it counts. Any block can still be rejected afterwards.
     """
     by_coord: Dict[str, List[CalendarBlock]] = {}
     dropped = 0
@@ -364,7 +548,7 @@ def _build_runs(parsed, result, attributed, now) -> None:
                 coordinator_id=cid,
                 start=start,
                 end=end,
-                reviewed=False,
+                reviewed=auto_confirm,
                 confirmed=True,
                 source_hash=result.source_hash,
                 run_id="",
@@ -383,7 +567,7 @@ def _build_runs(parsed, result, attributed, now) -> None:
                 view_type=parsed.calendar_view_type,
                 source_hash=result.source_hash,
                 blocks=blocks,
-                auto_committed=False,
+                auto_committed=auto_confirm,
             )
         )
 
@@ -392,7 +576,13 @@ def _build_runs(parsed, result, attributed, now) -> None:
             f"{dropped} parsed entries could not become blocks (no owner colour, or no "
             "readable interval) and were left out rather than guessed at."
         )
-    result.notes.append(
-        f"{len(result.blocks)} blocks are waiting on review. Until each is confirmed it "
-        "is evidence of nothing and cannot block an assignment."
-    )
+    if auto_confirm:
+        result.notes.append(
+            f"{len(result.blocks)} blocks were read exactly off the PDF and are already "
+            "in effect. Reject any that are wrong and the board updates immediately."
+        )
+    else:
+        result.notes.append(
+            f"{len(result.blocks)} blocks are waiting on review. Until each is confirmed "
+            "it is evidence of nothing and cannot block an assignment."
+        )

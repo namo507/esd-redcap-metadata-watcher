@@ -17,6 +17,7 @@ from typing import Dict, List, Optional
 
 from esd_scheduler import __version__ as ENGINE_VERSION
 from esd_scheduler.calendar_import import (
+    TIER_MONTH_GRID,
     TIER_RULES,
     ColorMap,
     import_pdf,
@@ -164,6 +165,7 @@ class LabSession:
             )
             self.assignments: Dict[str, dict] = {}
             self.last_import: Optional[dict] = None
+            self.availability: List[dict] = []
             self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
@@ -264,13 +266,23 @@ class LabSession:
             payload = result.to_dict()
             payload["stored_as"] = os.path.basename(path)
             self.last_import = payload
+            if result.availability:
+                self.availability = result.availability
             applied = self._apply_confirmed_blocks()
             payload["applied_blocks"] = applied
-            self._log(
-                f"Calendar upload {result.source_file}: {result.view_type} view, "
-                f"tier {result.tier}, {result.entry_count} entries, "
-                f"{len(result.blocks)} blocks awaiting review."
-            )
+            who = ", ".join(
+                a["name"] for a in result.availability if a.get("coordinator_id")
+            ) or "nobody the roster recognises"
+            if result.tier == TIER_MONTH_GRID:
+                self._log(
+                    f"Calendar upload {result.source_file}: month view, "
+                    f"{result.entry_count} entries read for {who}."
+                )
+            else:
+                self._log(
+                    f"Calendar upload {result.source_file}: {result.view_type} view, "
+                    f"{len(result.blocks)} blocks read and applied."
+                )
         return payload
 
     def _apply_confirmed_blocks(self) -> int:
@@ -334,7 +346,31 @@ class LabSession:
             "confirmed_blocks": confirmed,
             "last_import": self.last_import,
             "color_map": self.color_map_state(),
+            "availability": self.availability,
+            "availability_month": self._availability_month(),
+            "applied": [
+                {
+                    "block_id": b["block_id"],
+                    "coordinator": getattr(
+                        self.state.coordinators.get(b["coordinator_id"]), "name",
+                        b["coordinator_id"]),
+                    "start": b["start_ts"],
+                    "end": b["end_ts"],
+                }
+                for b in (dict(r) for r in self.store.confirmed_blocks())
+            ][:60],
         }
+
+    def _availability_month(self) -> str:
+        """The month the current availability grid covers, for the heading."""
+        days = [d["day"] for a in self.availability for d in a.get("days", [])]
+        if not days:
+            return ""
+        mid = sorted(days)[len(days) // 2]
+        try:
+            return datetime.fromisoformat(mid).strftime("%B %Y")
+        except ValueError:
+            return ""
 
     def review_import_block(self, block_id: str, confirmed: bool, reviewer: str) -> dict:
         with self._lock:

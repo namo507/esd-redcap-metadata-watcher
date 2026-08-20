@@ -125,31 +125,45 @@ simplex, per-decision selection stability, tie-breaks logged with their seed.
 ## Uploading an Outlook calendar
 
 Print the shared Outlook calendar to PDF and drop it on **Sync calendars** in the
-board, or run `make import-calendar FILE=cal.pdf`. What the upload is worth
-depends entirely on which view was printed, and the board will not pretend
-otherwise.
+board, or run `make import-calendar FILE=cal.pdf`. There is nothing to configure
+first: the file identifies its own people, and the board syncs on upload.
+
+**How it knows who is who.** Outlook stacks every shared calendar onto one page
+and distinguishes them only by colour. The print looks like it has no legend —
+but it does, hidden in plain sight: each calendar's name in the header is drawn
+in that calendar's own colour. The importer reads those colours, matches the
+names to the roster, and attributes every entry with no human in the loop. A
+calendar that is not on the roster (the export owner's own, typically) is left
+unattributed rather than matched to someone.
+
+If a particular export loses its header colours, the board falls back to a
+stored colour map and asks you to match them by hand once. A printed legend
+always beats a stored map — the file is evidence, the map is someone's memory of
+it.
+
+**What the upload is worth** depends entirely on which view was printed:
 
 | Printed view | Tier | What it yields | Can it decide? |
 |---|---|---|---|
-| Work Week / Day | 2 | real start **and end** times | yes, once each block is confirmed |
-| Month | 3 | day-level workload only | never confirms and never vetoes |
+| Work Week / Day | 2 | real start **and end** times | yes, applied on upload |
+| Month | 3 | day-level availability per person | shows load; never books a time |
 
-**Print Work Week.** A month grid prints a start time and no end time, so it
-contains no intervals to schedule against; worse, each day cell silently stops at
-about seven rows with no "+N more" marker, and it is the afternoons that get cut.
-The board still reads a month export — it is a fair signal of how loaded a day
-looks — but it will not let that signal claim anybody is free.
+A month grid answers "who has room this month" — the board draws a per-person
+month grid of clear / some commitments / spoken for. It cannot answer "free at
+2pm", because no end time is printed anywhere on the page. For that, print
+**Work Week**.
 
-Two things gate an upload before it can affect anyone:
+**Cut-off days.** A month cell fits a fixed number of rows and prints no "+N
+more" marker — it simply stops drawing, and afternoons go first. The importer
+detects this by noticing many cells stopping at exactly the same count, and
+marks those days **not visible** rather than clear. An empty-looking afternoon on
+one of them is not evidence of free time.
 
-1. **The colour legend.** Outlook stacks every shared calendar on one page and
-   distinguishes them only by colour, and the print carries no legend. Match each
-   colour to a person once, under *Match colours to people*; until that is
-   confirmed, entries are parsed and counted but attributed to nobody. A guessed
-   attribution is worse than none, because it moves the wrong person's workload.
-2. **Human review.** Every block read off a PDF arrives unconfirmed, and an
-   unconfirmed block is evidence of *nothing* — it will not block an assignment.
-   Confirm or reject each one under *Confirm what was read*.
+**Corrections.** Blocks read from a work-week print take effect immediately,
+because a PDF's event boxes are vector rectangles and its time gutter is vector
+text — the times are read exactly, not guessed at by OCR, so there is nothing to
+proofread. Anything wrong can still be rejected under *What was read from the
+PDF*, and the board updates at once.
 
 Uploaded PDFs are written to `data/uploads/`, which is gitignored: a month export
 carries event titles for everyone on the page.

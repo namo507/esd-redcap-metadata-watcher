@@ -18,6 +18,9 @@ import json
 import os
 import shutil
 import sys
+import tempfile
+from datetime import datetime
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -26,6 +29,43 @@ from backend.session import LabSession  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "frontend")
 OUT = os.path.join(ROOT, "dist-static")
+
+
+def _demo_calendar(session) -> dict:
+    """A month-availability grid for the public copy, built from a fake export.
+
+    The published board must never carry a real one. Availability derived from
+    the lab's actual Outlook print would publish six named people's genuine busy
+    days, which is exactly the disclosure this project exists to avoid — so the
+    demo imports a generated PDF instead. The roster names are real and the
+    pattern is invented, matching the demonstration notice the page already
+    carries.
+    """
+    sys.path.insert(0, os.path.join(ROOT, "tests", "fixtures"))
+    try:
+        from make_month_pdf import build as build_month
+
+        from esd_scheduler.calendar_import import import_pdf
+    except ImportError:
+        return {}
+
+    tmp = tempfile.mkdtemp(prefix="esd-demo-cal-")
+    path = build_month(os.path.join(tmp, "demo-month.pdf"),
+                       year=session.now.year, month=session.now.month, vary=True)
+    result = import_pdf(path, coordinators=session.state.coordinators,
+                        year_hint=session.now.year)
+    month = ""
+    days = [d["day"] for a in result.availability for d in a.get("days", [])]
+    if days:
+        month = datetime.fromisoformat(sorted(days)[len(days) // 2]).strftime("%B %Y")
+    return {
+        "imports": [], "pending_review": [], "applied": [], "confirmed_blocks": 0,
+        "last_import": None,
+        "color_map": {"confirmed": False, "map": {}, "hues_seen": {},
+                      "roster": [], "calendar_names": []},
+        "availability": result.availability,
+        "availability_month": month,
+    }
 
 
 def build() -> str:
@@ -44,6 +84,7 @@ def build() -> str:
         },
         "roster": session.roster(),
         "reasonCodes": session.reason_codes(),
+        "calendar": _demo_calendar(session),
         "visits": [],
     }
     for visit_id in session.order:

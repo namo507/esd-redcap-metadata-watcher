@@ -425,3 +425,40 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .reviewrow { display: flex; justify-content: space-between; align-items: center; gap: .8rem;
   flex-wrap: wrap; border: 1px solid var(--line); border-radius: var(--r-sm); padding: .6rem .75rem; }
 .reviewacts { display: flex; gap: .45rem; }
+
+/* ---------- month availability ---------- */
+.availtable { border-collapse: separate; border-spacing: 2px; margin-top: 1rem; }
+.availtable th, .availtable td { padding: 0; }
+.availname {
+  text-align: left; font-size: .82rem; font-weight: 700; white-space: nowrap;
+  padding-right: .7rem !important; position: sticky; left: 0; background: var(--bg);
+}
+.availname .swatch { width: 11px; height: 11px; border-radius: 3px; margin-right: .4rem;
+  vertical-align: baseline; }
+.availhead { font-size: .6rem; font-weight: 700; color: var(--muted); text-align: center;
+  line-height: 1.1; min-width: 17px; }
+.availhead span { display: block; opacity: .6; }
+.availhead.is-weekend { opacity: .45; }
+.availcell {
+  width: 17px; height: 22px; border-radius: 4px; background: var(--surface);
+}
+.availcell.is-open    { background: #CDEBD9; }
+.availcell.is-light   { background: var(--esd-optimal-yellow); }
+.availcell.is-busy    { background: var(--esd-confident-orange); }
+.availcell.is-unknown {
+  background: repeating-linear-gradient(45deg, #E4E4EA 0 3px, #F4F4F6 3px 6px);
+}
+.availcell.is-weekend { opacity: .35; }
+.availcount { font-size: .8rem; text-align: center; padding-left: .6rem !important;
+  color: var(--muted); font-weight: 700; }
+.availcount b { font-size: 1rem; color: var(--ink); }
+.availlegend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .8rem;
+  font-size: .78rem; color: var(--muted); }
+.availlegend span { display: inline-flex; align-items: center; gap: .35rem; }
+.availkey { width: 13px; height: 13px; border-radius: 4px; display: inline-block; }
+.availkey.is-open    { background: #CDEBD9; }
+.availkey.is-light   { background: var(--esd-optimal-yellow); }
+.availkey.is-busy    { background: var(--esd-confident-orange); }
+.availkey.is-unknown { background: repeating-linear-gradient(45deg, #E4E4EA 0 3px, #F4F4F6 3px 6px); }
+.inforce { font-size: .7rem; font-weight: 700; color: var(--ok); text-transform: uppercase;
+  letter-spacing: .05em; align-self: center; }

@@ -507,9 +507,58 @@ function drawSync() {
   drawSyncRoster();
   drawUpload();
   drawImportResult();
+  drawAvailability();
   drawColorMatch();
   drawReviewQueue();
   drawImportHistory();
+}
+
+const AVAIL_WORD = {
+  busy: "Spoken for", light: "Some commitments", open: "Clear", unknown: "Not visible",
+};
+const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
+
+function drawAvailability() {
+  const cal = S.board.calendar || {};
+  const rows = (cal.availability || []).filter((a) => a.coordinator_id);
+  const card = $("sync-availability-card");
+  if (!rows.length) { card.hidden = true; return; }
+  card.hidden = false;
+  $("avail-title").textContent = cal.availability_month
+    ? `Who is free in ${cal.availability_month}` : "Who is free this month";
+
+  const days = rows[0].days || [];
+  const anyUnknown = rows.some((r) => r.unknown_days > 0);
+
+  const head = days.map((d) => {
+    const dt = new Date(d.day + "T00:00:00");
+    return `<th class="availhead${d.weekday > 4 ? " is-weekend" : ""}"
+      title="${esc(d.day)}"><span>${DAY_INITIAL[d.weekday]}</span><b>${dt.getDate()}</b></th>`;
+  }).join("");
+
+  const body = rows.map((r) => `<tr>
+      <th class="availname"><span class="swatch swatch-${esc(r.hue || "")}"></span>${esc(r.name)}</th>
+      ${r.days.map((d) => `<td class="availcell is-${esc(d.state)}${d.weekday > 4 ? " is-weekend" : ""}"
+          title="${esc(r.name)} — ${esc(d.day)}: ${esc(AVAIL_WORD[d.state] || d.state)}${
+            d.items ? ", " + d.items + " item" + (d.items === 1 ? "" : "s") : ""
+          }${d.truncated ? " (day cell was cut off)" : ""}"></td>`).join("")}
+      <td class="availcount"><b>${r.open_working_days}</b></td>
+    </tr>`).join("");
+
+  $("sync-availability").innerHTML = `
+    <div class="tablewrap"><table class="availtable">
+      <thead><tr><th class="availname"></th>${head}<th class="availcount">Clear<br>weekdays</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>
+    <div class="availlegend">
+      <span><i class="availkey is-open"></i>Clear</span>
+      <span><i class="availkey is-light"></i>Some commitments</span>
+      <span><i class="availkey is-busy"></i>Spoken for</span>
+      <span><i class="availkey is-unknown"></i>Not visible</span>
+    </div>
+    ${anyUnknown ? `<p class="note" style="margin-top:.6rem">
+      <b>Not visible</b> means that day's cell hit the month grid's row limit, so
+      anything further down was cut off the page. It is not the same as free.</p>` : ""}`;
 }
 
 function drawSyncRoster() {
@@ -652,7 +701,14 @@ function drawColorMatch() {
   const cmap = cal.color_map || {};
   const hues = Object.keys(cmap.hues_seen || {}).filter((h) => h !== "unknown");
   const card = $("sync-colors-card");
-  if (STATIC || !hues.length) { card.hidden = true; return; }
+  const last = cal.last_import || {};
+  // Outlook prints its own legend, so hand-matching is only for exports where
+  // reading it failed. Showing it otherwise invites someone to override a fact
+  // with a guess.
+  if (STATIC || !hues.length || last.attribution_source === "legend") {
+    card.hidden = true;
+    return;
+  }
   card.hidden = false;
 
   const roster = cmap.roster || [];
@@ -710,23 +766,29 @@ async function saveColors() {
 function drawReviewQueue() {
   const cal = S.board.calendar || {};
   const pending = cal.pending_review || [];
+  const applied = cal.applied || [];
   const card = $("sync-review-card");
-  if (STATIC || !pending.length) { card.hidden = true; return; }
+  if (STATIC || (!pending.length && !applied.length)) { card.hidden = true; return; }
   card.hidden = false;
 
-  $("sync-review").innerHTML = `
-    <div class="reviewlist">${pending.slice(0, 40).map((b) => `
+  const row = (b, inEffect) => `
       <div class="reviewrow" data-block="${esc(b.block_id)}">
         <div>
           <div class="cand-name">${esc(b.coordinator)}</div>
           <div class="cand-sub">${esc(prettyBlock(b.start, b.end))}</div>
         </div>
         <div class="reviewacts">
+          ${inEffect ? `<span class="inforce">In effect</span>` : ""}
           <button class="btn btn-ghost" data-act="reject" type="button">Not real</button>
-          <button class="btn btn-primary" data-act="confirm" type="button">Confirm</button>
+          ${inEffect ? "" : `<button class="btn btn-primary" data-act="confirm" type="button">Confirm</button>`}
         </div>
-      </div>`).join("")}</div>
-    ${pending.length > 40 ? `<p class="note">${pending.length - 40} more waiting.</p>` : ""}`;
+      </div>`;
+
+  $("sync-review").innerHTML = `
+    <div class="reviewlist">
+      ${pending.slice(0, 30).map((b) => row(b, false)).join("")}
+      ${applied.slice(0, 30).map((b) => row(b, true)).join("")}
+    </div>`;
 
   document.querySelectorAll(".reviewrow .btn").forEach((btn) => {
     btn.addEventListener("click", () => {

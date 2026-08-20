@@ -50,10 +50,19 @@ HUE_FAMILIES: Dict[str, Dict[str, str]] = {
     "orange":   {"solid": "F7630C", "pale": "FDCFB5"},
     "orange2":  {"solid": "F6620C", "pale": "FDCFB5"},
 }
+def _hue_family(key: str) -> str:
+    """Collapse palette variants to one family: teal_lt and orange2 are teal, orange."""
+    return re.sub(r"(_lt|\d+)$", "", key)
+
+
 _COLOR_TO_HUE: Dict[str, Tuple[str, str]] = {}
 for _hue, _v in HUE_FAMILIES.items():
-    _COLOR_TO_HUE.setdefault(_v["solid"], (_hue.split("_")[0], "solid"))
-    _COLOR_TO_HUE.setdefault(_v["pale"], (_hue.split("_")[0], "pale"))
+    _COLOR_TO_HUE.setdefault(_v["solid"], (_hue_family(_hue), "solid"))
+    _COLOR_TO_HUE.setdefault(_v["pale"], (_hue_family(_hue), "pale"))
+
+# Fewest rows an Outlook month cell can show before it is credible that the
+# cell ran out of room rather than the day simply being quiet.
+MIN_CELL_ROWS = 5
 
 STATUS_WORDS = ("Busy", "Tentative", "Free", "Out of office", "Working elsewhere")
 TIME_RE = re.compile(r"^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$", re.I)
@@ -94,6 +103,10 @@ class PdfIngestResult:
     timezone: Optional[str] = None
     entries: List[PdfEntry] = field(default_factory=list)
     overflow_cells: List[str] = field(default_factory=list)
+    # days whose cell stopped at the grid's row ceiling, so the count is a floor
+    saturated_cells: List[str] = field(default_factory=list)
+    # calendar label -> hue, read from the colour Outlook prints each name in
+    legend: Dict[str, str] = field(default_factory=dict)
     unresolved: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -168,6 +181,7 @@ def extract(path: str, year_hint: Optional[int] = None) -> PdfIngestResult:
     # The calendar list is the run of large spans after the title.
     names_raw = "".join(s["text"] for s in title_spans[1:]).strip()
     result.selected_calendars = _split_calendar_names(names_raw)
+    result.legend = extract_legend(page)
 
     weekday_headers = [s for s in spans if s["text"].strip() in (
         "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")]
@@ -326,21 +340,58 @@ def extract(path: str, year_hint: Optional[int] = None) -> PdfIngestResult:
             )
         )
 
+    result.saturated_cells = _saturated_cells(result)
+
     result.unresolved = [
         "END TIMES NOT VISIBLE: an Outlook month view prints only a start time, "
         "so no entry here can be turned into a real interval.",
-        "NO COLOUR LEGEND IN THE EXPORT: the header names the overlaid calendars "
-        "as plain comma-separated text with no swatches, so colour ids cannot be "
-        "mapped to people from this file alone.",
         "ALL-DAY 'Free' ROWS ARE AMBIGUOUS: Outlook prints these for a day with a "
         "free-marked all-day item, which is not the same as an empty day.",
     ]
+    if not result.legend:
+        result.unresolved.append(
+            "NO COLOUR LEGEND RECOVERED: Outlook normally prints each calendar's "
+            "name in that calendar's own colour, but this file's header carries no "
+            "usable colours, so entries cannot be attributed to people from it."
+        )
     if result.overflow_cells:
         result.unresolved.append(
             f"MONTH-VIEW OVERFLOW on {len(result.overflow_cells)} day(s): "
             "events are hidden behind a '+N more' link and are not in this file."
         )
+    if result.saturated_cells:
+        result.unresolved.append(
+            f"CELLS AT THE ROW LIMIT on {len(result.saturated_cells)} day(s): the "
+            "month grid fits a fixed number of rows and prints no marker when it "
+            "cuts the rest, so these days are a floor, not a full count. An empty "
+            "afternoon on one of them is not evidence of free time."
+        )
     return result
+
+
+def _saturated_cells(result: "PdfIngestResult") -> List[str]:
+    """Days whose cell hit the grid's row ceiling and was silently cut.
+
+    Outlook's month print does not render a '+N more' marker: it simply stops
+    drawing. The tell is that many cells stop at exactly the same count, which
+    is a layout ceiling rather than a coincidence about everyone's diaries. Days
+    at that ceiling are reported as a floor on the true load, so nothing
+    downstream reads a gap there as availability.
+    """
+    per_day: Dict[str, int] = {}
+    for entry in result.entries:
+        per_day[entry.day] = per_day.get(entry.day, 0) + 1
+    if len(per_day) < 4:
+        return []
+    ceiling = max(per_day.values())
+    at_ceiling = [d for d, n in per_day.items() if n == ceiling]
+    # Two things have to hold before this is read as a layout limit rather than
+    # a coincidence: the cell must hold enough rows to plausibly be full (a
+    # three-item day is just a quiet day), and several days must stop at exactly
+    # the same number, which diaries do not do on their own.
+    if ceiling < MIN_CELL_ROWS or len(at_ceiling) < 3:
+        return []
+    return sorted(at_ceiling)
 
 
 def _split_calendar_names(raw: str) -> List[str]:
@@ -381,6 +432,86 @@ def _nearest_chip(chips, x, y, x_tol=14.0, y_tol=7.0):
         if d < best_d:
             best, best_d = _COLOR_TO_HUE[hexc], d
     return best
+
+
+# ---------------------------------------------------------------------------
+# The legend Outlook hides in plain sight
+# ---------------------------------------------------------------------------
+
+
+def _nearest_hue(rgb_int: int, tolerance: int = 40):
+    """Closest calendar hue to a printed colour, or None if nothing is close.
+
+    Outlook renders each overlaid calendar's name in that calendar's own colour,
+    but the printed value is a rounded approximation of the palette entry
+    (#0E6BBD for a #0F6CBD calendar). Exact matching therefore finds nothing;
+    nearest-with-a-ceiling finds the right one without inventing a match for a
+    colour that is simply not in the palette.
+    """
+    r, g, b = (rgb_int >> 16) & 0xFF, (rgb_int >> 8) & 0xFF, rgb_int & 0xFF
+    best, best_d = None, None
+    for hexc, (hue, tone) in _COLOR_TO_HUE.items():
+        if tone != "solid":
+            continue
+        rr, gg, bb = int(hexc[0:2], 16), int(hexc[2:4], 16), int(hexc[4:6], 16)
+        d = ((r - rr) ** 2 + (g - gg) ** 2 + (b - bb) ** 2) ** 0.5
+        if best_d is None or d < best_d:
+            best, best_d = hue, d
+    if best_d is not None and best_d <= tolerance:
+        return best, best_d
+    return None
+
+
+def extract_legend(page, header_fraction: float = 0.18) -> Dict[str, str]:
+    """Map each overlaid calendar's name to its colour, read from the print.
+
+    The header looks like plain text, but Outlook colours every calendar label
+    with that calendar's own colour. That makes the legend recoverable from the
+    file itself, so nobody has to hand-match colours to people and no
+    attribution rests on a guess.
+
+    Labels are collected across the whole header band rather than one text line,
+    because a long roster wraps. The colour match is what identifies a legend
+    entry: the view's title is drawn in a neutral grey that is nowhere near a
+    calendar hue, so it drops out on its own.
+
+    Returns ``{calendar_label: hue}`` with raw header fragments as keys
+    ("Bell, Margaret"); joining those to a roster is the caller's job.
+    """
+    # The legend sits above the weekday header row. Bounding it there matters:
+    # grid cells carry coloured text too, and without this the "legend" would
+    # swallow event titles — both wrong and a needless copy of private detail.
+    weekday_tops = [
+        span["bbox"][1]
+        for block in page.get_text("dict")["blocks"]
+        for line in block.get("lines", [])
+        for span in line["spans"]
+        if span["text"].strip() in WEEKDAY_NAMES
+    ]
+    cutoff = min(weekday_tops) - 2 if weekday_tops else page.rect.height * header_fraction
+    found: Dict[str, str] = {}
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            for span in line["spans"]:
+                if span["bbox"][1] > cutoff:
+                    continue
+                label = _clean_label(span["text"])
+                if not label or label.isdigit():
+                    continue
+                match = _nearest_hue(span.get("color", 0))
+                if match is None:
+                    continue
+                found.setdefault(label, match[0])
+    return found
+
+
+def _clean_label(raw: str) -> str:
+    """Strip Outlook's private-use badge glyphs from a calendar label."""
+    out = "".join(
+        ch for ch in raw
+        if ch.isprintable() and not 0xE000 <= ord(ch) <= 0xF8FF
+    ).strip().strip(",").strip()
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +639,10 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
     page = doc[0]
     result = PdfIngestResult(source_file=os.path.basename(path))
     result.calendar_view_type = detect_view_type(page)
+    # The same header trick works here: Outlook prints each overlaid calendar's
+    # name in that calendar's colour whatever the view.
+    result.legend = extract_legend(page)
+    result.selected_calendars = list(result.legend)
 
     spans = _page_spans(page)
     headers_all = [s for s in spans if s["text"].strip() in WEEKDAY_NAMES]

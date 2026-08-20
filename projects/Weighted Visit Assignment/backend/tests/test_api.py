@@ -296,16 +296,30 @@ def test_upload_rejects_a_file_that_is_not_a_pdf():
     expect("PDF" in body.get("error", ""), f"unhelpful error: {body}")
 
 
-def test_unconfirmed_colour_map_attributes_to_nobody():
-    """Without a confirmed legend, a parsed block must not land on a person."""
+def test_legend_attributes_people_with_no_setup_at_all():
+    """Outlook prints its own legend, so an upload needs no manual matching."""
     _clear_colours()
     status, body = _upload(WEEK_PDF)
     expect(status == 200, f"work-week upload returned {status}: {body}")
-    expect(body["tier"] == 2, f"work week must be tier 2, got {body['tier']}")
+    expect(body["attribution_source"] == "legend",
+           f"expected legend attribution, got {body['attribution_source']}")
+    expect(body["block_count"] == 6,
+           f"legend should attribute all 6 blocks, got {body['block_count']}")
+    expect(not any("NOBODY COULD BE IDENTIFIED" in b for b in body["blockers"]),
+           "a file with a legend must not report that nobody was identified")
+
+
+def test_export_without_a_colour_legend_attributes_to_nobody():
+    """The fallback still holds: no legend and no stored map means no guessing."""
+    _clear_colours()
+    status, body = _upload(PLAIN_WEEK_PDF)
+    expect(status == 200, f"upload returned {status}: {body}")
+    expect(body["attribution_source"] == "none",
+           f"expected no attribution, got {body['attribution_source']}")
     expect(body["block_count"] == 0,
-           "an unconfirmed colour map must not attribute blocks to anyone")
-    expect(any("COLOUR MAP NOT CONFIRMED" in b for b in body["blockers"]),
-           f"missing the unconfirmed-map blocker: {body['blockers']}")
+           "without a legend nothing may be attributed to a person")
+    expect(any("NOBODY COULD BE IDENTIFIED" in b for b in body["blockers"]),
+           f"missing the no-identification blocker: {body['blockers']}")
 
 
 def test_colour_map_needs_a_named_confirmer():
@@ -331,48 +345,60 @@ def _confirm_colours():
     return body
 
 
-def test_work_week_upload_becomes_reviewable_blocks_with_real_intervals():
-    _confirm_colours()
-    _, before = call("GET", "/api/calendar/imports")
-
+def test_work_week_upload_applies_immediately():
+    """A PDF is parsed exactly, so its blocks take effect without a review step."""
     status, body = _upload(WEEK_PDF)
     expect(status == 200, f"work-week upload returned {status}")
     expect(body["tier"] == 2 and body["schedulable"] is True,
            "a timed export must be schedulable")
     expect(body["block_count"] == 6, f"expected 6 blocks, got {body['block_count']}")
-    expect(body["pending_review"] == 6, "every fresh block must await review")
-
-    # The invariant: uploading alone adds no evidence, whatever was confirmed
-    # by an earlier upload.
-    _, after = call("GET", "/api/calendar/imports")
-    expect(after["confirmed_blocks"] == before["confirmed_blocks"],
-           "an upload must not create evidence before anyone has reviewed it")
+    expect(body["pending_review"] == 0,
+           "an exact PDF parse should not sit in a review queue")
+    expect(body["applied_blocks"] >= 6,
+           f"blocks should be in effect, applied={body['applied_blocks']}")
 
 
-def test_only_confirmed_blocks_become_evidence():
-    # Self-contained: tests run in name order, so this cannot lean on another
-    # test having uploaded first.
-    _confirm_colours()
+def test_a_block_in_effect_can_still_be_rejected():
+    """Auto-applying is not irreversible: a wrong read can be taken back."""
     _upload(WEEK_PDF)
-
     _, imports = call("GET", "/api/calendar/imports")
-    pending = imports["pending_review"]
-    expect(pending, "no pending blocks to review")
+    applied = imports["applied"]
+    expect(applied, "no applied blocks to reject")
     before = imports["confirmed_blocks"]
 
     status, body = call("POST", "/api/calendar/review",
-                        {"block_id": pending[0]["block_id"], "confirmed": True,
+                        {"block_id": applied[0]["block_id"], "confirmed": False,
                          "reviewer": "Test Coordinator"})
-    expect(status == 200, f"review returned {status}: {body}")
-    expect(body["confirmed_blocks"] == before + 1,
-           "confirming a block did not add evidence")
+    expect(status == 200, f"reject returned {status}: {body}")
+    expect(body["confirmed_blocks"] == before - 1,
+           "rejecting a block must remove it from the evidence in force")
 
-    status, body = call("POST", "/api/calendar/review",
-                        {"block_id": pending[1]["block_id"], "confirmed": False,
-                         "reviewer": "Test Coordinator"})
-    expect(status == 200, f"reject returned {status}")
-    expect(body["confirmed_blocks"] == before + 1,
-           "a rejected block must never count as evidence")
+
+def test_month_upload_reports_who_is_free():
+    """The point of a month upload: day-level availability per person."""
+    status, body = _upload(MONTH_PDF)
+    expect(status == 200, f"month upload returned {status}")
+    rows = [a for a in body["availability"] if a["coordinator_id"]]
+    expect(rows, f"month upload produced no per-person availability: {body['availability']}")
+    for row in rows:
+        expect(row["days"], f"{row['name']} has no days")
+        states = {d["state"] for d in row["days"]}
+        expect(states <= {"busy", "light", "open", "unknown"},
+               f"unexpected availability states: {states}")
+        expect(row["open_working_days"] <= row["working_days"],
+               "more clear weekdays than weekdays")
+
+
+def test_truncated_days_are_unknown_not_free():
+    """A cut-off day cell must never read as availability."""
+    status, body = _upload(MONTH_PDF)
+    expect(status == 200, f"month upload returned {status}")
+    bad = [
+        (a["name"], d["day"])
+        for a in body["availability"] for d in a["days"]
+        if d["truncated"] and d["items"] == 0 and d["state"] == "open"
+    ]
+    expect(not bad, f"cut-off cells reported as free: {bad[:3]}")
 
 
 def test_review_of_an_unknown_block_is_404():
@@ -402,6 +428,8 @@ if __name__ == "__main__":
     # Both fixtures are synthetic. A real month export prints event titles for
     # every overlaid calendar, so one can never be committed here.
     WEEK_PDF = build_week_pdf(os.path.join(tmp, "work-week.pdf"))
+    PLAIN_WEEK_PDF = build_week_pdf(
+        os.path.join(tmp, "work-week-plain.pdf"), coloured_legend=False)
     MONTH_PDF = build_month_pdf(os.path.join(tmp, "month.pdf"))
     httpd = srv.build_server(port=0, db_path=os.path.join(tmp, "test.db"))
     BASE = f"http://127.0.0.1:{httpd.server_address[1]}"

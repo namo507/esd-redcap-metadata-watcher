@@ -137,38 +137,51 @@
         <h2>Upload a calendar</h2>
       </div></div>
       <p class="note" style="max-width:74ch">
-        Print the Outlook calendar to PDF and drop it here. <b>Work Week</b> or
-        <b>Day</b> view gives real start and end times, so the board can schedule
-        against it. A <b>Month</b> view prints start times only and quietly cuts
-        long days off, so it is read as a workload signal and never as proof that
-        someone is free.
+        Print the Outlook calendar to PDF and drop it here. Nothing to set up: the
+        file names its own calendars and the board syncs on upload. <b>Work Week</b>
+        or <b>Day</b> view gives real start and end times it can schedule against.
+        A <b>Month</b> view shows who has room on which days, but prints no end
+        times, so it never claims anyone is free at a particular hour.
       </p>
       <div id="sync-upload"></div>
       <div id="sync-result"></div>
     </div>
 
+    <div class="card" style="margin-top:1.3rem" id="sync-availability-card" hidden>
+      <div class="card-head"><div>
+        <p class="eyebrow">From the upload</p>
+        <h2 id="avail-title">Who is free this month</h2>
+      </div></div>
+      <p class="note" style="max-width:74ch">
+        Read straight off the calendar you uploaded. A month print shows how many
+        commitments each person has on each day, not the gaps between them &mdash; so
+        this says who has room, not what time to book.
+      </p>
+      <div id="sync-availability"></div>
+    </div>
+
     <div class="card" style="margin-top:1.3rem" id="sync-colors-card" hidden>
       <div class="card-head"><div>
-        <p class="eyebrow">One-time setup</p>
+        <p class="eyebrow">Fallback</p>
         <h2>Match colours to people</h2>
       </div></div>
       <p class="note" style="max-width:74ch">
-        Outlook stacks everyone's calendar on one page and tells them apart only
-        by colour &mdash; the printout has no legend. Open the shared calendar in
-        Outlook, read off who owns each colour, and record it once here. Until
-        that is done, entries are counted but belong to nobody.
+        This export's header lost its calendar colours, so the board could not
+        work out who is who on its own. Open the shared calendar in Outlook, read
+        off who owns each colour, and record it once here. Until that is done,
+        entries are counted but belong to nobody.
       </p>
       <div id="sync-colors"></div>
     </div>
 
     <div class="card" style="margin-top:1.3rem" id="sync-review-card" hidden>
       <div class="card-head"><div>
-        <p class="eyebrow">Needs a human</p>
-        <h2>Confirm what was read</h2>
+        <p class="eyebrow">Correction</p>
+        <h2>What was read from the PDF</h2>
       </div></div>
       <p class="note" style="max-width:74ch">
-        Each block below was read off the PDF automatically. Until you confirm it,
-        it counts as <b>no evidence</b> &mdash; it will not block anyone's assignment.
+        These times were read exactly off the PDF and are already in effect. If one
+        is wrong, reject it and the board updates immediately.
       </p>
       <div id="sync-review"></div>
     </div>

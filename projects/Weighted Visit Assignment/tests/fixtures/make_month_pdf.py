@@ -9,6 +9,7 @@ so the month reader stays covered.
 from __future__ import annotations
 
 import calendar as _cal
+import random
 from datetime import date
 
 import fitz
@@ -21,19 +22,42 @@ DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 MONTH_ABBR = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-HUES = ["0F6CBD", "038387", "0078D4", "F7630C", "00CC6A", "FDE300", "69797E"]
+# Outlook prints each overlaid calendar's name in that calendar's own colour.
+# That is the only legend the export carries, so the fixture reproduces it.
+LEGEND = [
+    ("Calendar", "0F6CBD"),
+    ("Bell, Margaret", "038387"),
+    ("Puttock, Lauren", "0078D4"),
+    ("Oak, Sanjana", "F7630C"),
+    ("Tous, Sofia", "00CC6A"),
+    ("Soto, Morgan", "FDE300"),
+    ("Lucas-Mariano, Ramiro", "69797E"),
+]
+HUES = [hexc for _, hexc in LEGEND]
 
 
 def rgb(hexc: str):
     return tuple(int(hexc[i:i + 2], 16) / 255 for i in (0, 2, 4))
 
 
-def build(path: str, year: int = 2026, month: int = 8, events_per_day: int = 3) -> str:
+def build(path: str, year: int = 2026, month: int = 8, events_per_day: int = 5,
+          vary: bool = False, seed: int = 7) -> str:
+    """Draw a month grid.
+
+    ``vary`` gives each calendar an uneven, deterministic load, which is what a
+    demo grid needs to look like anything. Tests leave it off: they rely on a
+    predictable row count to exercise the cut-off-cell detection.
+    """
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
 
     page.insert_text((30, 40), f"{_cal.month_name[month]} {year}", fontsize=14)
-    page.insert_text((190, 40), "Calendar, Bell, Margaret, Puttock, Lauren", fontsize=11)
+    x, y = 150.0, 40.0
+    for label, hexc in LEGEND:
+        if x + 6.2 * len(label) > 596:
+            x, y = 150.0, y + 14.0
+        page.insert_text((x, y), label + ",", fontsize=11, color=rgb(hexc))
+        x += 6.2 * len(label) + 10
 
     for i, name in enumerate(DAYS):
         page.insert_text((COL_X[i], HEADER_Y), name, fontsize=8)
@@ -50,9 +74,14 @@ def build(path: str, year: int = 2026, month: int = 8, events_per_day: int = 3) 
                 text = str(day.day)
             page.insert_text((x, y), text, fontsize=7)
 
-            for k in range(events_per_day if day.month == month else 1):
+            rng = random.Random((seed, day.toordinal()))
+            n = events_per_day if day.month == month else 1
+            if vary:
+                n = rng.choice([0, 1, 2, 3, 3, 4, 5, 6]) if day.weekday() < 5 else 0
+            for k in range(n):
                 ey = y + 14 + k * 13
-                hue = HUES[(day.day + k) % len(HUES)]
+                hue = (rng.choice(HUES) if vary
+                       else HUES[(day.day + k) % len(HUES)])
                 page.draw_rect(
                     fitz.Rect(x, ey - 8, x + 2.7, ey + 2.6),
                     color=None, fill=rgb(hue),
