@@ -1,0 +1,136 @@
+
+# ESD Visitboard — Master Implementation Prompt (v2)
+## Comprehensive Backend + Frontend Update Spec for esd-visitboard.netlify.app
+
+**Purpose:** this is the consolidated, final-form prompt for updating the live site at [esd-visitboard.netlify.app](https://esd-visitboard.netlify.app/). It supersedes the separate "unified prototype" and "refined scheduling logic" prompts by merging them into one document, organized the way the actual codebase should be organized: sections, considerations, automations, uploads, and exports all called out explicitly so nothing gets built as a one-off. It is grounded in the live site's current demo copy ("Pick a visit. The board checks every calendar, rules out who cannot go, and explains who it would send"), the ESD Scheduling Manual, and the full meeting-notes transcript reviewed across this thread.
+
+**Roster constraint, confirmed again here:** every rule below uses only the coordinators already on the dashboard — **Emma, Sanjana, Lauren, Makenzie, Ramiro, Maggie**. The latest research-report draft introduces additional names (Cali, Kim, Sophia) and reworded attributes (e.g., "Emma available only Tuesdays & Fridays," a three-metric ranking order) that are **not reflected in the manual excerpts reviewed and are not part of the current roster** — they are intentionally excluded from this spec. If Cali/Kim/Sophia are real, current lab members, add them as a separate follow-up once their reliability/tech-training data is confirmed against the manual directly; do not merge unverified names into the live roster silently.
+
+---
+
+## 1. Site structure — the sections the dashboard should have
+
+The live site currently shows three top-level ideas in its copy: **"The week"** (a status board — "Needs someone assigned," "Needs a closer look"), **"Next visit assignment"** (pick a visit → ranked recommendation), and **"How the work is spread"** (a workload view). Formalize these into four persistent sections plus one new one, all reachable from a single nav bar so the tool stays a one-page operational surface, not a multi-app suite:
+
+| Section | Current state on live site | What to build/refine |
+|---|---|---|
+| **1. The Week** | Shows a status board, "Needs someone assigned" / "Needs a closer look" | Keep as the landing view. Add a visible **"last synced: X minutes ago"** badge (per §4) and a red/amber/green state per visit row reflecting evidence sufficiency (§3), not just assignment status. |
+| **2. Next Visit Assignment** | "Pick a visit. The board checks every calendar, rules out who cannot go, and explains who it would send." | This is the ranking screen — refine per §2/§3 hard-gate and scoring logic. Every recommendation must show its **reason string**, not just a name and score. |
+| **3. How the Work Is Spread** | Workload view, described as "Record" | Keep as the equity/audit view — out-of-hours tally, visit count per coordinator, van-trained utilization. This is where §7's equity metrics surface. |
+| **4. Sync Calendars (new)** | Not yet present as a distinct section | New dedicated screen: upload panel + review overlay per §4. This should NOT be buried inside "Next Visit Assignment" — it is its own workflow step because it produces the evidence that step 2 consumes. |
+| **5. Data & Exports (new)** | Not yet present | New section for CSV import/export and audit-trail download, per §5. |
+
+Each section keeps the same visual language already on the site ("Record" labels, card-based layout) — this prompt is about wiring real logic and data behind the existing frontend shell, not restyling it.
+
+---
+
+## 2. Hard constraints — must run before any ranking math
+
+These gate candidates out entirely. None of these are scores; all are boolean pass/fail, executed in this exact order so failures short-circuit early and cheaply:
+
+1. **NDD mandatory override (highest priority, checked first).** If `participant.is_ndd_cross_collab` is true, the only valid clinician is **Makenzie**. All other candidates are excluded outright — this is not a scoring boost, it is a full override, because Makenzie is the sole coordinator on the current roster certified on NDD/cross-collaboration measures. If Makenzie is unavailable for the requested window, output a hard "escalation needed" state rather than substituting anyone else.
+2. **Assessment reliability gate.** The candidate (or candidate pair) must be `RELIABLE` — not merely `IN_TRAINING` — in every assessment required for that visit's time point, unless the in-training buddy rule (below) is satisfied.
+3. **In-training buddy rule.** An `IN_TRAINING` coordinator (currently: **Maggie**, in training on CSBS 6–12m) may only be scheduled on a visit requiring that assessment if paired with a `RELIABLE` coordinator on the same assessment (Sanjana, Lauren, or Makenzie). Maggie is never solo-eligible for any visit on the current roster.
+4. **Lab-day exclusion.** A coordinator cannot be scheduled off-site on their designated weekly in-lab day.
+5. **Friday prohibition.** No visit may be scheduled on a Friday without an explicit, logged override flag (lab meetings occupy Fridays lab-wide).
+6. **Calendar-evidence check — three states, not two.** For the requested window, each candidate's synced evidence must show `clear` (no conflict), `conflict` (hard fail), or `insufficient evidence` (also a fail state — **never treated as available**). This is the rule that prevents the exact double-booking failure mode flagged repeatedly across the meeting notes and the calendar-ingestion research.
+7. **NANO kit ceiling.** Reject any window where two existing NANO visits already overlap it — only two tech kits exist.
+8. **Visit-window boundary.** The requested date must fall inside the manual's age-specific visit window (0–3m: −5/+7 days; 6m/9m: −2wk/+4wk; 12m/24m: −2wk/+6wk; 36m: ideal date through day before 4th birthday). Anything outside this is rejected regardless of staffing.
+9. **36-month exclusion.** 36-month visits never enter the automated ranking pipeline at all — the manual and the meeting notes agree this age point is grad-student-availability-dependent in a way the fixed coordinator model can't represent. Route these straight to a manual-assignment UI state (§1, section 2).
+10. **24-month remote bypass.** 24-month visits skip clinician/tech matching entirely — route to the REDCap/LUI questionnaire workflow state instead of the ranking screen.
+
+---
+
+## 3. Soft scoring — only runs on candidates that already passed every gate above
+
+Corrected priority order, straight from the meeting feedback ("the top one needs to be trained in the assessment... family preference doesn't matter if the people they prefer can't do the assessment"):
+
+| Rank | Factor | Notes |
+|---|---|---|
+| 1 | **Family preference / continuity** (set at consent visit; "knows the family, did the last visit") | Highest-weighted soft factor — but only among candidates who already cleared every hard gate. |
+| 2 | **Availability freshness** | Prefer candidates with more recently synced, higher-confidence evidence over stale-but-technically-clear evidence. |
+| 3 | **Out-of-hours equity** | Penalize candidates with an above-average recent out-of-hours tally, to keep evening/weekend load distributed fairly, per the manual's Slack-canvas tracking method being replaced by a real column. |
+| 4 | **Vehicle optimization** | Prefer van-trained pairs for short drives, preserve van-trained staff for concurrent short trips, no penalty for rental-car-only pairs on long drives. |
+| 5 | **Skill-scarcity** | Slight penalty for assigning a highly versatile coordinator (e.g., Sanjana, reliable across 1–12m) to a visit that a narrower-scope coordinator (e.g., Makenzie, 6–12m specific) could equally cover — keeps versatile staff free for visits only they can do. |
+
+Every ranked result must render its **reason string** in the UI — e.g., "Recommended: family's coordinator from last visit; van-trained; no out-of-hours conflict" — matching the live site's own framing of "explains who it would send." A result with `insufficient evidence` from §2 rule 6 must render distinctly (e.g., "Sync calendars first — no current data for Lauren on this date") rather than being silently omitted, so the scheduler always knows *why* someone isn't ranked.
+
+---
+
+## 4. Automations — "Sync Calendars" as its own first-class workflow
+
+This remains the centerpiece automation, unchanged in spirit from the meeting's original ask, refined here into the exact backend/frontend contract:
+
+**Trigger:** a single "Sync Calendars" button in the new dedicated section (§1, section 4), not buried in the ranking screen.
+
+**Backend flow, one coordinator at a time (never a combined multi-person capture):**
+1. Scheduler uploads or captures one calendar image per coordinator (day/work-week view only — reject month-grid captures with a clear error, since month grids silently truncate and can't be trusted for time-level scheduling).
+2. Backend runs the OpenCV pipeline: grayscale → Otsu threshold → morphological grid skeletonization → contour/bounding-box extraction → HSV saturation check per cell. No OCR anywhere in this path.
+3. Presence of a saturated (colored) block = `Busy`. Absence = simply not recorded — absence is not proof of `Free`, it's the *lack of a busy signal*, matching the meeting's own framing.
+4. Each detected block is written as an unreviewed row tied to that coordinator, that sync run, and a source-image hash for audit purposes.
+
+**Mandatory human review step (frontend), before anything counts toward ranking:**
+- Overlay detected blocks on the original image, one coordinator at a time, with a simple confirm/reject control per block.
+- Unconfirmed blocks are excluded from the availability check in §2 rule 6 — they simply don't exist yet as evidence, so the three-state check correctly reports "insufficient evidence" rather than guessing.
+- Once a coordinator's calendar theme has proven reliable across several syncs, allow (but do not default to) auto-commit for that person specifically.
+
+**Freshness display:** the "last synced: X minutes ago" badge from §1 must be visible on both the Sync Calendars section and the Next Visit Assignment section, since a scheduler making an assignment needs to know how current the underlying evidence is without navigating away.
+
+**Long-term automation path (not this build, but keep the evidence shape compatible):** Microsoft Graph `getSchedule` is the eventual replacement for manual image capture per coordinator — same output shape (`busy`/`free`/`insufficient evidence` per person per window), so coordinators can be migrated one at a time from vision-capture to live API without touching the ranking logic at all.
+
+---
+
+## 5. Uploads and exports — the two data-movement flows the dashboard needs
+
+This is new relative to the earlier prompts and directly answers "uploads, export stuff maintained properly":
+
+### 5.1 Uploads
+- **Calendar images** (§4) — per-coordinator, day/work-week view only, one file per upload slot.
+- **Participant/visit roster import** — a CSV upload matching the Access export columns already in use (Visit Month, Ideal Date, Status, Child/Parent names, Address + drive time, Childcare flag, Van Inaccessible flag, Scheduling Notes, Contact Notes) so the lab can migrate data out of Access incrementally rather than needing a big-bang cutover. Validate on upload: reject rows with an unparseable Ideal Date, flag (don't reject) rows missing drive-time data since that only affects the offer-window calculation, not core scheduling validity.
+- **Reliability matrix updates** — a small structured upload (or an admin-only in-app edit form) for updating a coordinator's `RELIABLE`/`IN_TRAINING` status per assessment, so the matrix doesn't require a code change every time someone completes training. This directly answers the meeting's own note: "as people continue training, I will add in who's [reliable] on this."
+
+### 5.2 Exports
+- **Ranked-assignment audit export (CSV)** — every assignment decision made through the dashboard, with participant ID, visit month, chosen coordinator(s), score, reason string, evidence tier/timestamp used, and whether it was a hard-override case (NDD, 36m manual, 24m remote). This is the record that lets Dr. Bradshaw or a new scheduler reconstruct *why* a past assignment happened.
+- **Workload/equity export (CSV)** — a snapshot of the "How the Work Is Spread" section: visits per coordinator, out-of-hours tally, van-trained utilization — for the periodic fairness review the manual already does manually via the Slack canvas.
+- **Calendar-sync evidence export** — per sync run, which blocks were detected, which were confirmed vs. corrected by a human, and the resulting `vision_correction_rate` — this is the metric that eventually justifies turning on auto-commit for a given coordinator.
+
+All exports should be triggerable from the "Data & Exports" section (§1, section 5) as a simple "Download CSV" action — no scheduled/emailed exports needed for this build; on-demand is sufficient and matches the same "sync when you need it, not constantly" philosophy the lab already applied to calendar syncing.
+
+---
+
+## 6. Additional considerations carried over and finalized
+
+- **Communication method field.** Surface `preferred_contact_method` (Text/Email/Call) directly next to every visit in "Next Visit Assignment" — this was an explicit open item from the meeting ("confirm current family communication method") and belongs beside the ranked coordinators, not in a separate settings page.
+- **Scheduling notes stay free-text.** Family-specific quirks (fragrance sensitivity, weekend-only availability) are too heterogeneous to rule-encode — keep this a visible free-text field surfaced prominently next to the ranked list, never parsed or auto-applied as a constraint.
+- **PTO / explicit unavailability.** No special-case logic — a coordinator's marked-out dates simply appear as `Busy` blocks through the same sync pipeline as any other calendar evidence.
+- **NDD visit duration.** Automatically add 60 minutes to the base visit-length lookup when `is_ndd_cross_collab` is true, and make sure this adjusted duration — not the static manual table — feeds the calendar-conflict window check, or NDD visits will be under-blocked and risk double-booking.
+- **Travel-time-adjusted offer windows.** The earliest/latest offerable start time for a given visit is a function of that specific family's drive time, not a fixed lab-hours assumption — compute it per visit from the stored address/drive-time field, and use the same computed window in both the scheduler's ranking view and any future family-facing display, so the two can never disagree.
+- **Scope boundary, confirmed again:** this dashboard is scheduler-facing only. No family-facing self-scheduling calendar is part of this build — that was explicitly set aside in the meeting ("let's just keep the family thing aside... this is for us").
+
+---
+
+## 7. Backend/data model summary (unchanged core, refined fields)
+
+Keep the six-file architecture already recommended (`models.py`, `db.py`, `constraints.py`, `scoring.py`, `vision.py`, `seed_data.py`, plus `static/` for frontend) — this update is about correctness and completeness of what's inside those files, not a restructure. Key field additions from this pass:
+
+- `Participant.is_ndd_cross_collab: bool`
+- `Participant.preferred_contact_method: str` (Text | Email | Call)
+- `Participant.scheduling_notes: str` (free text)
+- `Staff.tech_trained: bool`, `Staff.van_trained: bool`, `Staff.in_lab_day: int`, `Staff.out_of_hours_count: int`
+- `Assessment` rows split by age band where the manual distinguishes them (`CSBS_6m` vs `CSBS_9_12m`; `Bayley_3m` vs `Bayley_9_12m`; `Orientation_1_3m`) — collapsing these into one generic row per assessment name is the single most likely correctness bug if skipped.
+- `StaffAssessment.status: RELIABLE | IN_TRAINING`
+- `CalendarSyncRun` / `CalendarBlock` with a `reviewed: bool` column enforcing the mandatory-review rule in §4.
+
+---
+
+## 8. Build order for this revision
+
+1. Ship the schema field additions (§7) and re-seed the six-coordinator reliability matrix with the corrected age-banded assessment rows.
+2. Wire the hard-gate order (§2) exactly as sequenced — NDD override first, three-state evidence check before anything scores.
+3. Reorder the soft-scoring weights (§3) and add reason-string rendering to the ranking UI.
+4. Build the dedicated "Sync Calendars" section (§4) with the mandatory review overlay, separate from the ranking screen.
+5. Add the "Data & Exports" section (§5) with the three CSV exports and the two upload flows.
+6. Surface `preferred_contact_method` and `scheduling_notes` in the ranking view (§6).
+7. Add the "last synced" freshness badge to both "The Week" and "Next Visit Assignment" (§1/§4).
+
+Each step should be independently deployable to the live Netlify frontend + its backend without waiting for the next step, consistent with the incremental approach already used to get the current demo live.
