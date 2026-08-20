@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Who is reliable on what. Editable without a code change, per Master prompt 5.3",
+    "('as people continue training, I will add in who's reliable on this').",
+    "",
+    "STATUS OF THIS FILE: the age-banded assessment names come from the manual.",
+    "The per-coordinator rows are UNCONFIRMED and deliberately empty. The master",
+    "prompt names Emma, Makenzie and Maggie, none of whom are on the roster the",
+    "dashboard and the shared Outlook calendar carry (Margaret Bell, Lauren",
+    "Puttock, Sanjana Oak, Sofia Tous, Morgan Soto, Ramiro Lucas-Mariano).",
+    "",
+    "Guessing a mapping would encode a clinical-certification claim about a real",
+    "person that nobody verified, so the gates read this file and escalate when",
+    "it is empty rather than substituting anyone. Fill in from the manual and the",
+    "gates start enforcing immediately - no code change.",
+    "",
+    "status values: RELIABLE | IN_TRAINING | (absent = not certified)"
+  ],
+
+  "assessments": [
+    "Orientation_1_3m",
+    "Bayley_3m",
+    "Bayley_9_12m",
+    "CSBS_6m",
+    "CSBS_9_12m",
+    "ADOS",
+    "NDD_cross_collab"
+  ],
+
+  "confirmed": false,
+  "confirmed_by": null,
+  "confirmed_on": null,
+
+  "staff": {
+    "C01": { "_name": "Margaret Bell",         "assessments": {} },
+    "C02": { "_name": "Lauren Puttock",        "assessments": {} },
+    "C03": { "_name": "Sanjana Oak",           "assessments": {} },
+    "C04": { "_name": "Sofia Tous",            "assessments": {} },
+    "C05": { "_name": "Morgan Soto",           "assessments": {} },
+    "C06": { "_name": "Ramiro Lucas-Mariano",  "assessments": {} }
+  },
+
+  "visit_requirements": {
+    "_comment": "Which assessments a visit needs, by protocol and checkpoint.",
+    "NICO": {
+      "6mo":  ["CSBS_6m"],
+      "12mo": ["CSBS_9_12m", "Bayley_9_12m"],
+      "18mo": ["ADOS"],
+      "24mo": []
+    },
+    "NANO": {
+      "baseline": ["Orientation_1_3m"],
+      "3mo":  ["Bayley_3m"],
+      "9mo":  ["CSBS_9_12m"],
+      "18mo": ["ADOS"]
+    }
+  }
+}

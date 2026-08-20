@@ -16,6 +16,7 @@ import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 
+from .constraints import apply_visit_duration
 from .models import (
     BusyBlock,
     CalendarSnapshot,
@@ -69,6 +70,11 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             attributes=set(attrs),
             hire_date=(now - timedelta(days=900 if done else 9)).date(),
             working_blocks=[(d, 8.0, 17.0) for d in range(5)],
+            # Master §7 staff fields. Synthetic, like everything else here.
+            tech_trained=i in (0, 1, 5),
+            van_trained=i in (0, 2, 3),
+            in_lab_day=(i % 4) if done else None,
+            out_of_hours_count=[3, 0, 5, 1, 2, 0, 0][i],
         )
     ids = sorted(state.coordinators)
 
@@ -101,6 +107,25 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     state.families["F5033"].soft_avoid = {"C02"}
     # One family needs a Spanish-speaking coordinator.
     state.families["F5039"].required_attributes = {"spanish"}
+
+    # --- Master prompt §6/§7 participant detail ------------------------------
+    # Contact method, drive time and free-text notes are what a scheduler reads
+    # right before they pick up the phone, so the demo carries realistic ones.
+    contact_cycle = ["Text", "Email", "Call"]
+    for i, (fid, fam) in enumerate(sorted(state.families.items())):
+        fam.preferred_contact_method = contact_cycle[i % 3]
+        fam.drive_time_minutes = round(12 + 9 * fam.zone + rng.uniform(-4, 8), 1)
+    state.families["F5032"].scheduling_notes = (
+        "Fragrance sensitivity: no scented products, please.")
+    state.families["F5036"].scheduling_notes = (
+        "Weekends only until mid-September; father works nights.")
+    state.families["F5030"].scheduling_notes = (
+        "Street parking is tight after 4pm. Park on the cross street.")
+    # One NDD cross-collaboration visit, to exercise the override and the
+    # 60-minute duration extension.
+    state.families["F5038"].is_ndd_cross_collab = True
+    state.families["F5041"].van_inaccessible = True
+    state.families["F5035"].childcare_needed = True
 
     # --- travel: correlated with zone distance ------------------------------
     for cid in ids:
@@ -201,7 +226,7 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             window_start += timedelta(days=1)
         seq = checkpoints[fam.protocol]
         visits.append(
-            Visit(
+            apply_visit_duration(Visit(
                 visit_id=f"V{i + 1:03d}",
                 family_id=fid,
                 protocol=fam.protocol,
@@ -209,7 +234,7 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
                 window_start=window_start,
                 window_end=window_start + timedelta(days=3, hours=9),
                 duration_hours=rng.choice([1.5, 2.0, 2.5, 3.0]),
-            )
+            ), fam)
         )
     return state, visits
 
