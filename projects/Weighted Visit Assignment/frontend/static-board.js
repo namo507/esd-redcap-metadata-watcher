@@ -106,6 +106,8 @@ window.StaticBoard = (function () {
    *  changes who is still free and the header counts these. */
   function needsAttention(visitId) {
     if (assignments[visitId]) return false;
+    const summary = DATA.visits.find((v) => v.visit.id === visitId);
+    if (summary && summary.visit.automated === false) return false;
     const r = rankRows(visitId);
     if (!r) return false;
     return !r.recommended || Boolean(r.rows.length >= 2 && r.rows[0].review_band);
@@ -129,6 +131,8 @@ window.StaticBoard = (function () {
     const base = DATA.visits.find((v) => v.visit.id === visitId).visit;
     const a = assignments[visitId];
     return Object.assign({}, base, {
+      // base already carries route, contact method, notes, offer window and
+      // duration from the snapshot; only the status-derived keys move here.
       status: a ? "assigned" : "needs_assignment",
       needs_attention: false,   // filled in by the queue, which has the rows
       assigned_to: a ? a.coordinator_name : null,

@@ -53,6 +53,12 @@ class Coordinator:
     n_completed_visits: int = 0
     attributes: Set[str] = field(default_factory=set)  # e.g. {"spanish", "female"}
     active: bool = True
+
+    # --- Master prompt §7 staff fields --------------------------------------
+    tech_trained: bool = False
+    van_trained: bool = False
+    in_lab_day: Optional[int] = None   # weekday index; cannot go off-site that day
+    out_of_hours_count: int = 0        # rolling tally, drives the equity factor
     # Declared working availability, as (weekday, start_hour, end_hour) triples.
     working_blocks: List[Tuple[int, float, float]] = field(default_factory=list)
 
@@ -76,6 +82,16 @@ class Family:
     # Attribute requirements, e.g. {"spanish"}; satisfied ones lift Omega.
     required_attributes: Set[str] = field(default_factory=set)
     pi_hold: bool = False
+
+    # --- Master prompt §7 participant fields --------------------------------
+    # NDD cross-collaboration visits may only be taken by staff certified on
+    # NDD measures, and they run 60 minutes longer than the base visit length.
+    is_ndd_cross_collab: bool = False
+    preferred_contact_method: str = "Email"   # Text | Email | Call
+    scheduling_notes: str = ""                # free text, never parsed
+    drive_time_minutes: float = 0.0           # one way, from the stored address
+    van_inaccessible: bool = False
+    childcare_needed: bool = False
 
     @property
     def has_stated_preference(self) -> bool:
@@ -200,6 +216,64 @@ def _hhmmss_to_hours(value: Optional[str], default: float) -> float:
         return int(parts[0]) + int(parts[1]) / 60.0
     except (ValueError, IndexError):
         return default
+
+
+# Three states, never two. "No evidence" is a distinct answer from "free", and
+# treating it as availability is the double-booking failure mode the meeting
+# notes flagged repeatedly.
+EVIDENCE_CLEAR = "clear"
+EVIDENCE_CONFLICT = "conflict"
+EVIDENCE_INSUFFICIENT = "insufficient"
+
+
+@dataclass
+class CalendarBlock:
+    """One busy block detected from a captured calendar image.
+
+    Unreviewed blocks are evidence of nothing. They are recorded so a human can
+    confirm or reject them, and they are excluded from the availability check
+    until they are, which is what makes the three-state answer honest.
+    """
+
+    coordinator_id: str
+    start: datetime
+    end: datetime
+    reviewed: bool = False
+    confirmed: bool = True      # meaningful only once reviewed
+    source_hash: str = ""       # the image this came from, for audit
+    run_id: str = ""
+
+    def counts_as_evidence(self) -> bool:
+        return self.reviewed and self.confirmed
+
+
+@dataclass
+class CalendarSyncRun:
+    """One capture of one coordinator's calendar. Never a combined capture."""
+
+    run_id: str
+    coordinator_id: str
+    captured_at: datetime
+    view_type: str              # day | work_week  (month is rejected upstream)
+    source_hash: str = ""
+    blocks: List[CalendarBlock] = field(default_factory=list)
+    auto_committed: bool = False
+
+    @property
+    def reviewed_count(self) -> int:
+        return sum(1 for b in self.blocks if b.reviewed)
+
+    @property
+    def correction_rate(self) -> float:
+        """Share of reviewed blocks a human rejected.
+
+        This is the number that eventually justifies auto-commit for one
+        person: a theme that has read cleanly for several runs has earned it.
+        """
+        reviewed = [b for b in self.blocks if b.reviewed]
+        if not reviewed:
+            return 0.0
+        return sum(1 for b in reviewed if not b.confirmed) / len(reviewed)
 
 
 @dataclass

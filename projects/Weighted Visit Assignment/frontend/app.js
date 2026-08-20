@@ -6,7 +6,8 @@
  */
 "use strict";
 
-const S = { board: null, detail: null, selected: null, status: "all", search: "", view: "list" };
+const S = { board: null, detail: null, selected: null, status: "all", search: "",
+            section: "week", assignments: {} };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -95,7 +96,7 @@ function drawQueue() {
 
   $("queue").querySelectorAll("[data-visit]").forEach((b) =>
     b.addEventListener("click", () => selectVisit(b.dataset.visit)));
-  if (S.view === "calendar") drawCalendar();
+  if (S.section === "week") drawCalendar();
   const clear = $("clear-filters");
   if (clear) clear.addEventListener("click", () => {
     S.search = ""; S.status = "all"; $("filter-search").value = "";
@@ -159,8 +160,12 @@ function drawCalendar() {
       const items = byDay[iso] || [];
       const isToday = day.getTime() === today.getTime();
       const cards = items.map((v) => {
-        const state = v.status === "assigned" ? "done" : v.needs_attention ? "attn" : "todo";
-        const who = v.status === "assigned" ? esc(v.assigned_to) : "Needs someone";
+        const state = !v.automated ? "route"
+          : v.status === "assigned" ? "done"
+          : v.needs_attention ? "attn" : "todo";
+        const who = !v.automated
+          ? (v.route === "remote_24_month" ? "Remote questionnaire" : "Assigned by hand")
+          : v.status === "assigned" ? esc(v.assigned_to) : "Needs someone";
         return `<button class="cal-card cal-${state} ${v.id === S.selected ? "is-on" : ""}"
             type="button" data-visit="${esc(v.id)}"
             title="${esc(v.family_label)} — ${esc(v.title)}">
@@ -189,12 +194,29 @@ function drawCalendar() {
     : "Every visit on the board has someone assigned.";
 }
 
-function setView(view) {
-  S.view = view;
-  document.querySelectorAll(".viewbtn").forEach((b) =>
-    b.classList.toggle("is-on", b.dataset.view === view));
-  $("calendar-card").hidden = view !== "calendar";
-  if (view === "calendar") drawCalendar();
+const SECTIONS = {
+  week:     ["The week", "Plan the week.", "Every visit on the board, on the day it falls. Colour tells you what still needs a decision."],
+  assign:   ["Next visit assignment", "Assign a visit.", "Pick a visit. The board checks every calendar, rules out who cannot go, and explains who it would send."],
+  workload: ["Fair shares", "How the work is spread.", "Visits, hours, out-of-hours duty and van trips across the team."],
+  sync:     ["Evidence", "Sync calendars.", "One coordinator at a time. Nothing counts until a human has confirmed it."],
+  data:     ["Records", "Data and exports.", "Take the audit trail with you, or bring the roster in."],
+};
+
+function setSection(name) {
+  S.section = name;
+  document.querySelectorAll(".navbtn").forEach((b) =>
+    b.classList.toggle("is-on", b.dataset.section === name));
+  ["week", "assign", "workload", "sync", "data"].forEach((k) => {
+    $("sec-" + k).hidden = k !== name;
+  });
+  const [eyebrow, title, sub] = SECTIONS[name];
+  $("hero-eyebrow").textContent = eyebrow;
+  $("hero-title").textContent = title;
+  $("hero-sub").textContent = sub;
+  if (name === "week") drawCalendar();
+  if (name === "workload") { drawFairness(); drawEquity(); drawActivity(); }
+  if (name === "sync") drawSync();
+  if (name === "data") drawData();
 }
 
 /* ---------------------------------------------------------------- detail */
@@ -266,6 +288,7 @@ function candidateCard(c, canAssign, recommendedId) {
       </div>
     </div>
     ${contributionBar(c)}
+    <p class="reason">${esc(c.reason || "")}</p>
     <p class="why">Strongest reason: <b>${esc(c.leads_on)}</b> &middot; ${whyLine(c)}</p>
     ${c.blocked_by.length ? `<p class="blocked-line">Cannot be assigned: ${esc(c.blocked_by.join("; "))}${demoted ? ". The next person down carries the recommendation." : ""}</p>` : ""}
     ${canAssign && c.assignable
@@ -283,6 +306,24 @@ function drawDetail() {
   const d = S.detail;
   if (!d) { $("detail").innerHTML = '<div class="card empty">Pick a visit from the queue.</div>'; return; }
   const v = d.visit;
+
+  // Some visits never enter the ranking pipeline at all. Showing a ranked list
+  // for them would invite a decision the board is not entitled to make.
+  if (!v.automated) {
+    $("detail").innerHTML = `<div class="card">
+      <p class="eyebrow">${esc(v.id)} &middot; ${esc(v.protocol)}</p>
+      <h2>${esc(v.family_label)} &middot; ${esc(v.title)}</h2>
+      <div class="notice notice-${v.escalate ? "alert" : "warn"}" style="margin-top:1rem">
+        <span>${v.escalate ? "&#9888;" : "&#9432;"}</span><span>${esc(v.route_reason || "")}</span>
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact-k">Contact by</div><div class="fact-v">${esc(v.preferred_contact_method)}</div></div>
+        <div class="fact"><div class="fact-k">Window</div><div class="fact-v">${esc(v.window)}</div></div>
+      </div>
+      ${v.scheduling_notes ? `<div class="notes"><b>Note from the family record:</b> ${esc(v.scheduling_notes)}</div>` : ""}
+    </div>`;
+    return;
+  }
   const assigned = d.assigned;
 
   const notices = d.notices.map((n) =>
@@ -320,8 +361,11 @@ function drawDetail() {
         </div>
         <span class="pill">${esc(d.family_preference)}</span>
       </div>
+      ${v.scheduling_notes ? `<div class="notes"><b>Note from the family record:</b> ${esc(v.scheduling_notes)}</div>` : ""}
       <div class="facts">
-        <div class="fact"><div class="fact-k">Visit length</div><div class="fact-v">${v.duration_hours} h</div></div>
+        <div class="fact"><div class="fact-k">Contact by</div><div class="fact-v">${esc(v.preferred_contact_method)}</div></div>
+        <div class="fact"><div class="fact-k">Visit length</div><div class="fact-v">${v.duration_hours} h${v.is_ndd ? " <span class=\"tag tag-ndd\">NDD +60m</span>" : ""}</div></div>
+        <div class="fact"><div class="fact-k">Drive</div><div class="fact-v">${v.drive_time_minutes} min</div></div>
         <div class="fact"><div class="fact-k">Where</div><div class="fact-v">Home visit</div></div>
         <div class="fact"><div class="fact-k">Who can go</div><div class="fact-v">${d.candidates.length} of ${d.candidates.length + d.excluded.length}</div></div>
       </div>
@@ -382,6 +426,7 @@ async function doAssign(coordinatorId, reasonCode, reasonText) {
         reason_code: reasonCode, reason_text: reasonText,
       }),
     });
+    S.assignments[S.selected] = out.assignment;
     toast(`${out.assignment.coordinator_name} assigned.`);
     await refresh();
     await selectVisit(S.selected);
@@ -391,6 +436,7 @@ async function doAssign(coordinatorId, reasonCode, reasonText) {
 async function unassign(visitId) {
   try {
     await api("/api/unassign", { method: "POST", body: JSON.stringify({ visit_id: visitId }) });
+    delete S.assignments[visitId];
     toast("Assignment undone.");
     await refresh();
     await selectVisit(visitId);
@@ -436,11 +482,168 @@ function drawFairness() {
        (p&nbsp;=&nbsp;${f.permutation_p.toFixed(2)}). Worth a look.`;
 }
 
+function drawEquity() {
+  const rows = S.board.roster;
+  const avgOoh = rows.reduce((s, r) => s + (r.out_of_hours || 0), 0) / (rows.length || 1);
+  $("equity").innerHTML = `
+    <thead><tr><th>Coordinator</th><th>Visits this week</th><th>Out-of-hours</th>
+      <th>Van trained</th><th>Tech trained</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr>
+      <td>${esc(r.name)}</td>
+      <td>${r.visits_this_week}</td>
+      <td class="${(r.out_of_hours || 0) > avgOoh ? "over" : ""}">${r.out_of_hours || 0}${(r.out_of_hours || 0) > avgOoh ? " <span class=\"flag\">above average</span>" : ""}</td>
+      <td>${r.van_trained ? "Yes" : "&mdash;"}</td>
+      <td>${r.tech_trained ? "Yes" : "&mdash;"}</td>
+    </tr>`).join("")}</tbody>`;
+}
+
+function drawSync() {
+  const h = S.board.health;
+  $("syncgrid").innerHTML = S.board.roster.map((r) => {
+    const mins = r.evidence_age_minutes;
+    const state = mins == null ? "none" : mins <= 15 ? "fresh" : mins <= 60 ? "stale" : "old";
+    const label = mins == null ? "No evidence yet"
+      : mins < 60 ? `Synced ${mins} min ago` : `Synced ${Math.round(mins / 60)} h ago`;
+    return `<div class="synccard is-${state}">
+      <div class="synchead"><span class="avatar">${esc(r.initials)}</span>
+        <div><div class="cand-name">${esc(r.name)}</div>
+        <div class="cand-sub">${esc(label)}</div></div></div>
+      <div class="syncstate">${state === "none"
+        ? "Counts as <b>no evidence</b> — this person cannot be assigned until a calendar is synced."
+        : state === "old" ? "Too old to trust. Re-sync before assigning."
+        : state === "stale" ? "Usable, but any assignment stays provisional."
+        : "Current."}</div>
+      <div class="syncmeta">${r.blocks_reviewed || 0} of ${r.blocks_total || 0} detected blocks confirmed</div>
+    </div>`;
+  }).join("");
+
+  $("sync-capture").innerHTML = STATIC
+    ? `<div class="notice notice-warn" style="margin-top:1rem"><span>&#9432;</span><span>
+        Capturing a calendar runs an image pipeline on the machine hosting the
+        board, so it is available when you run <code>make serve</code> locally,
+        not on this public copy. What you see above is the evidence state the
+        gates actually read.</span></div>`
+    : `<div class="assign-row" style="margin-top:1rem">
+         <label class="btn btn-ghost" for="sync-file">Choose a calendar image&hellip;</label>
+         <input id="sync-file" type="file" accept="image/*" hidden>
+         <select class="select" id="sync-who" aria-label="Coordinator">
+           ${S.board.roster.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("")}
+         </select>
+         <span class="note">Day or work-week view only.</span>
+       </div>`;
+}
+
+function csv(rows) {
+  return rows.map((r) => r.map((cell) => {
+    const v = cell == null ? "" : String(cell);
+    return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  }).join(",")).join("\n");
+}
+
+function download(name, text) {
+  const blob = new Blob([text], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+const EXPORTS = [
+  ["assignments", "Assignment audit",
+   "Every decision this board made: who was chosen, the reason string, the evidence used, and whether a hard rule overrode the ranking.",
+   () => {
+     const rows = [["visit_id", "family", "checkpoint", "protocol", "coordinator",
+                    "was_override", "reason_code", "reason", "evidence", "route"]];
+     S.board.queue.forEach((v) => {
+       const a = v.assigned_id ? S.assignments[v.id] : null;
+       rows.push([v.id, v.family_label, v.checkpoint, v.protocol,
+                  v.assigned_to || "", v.was_override ? "yes" : "no",
+                  (a && a.reason_code) || "", (a && a.reason) || "",
+                  v.automated ? "ranked" : "routed", v.route || ""]);
+     });
+     return rows;
+   }],
+  ["workload", "Workload and equity",
+   "Visits, committed hours, out-of-hours tally and van training per coordinator — the periodic fairness review as a file.",
+   () => {
+     const rows = [["coordinator", "visits_this_week", "committed_hours",
+                    "capacity_hours", "utilisation", "out_of_hours",
+                    "van_trained", "tech_trained"]];
+     S.board.fairness.rows.forEach((r) => {
+       const p = S.board.roster.find((x) => x.id === r.id) || {};
+       rows.push([r.name, r.visits, r.hours, r.capacity, r.utilization.toFixed(3),
+                  p.out_of_hours || 0, p.van_trained ? "yes" : "no",
+                  p.tech_trained ? "yes" : "no"]);
+     });
+     return rows;
+   }],
+  ["evidence", "Calendar evidence",
+   "Per coordinator: how old the evidence is, how many detected blocks a human confirmed, and the resulting correction rate.",
+   () => {
+     const rows = [["coordinator", "evidence_age_minutes", "blocks_detected",
+                    "blocks_confirmed", "correction_rate"]];
+     S.board.roster.forEach((r) => {
+       const total = r.blocks_total || 0, ok = r.blocks_reviewed || 0;
+       rows.push([r.name, r.evidence_age_minutes == null ? "" : r.evidence_age_minutes,
+                  total, ok, total ? ((total - ok) / total).toFixed(3) : ""]);
+     });
+     return rows;
+   }],
+];
+
+function drawData() {
+  const stamp = new Date().toISOString().slice(0, 10);
+  $("exports").innerHTML = EXPORTS.map(([key, title, blurb]) =>
+    `<div class="exportcard">
+       <h3>${esc(title)}</h3><p class="note">${esc(blurb)}</p>
+       <button class="btn" type="button" data-export="${esc(key)}">Download CSV</button>
+     </div>`).join("");
+  $("exports").querySelectorAll("[data-export]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const spec = EXPORTS.find((e) => e[0] === b.dataset.export);
+      download(`esd-visitboard-${spec[0]}-${stamp}.csv`, csv(spec[3]()));
+      toast(`${spec[1]} downloaded.`);
+    }));
+
+  $("uploads").innerHTML = `
+    <div class="exportcard">
+      <h3>Visit roster (CSV)</h3>
+      <p class="note">Matching the Access export columns already in use, so the lab
+        can move off Access a slice at a time. Rows with an unreadable ideal date
+        are rejected; a missing drive time is flagged, not rejected, because it
+        only affects the offer window.</p>
+      <button class="btn btn-ghost" type="button" disabled>Needs the local board</button>
+    </div>
+    <div class="exportcard">
+      <h3>Reliability matrix</h3>
+      <p class="note">Who is signed off on which assessment. Editing this file is
+        how training gets recorded — no code change. Currently
+        <b>${S.board.health.reliability_matrix_confirmed ? "confirmed" : "unconfirmed"}</b>,
+        so reliability gates are not being enforced yet.</p>
+      <button class="btn btn-ghost" type="button" disabled>Needs the local board</button>
+    </div>`;
+}
+
 function drawActivity() {
   const rows = S.board.activity;
   $("activity").innerHTML = rows.length
     ? rows.map((a) => `<li class="arow"><span class="atime">${esc(a.at)}</span><span class="amsg">${esc(a.message)}</span></li>`).join("")
     : '<li class="note">Nothing yet.</li>';
+}
+
+function drawSyncBadge() {
+  const h = S.board.health;
+  const mins = h.last_synced_minutes;
+  const fresh = mins <= 15 ? "fresh" : mins <= 60 ? "stale" : "old";
+  const label = mins < 1 ? "just now"
+    : mins < 60 ? `${mins} min ago`
+    : `${Math.round(mins / 60)} h ago`;
+  const el = $("sync-badge");
+  el.className = `sync-badge is-${fresh}`;
+  el.innerHTML = `<i></i>Calendars synced ${esc(label)}`;
 }
 
 function drawFooter() {
@@ -455,7 +658,8 @@ function drawFooter() {
 
 async function refresh() {
   S.board = await api("/api/board");
-  drawKpis(); drawQueue(); drawFairness(); drawActivity(); drawFooter();
+  drawKpis(); drawQueue(); drawFairness(); drawActivity(); drawFooter(); drawSyncBadge();
+  if (S.section === "week") drawCalendar();
 }
 
 async function detectMode() {
@@ -481,11 +685,12 @@ async function boot() {
       chip.classList.add("is-on");
       drawQueue();
     }));
-  document.querySelectorAll(".viewbtn").forEach((b) =>
-    b.addEventListener("click", () => setView(b.dataset.view)));
+  document.querySelectorAll(".navbtn").forEach((b) =>
+    b.addEventListener("click", () => setSection(b.dataset.section)));
   $("btn-reset").addEventListener("click", async () => {
     if (!confirm("Reset the board? This clears the assignments made in this session.")) return;
     await api("/api/reset", { method: "POST" });
+    S.assignments = {};
     await refresh();
     const first = S.board.queue[0];
     if (first) await selectVisit(first.id);

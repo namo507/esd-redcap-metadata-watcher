@@ -20,6 +20,16 @@ from esd_scheduler.calendarsync import MockProvider
 from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
 from esd_scheduler.drift import weekly_drift
+from esd_scheduler.constraints import (
+    ROUTE_MANUAL,
+    ROUTE_REMOTE,
+    ReliabilityMatrix,
+    check_candidate,
+    evidence_state,
+    offer_window,
+    route_visit,
+    visit_duration_hours,
+)
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
     commit_assignment,
@@ -69,6 +79,35 @@ def describe_fail(reason: Optional[str]) -> str:
     return FAIL_REASON_TEXT.get(reason, reason.replace("_", " "))
 
 
+def reason_string(cand, family, coordinator) -> str:
+    """Why the board would send this person, in one sentence.
+
+    Master §3: "Every ranked result must render its reason string" - matching
+    the site's own promise that it "explains who it would send". A name and a
+    bar is not an explanation.
+    """
+    bits: List[str] = []
+    if cand.coordinator_id in family.preferred_coordinators:
+        bits.append("the family asked for them")
+    if cand.components.p >= 1.0:
+        bits.append("did this family's last visit")
+    elif cand.components.k_prior_visits > 0:
+        n = cand.components.k_prior_visits
+        bits.append(f"has seen this family {n} time{'s' if n > 1 else ''}")
+    if coordinator is not None and coordinator.van_trained:
+        bits.append("van-trained")
+    util = cand.components.utilization
+    if util <= 0.6:
+        bits.append("room left this week")
+    elif util >= 0.9:
+        bits.append("close to full this week")
+    if coordinator is not None and coordinator.out_of_hours_count == 0:
+        bits.append("no recent out-of-hours load")
+    if not bits:
+        bits.append("no conflicts and capacity available")
+    return "Recommended: " + "; ".join(bits) + "."
+
+
 def confidence_words(stability: Optional[float]) -> str:
     """Never show a coordinator a probability. Show them a judgement."""
     if stability is None:
@@ -87,6 +126,7 @@ class LabSession:
         self._lock = threading.RLock()
         self.db_path = db_path
         self.cfg: EngineConfig = load_config()
+        self.matrix = ReliabilityMatrix.load()
         self.reset()
 
     # -- lifecycle -----------------------------------------------------------
@@ -134,6 +174,17 @@ class LabSession:
             "reads_titles": False,
             "weights": self.cfg.weights.as_dict(),
             "week_of": self.now.strftime("%Y-%m-%d"),
+            # Master §4: a scheduler making an assignment needs to know how
+            # current the evidence is without navigating away.
+            "last_synced_iso": min(
+                (c.fetched_at for c in self.state.calendars.values()), default=self.now
+            ).isoformat(timespec="seconds"),
+            "last_synced_minutes": round(max(
+                (self.now - c.fetched_at).total_seconds() / 60
+                for c in self.state.calendars.values()
+            ) if self.state.calendars else 0),
+            "reliability_matrix_confirmed": self.matrix.confirmed,
+            "ndd_certified_count": len(self.matrix.ndd_certified()),
         }
 
     def roster(self) -> List[dict]:
@@ -164,12 +215,27 @@ class LabSession:
                             c.coordinator_id, self.now
                         ),
                         "is_new": c.n_completed_visits < self.cfg.n_min_visits,
+                        # Master §7 staff fields, surfaced for the equity view.
+                        "van_trained": c.van_trained,
+                        "tech_trained": c.tech_trained,
+                        "out_of_hours": c.out_of_hours_count,
+                        "in_lab_day": c.in_lab_day,
+                        # Evidence freshness, per coordinator (Master §4).
+                        "evidence_age_minutes": (
+                            round((self.now - snap.fetched_at).total_seconds() / 60)
+                            if (snap := self.state.calendars.get(c.coordinator_id))
+                            and snap.sync_ok else None
+                        ),
+                        "blocks_total": len(snap.blocks) if snap else 0,
+                        "blocks_reviewed": len(snap.blocks) if snap else 0,
                     }
                 )
             return out
 
     def visit_summary(self, visit_id: str) -> dict:
         v = self.visits[visit_id]
+        family = self.state.families[v.family_id]
+        routing = route_visit(v, family, self.matrix)
         assigned = self.assignments.get(visit_id)
         return {
             "id": v.visit_id,
@@ -186,9 +252,20 @@ class LabSession:
                 if v.window_start.date() == v.window_end.date()
                 else f"{v.window_start:%a %-d %b} to {v.window_end:%a %-d %b}"
             ),
-            "duration_hours": v.duration_hours,
             "status": "assigned" if assigned else "needs_assignment",
             "needs_attention": self._needs_attention(visit_id),
+            # Master §6: these belong beside the ranked coordinators, not in a
+            # settings page. The scheduler is about to contact this family.
+            "preferred_contact_method": family.preferred_contact_method,
+            "scheduling_notes": family.scheduling_notes,
+            "is_ndd": family.is_ndd_cross_collab,
+            "drive_time_minutes": round(family.drive_time_minutes),
+            "duration_hours": visit_duration_hours(v, family),
+            "route": routing.route,
+            "automated": routing.automated,
+            "route_reason": routing.reason,
+            "escalate": routing.escalate,
+            "offer_window": [round(x, 2) for x in offer_window(v, family)],
             "assigned_to": assigned["coordinator_name"] if assigned else None,
             "assigned_id": assigned["coordinator_id"] if assigned else None,
             "provisional": bool(assigned and assigned.get("provisional")),
@@ -284,6 +361,20 @@ class LabSession:
                         "soft_flags": list(cand.feasibility.soft_flags),
                         "blocked_by": [VETO_TEXT.get(v, v) for v in vetoes],
                         "assignable": not vetoes,
+                        "reason": reason_string(
+                            cand, family, self.state.coordinators.get(cand.coordinator_id)
+                        ),
+                        "evidence": evidence_state(
+                            cand.coordinator_id, self.state,
+                            cand.feasibility.slot_start or self.now,
+                            cand.feasibility.slot_end or self.now, self.now,
+                        ),
+                        "van_trained": bool(
+                            getattr(self.state.coordinators.get(cand.coordinator_id),
+                                    "van_trained", False)),
+                        "out_of_hours": int(
+                            getattr(self.state.coordinators.get(cand.coordinator_id),
+                                    "out_of_hours_count", 0)),
                     }
                 )
 
