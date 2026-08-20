@@ -234,6 +234,11 @@ window.StaticBoard = (function () {
           })),
           fairness: fairness(), reason_codes: DATA.reasonCodes,
           activity: activity.slice(0, 12),
+          calendar: DATA.calendar || {
+            imports: [], pending_review: [], confirmed_blocks: 0,
+            last_import: null, color_map: { confirmed: false, map: {}, hues_seen: {},
+                                            roster: [], calendar_names: [] },
+          },
         };
       case "/api/visit": {
         const d = visitDetail(params.id);
@@ -250,6 +255,17 @@ window.StaticBoard = (function () {
       case "/api/reset":
         reset();
         return { ok: true };
+      case "/api/calendar/imports":
+        return { imports: [], pending_review: [], confirmed_blocks: 0,
+                 last_import: null, color_map: { confirmed: false, map: {} } };
+      // Reading a PDF needs the engine. On the published copy there is no
+      // backend to read it, so refuse plainly instead of pretending to parse.
+      case "/api/calendar/upload":
+      case "/api/calendar/review":
+      case "/api/calendar/colors":
+        throw new Error(
+          "Calendar uploads run on the lab's own machine. Start the board with " +
+          "`make serve` to read a PDF.");
       default:
         throw new Error(`No route ${base}`);
     }

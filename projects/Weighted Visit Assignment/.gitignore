@@ -17,3 +17,7 @@ data/visitboard*.db*
 # Static publish build (regenerate with `make static`)
 dist-static/
 .netlify/
+
+# Uploaded Outlook calendar prints. These are real calendars: a month export
+# carries event titles for every overlaid person. Never commit them.
+data/uploads/

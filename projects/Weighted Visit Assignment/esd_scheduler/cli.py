@@ -462,6 +462,49 @@ def cmd_ahp(args) -> int:
 # ---------------------------------------------------------------------------
 
 
+def cmd_import_calendar(args) -> int:
+    """Read an Outlook PDF print from the command line, at its honest tier."""
+    from datetime import datetime as _dt
+
+    from .calendar_import import ColorMap, import_pdf
+    from .demo import build_lab
+    from .store import AuditStore
+
+    now = _dt.now()
+    state, _ = build_lab(now.replace(hour=9, minute=0, second=0, microsecond=0))
+    result = import_pdf(args.file, coordinators=state.coordinators, now=now,
+                        year_hint=now.year)
+
+    print(f"file       : {result.source_file}")
+    print(f"view       : {result.view_type}  (tier {result.tier})")
+    print(f"range      : {result.date_range}")
+    print(f"calendars  : {', '.join(result.calendar_names) or 'not printed'}")
+    print(f"entries    : {result.entry_count}")
+    print(f"blocks     : {len(result.blocks)}  ({result.pending_review} awaiting review)")
+    print(f"schedulable: {'yes' if result.schedulable else 'NO - workload signal only'}")
+    if result.hues_seen:
+        print("colours    : " + ", ".join(
+            f"{h}={n}" for h, n in sorted(result.hues_seen.items())))
+    if not ColorMap.load().confirmed:
+        print("\ncolour map is not confirmed, so nothing was attributed to a person.")
+    if result.blockers:
+        print("\nBLOCKERS:")
+        for b in result.blockers:
+            print(f"  - {b}")
+    if result.notes:
+        print("\nNOTES:")
+        for n in result.notes:
+            print(f"  - {n}")
+
+    if args.record:
+        store = AuditStore(args.db)
+        store.record_import(result)
+        store.close()
+        print(f"\nrecorded to {args.db}")
+    return 0
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="esd_scheduler", description=__doc__)
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
@@ -509,6 +552,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("ahp")
     s.add_argument("file")
     s.set_defaults(func=cmd_ahp)
+
+    s = sub.add_parser("import-calendar",
+                       help="read an Outlook calendar PDF print")
+    s.add_argument("file")
+    s.add_argument("--record", action="store_true",
+                   help="also write the import and its blocks to the audit store")
+    s.add_argument("--db", default=os.path.join("data", "visitboard.db"))
+    s.set_defaults(func=cmd_import_calendar)
 
     s = sub.add_parser("verify-graph")
     s.add_argument("--mailbox", action="append",

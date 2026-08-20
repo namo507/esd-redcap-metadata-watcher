@@ -13,6 +13,8 @@ decision is made here.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import mimetypes
 import os
@@ -59,6 +61,66 @@ def post(path: str):
     return wrap
 
 
+@get("/api/calendar/imports")
+def r_calendar_imports(params, body):
+    return 200, SESSION.imports()
+
+
+@get("/api/calendar/colors")
+def r_calendar_colors(params, body):
+    return 200, SESSION.color_map_state()
+
+
+@post("/api/calendar/colors")
+def r_calendar_colors_save(params, body):
+    """Confirm which coordinator owns each calendar colour."""
+    try:
+        return 200, SESSION.save_color_map(
+            body.get("map") or {}, str(body.get("confirmed_by") or "")
+        )
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+@post("/api/calendar/upload")
+def r_calendar_upload(params, body):
+    """Accept a printed Outlook calendar and ingest it at its true tier.
+
+    The PDF arrives base64-encoded inside JSON so the whole board keeps one
+    request format; the handler still verifies the decoded bytes really are a
+    PDF rather than trusting the filename.
+    """
+    raw = body.get("data") or ""
+    if isinstance(raw, str) and "," in raw[:64] and raw[:5] == "data:":
+        raw = raw.split(",", 1)[1]
+    try:
+        blob = base64.b64decode(raw, validate=True)
+    except (ValueError, TypeError, binascii.Error):
+        return 400, {"error": "The upload could not be decoded. Try the file again."}
+    try:
+        return 200, SESSION.upload_calendar_pdf(str(body.get("filename") or ""), blob)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+    except RuntimeError as exc:
+        return 503, {"error": str(exc)}
+
+
+@post("/api/calendar/review")
+def r_calendar_review(params, body):
+    """Confirm or reject one parsed block. Only confirmed blocks become evidence."""
+    block_id = str(body.get("block_id") or "")
+    if not block_id:
+        return 400, {"error": "Which block?"}
+    try:
+        return 200, SESSION.review_import_block(
+            block_id,
+            bool(body.get("confirmed")),
+            str(body.get("reviewer") or "coordinator"),
+        )
+    except KeyError as exc:
+        return 404, {"error": str(exc)}
+
+
 @get("/api/health")
 def r_health(params, body):
     return 200, SESSION.health()
@@ -74,6 +136,7 @@ def r_board(params, body):
         "fairness": SESSION.fairness(),
         "reason_codes": SESSION.reason_codes(),
         "activity": SESSION.activity[:12],
+        "calendar": SESSION.imports(),
     }
 
 

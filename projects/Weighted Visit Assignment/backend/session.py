@@ -16,6 +16,12 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from esd_scheduler import __version__ as ENGINE_VERSION
+from esd_scheduler.calendar_import import (
+    TIER_RULES,
+    ColorMap,
+    import_pdf,
+    suggest_roster_matches,
+)
 from esd_scheduler.calendarsync import MockProvider
 from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
@@ -37,7 +43,11 @@ from esd_scheduler.engine import (
     plan_week,
     score_visit,
 )
+from esd_scheduler.models import BusyBlock
 from esd_scheduler.store import OVERRIDE_REASON_CODES, AuditStore
+
+UPLOAD_DIR = os.path.join("data", "uploads")
+MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 
 # The four criteria, named the way a coordinator would say them out loud.
 # The engine's own names (continuity, burden relief, protocol continuity) are
@@ -119,6 +129,17 @@ def confidence_words(stability: Optional[float]) -> str:
     return "Too close to call"
 
 
+def _loads(raw):
+    import json as _json
+
+    if not raw:
+        return []
+    try:
+        return _json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+
+
 class LabSession:
     """Thread-safe wrapper around one LabState plus its audit store."""
 
@@ -142,6 +163,7 @@ class LabSession:
                 blocks=getattr(self.state, "demo_blocks", {}), clock=lambda: self.now
             )
             self.assignments: Dict[str, dict] = {}
+            self.last_import: Optional[dict] = None
             self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
@@ -152,6 +174,179 @@ class LabSession:
             self.store = AuditStore(self.db_path)
             self.store.record_config(self.cfg)
             self._log("Board reset. Synthetic lab rebuilt from the roster.")
+
+    # -- calendar uploads ----------------------------------------------------
+
+    def color_map_state(self) -> dict:
+        """The hue -> person map, plus what this roster could match it to."""
+        cmap = ColorMap.load()
+        names = sorted({c.name for c in self.state.active_coordinators()})
+        last = self.last_import or {}
+        return {
+            "confirmed": cmap.confirmed,
+            "confirmed_by": cmap.confirmed_by,
+            "confirmed_at": cmap.confirmed_at,
+            "map": cmap.mapping,
+            "hues_seen": last.get("hues_seen", {}),
+            "calendar_names": last.get("calendar_names", []),
+            "suggestions": {
+                label: cid
+                for label, cid in suggest_roster_matches(
+                    last.get("calendar_names", []), self.state.coordinators
+                ).items()
+            },
+            "roster": [
+                {"coordinator_id": c.coordinator_id, "name": c.name}
+                for c in sorted(
+                    self.state.active_coordinators(), key=lambda c: c.coordinator_id
+                )
+            ],
+            "roster_names": names,
+        }
+
+    def save_color_map(self, mapping: Dict[str, str], confirmed_by: str) -> dict:
+        """Confirm the legend a human read off the live Outlook overlay.
+
+        Requiring a name here is not ceremony: this map decides whose workload an
+        entry lands on, and the PDF cannot check it.
+        """
+        known = {c.coordinator_id for c in self.state.active_coordinators()}
+        clean = {
+            str(hue): str(cid)
+            for hue, cid in (mapping or {}).items()
+            if cid and str(cid) in known
+        }
+        if not clean:
+            raise ValueError("No colour was matched to a coordinator on the roster.")
+        if not confirmed_by.strip():
+            raise ValueError("Say who confirmed the colours; the PDF cannot verify them.")
+        with self._lock:
+            cmap = ColorMap(
+                mapping=clean,
+                confirmed=True,
+                confirmed_by=confirmed_by.strip(),
+                confirmed_at=datetime.now().isoformat(timespec="seconds"),
+            )
+            cmap.save()
+            self._log(
+                f"Calendar colours confirmed by {cmap.confirmed_by} "
+                f"({len(clean)} of {len(self.state.coordinators)} coordinators mapped)."
+            )
+        return self.color_map_state()
+
+    def upload_calendar_pdf(self, filename: str, blob: bytes) -> dict:
+        """Ingest an uploaded Outlook print and record it at its honest tier."""
+        if not blob:
+            raise ValueError("The upload was empty.")
+        if len(blob) > MAX_UPLOAD_BYTES:
+            raise ValueError(
+                f"That file is {len(blob) // (1024 * 1024)} MB; the limit is "
+                f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
+            )
+        if not blob.startswith(b"%PDF"):
+            raise ValueError("That is not a PDF. Print the Outlook calendar to PDF first.")
+
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        safe = os.path.basename(filename or "calendar.pdf").replace("\\", "_")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        path = os.path.join(UPLOAD_DIR, f"{stamp}-{safe}")
+        with open(path, "wb") as fh:
+            fh.write(blob)
+
+        with self._lock:
+            result = import_pdf(
+                path,
+                coordinators=self.state.coordinators,
+                now=datetime.now(),
+                year_hint=self.now.year,
+            )
+            self.store.record_import(result)
+            payload = result.to_dict()
+            payload["stored_as"] = os.path.basename(path)
+            self.last_import = payload
+            applied = self._apply_confirmed_blocks()
+            payload["applied_blocks"] = applied
+            self._log(
+                f"Calendar upload {result.source_file}: {result.view_type} view, "
+                f"tier {result.tier}, {result.entry_count} entries, "
+                f"{len(result.blocks)} blocks awaiting review."
+            )
+        return payload
+
+    def _apply_confirmed_blocks(self) -> int:
+        """Push reviewed-and-confirmed blocks into the live snapshots.
+
+        Only confirmed blocks land. An unreviewed parse is not evidence, so it
+        must not narrow anybody's availability while it waits for a human.
+        """
+        rows = [dict(r) for r in self.store.confirmed_blocks()]
+        by_coord: Dict[str, List[BusyBlock]] = {}
+        for row in rows:
+            try:
+                start = datetime.fromisoformat(row["start_ts"])
+                end = datetime.fromisoformat(row["end_ts"])
+            except (TypeError, ValueError):
+                continue
+            by_coord.setdefault(row["coordinator_id"], []).append(
+                BusyBlock(start=start, end=end, status="busy")
+            )
+        applied = 0
+        for cid, blocks in by_coord.items():
+            snap = self.state.calendars.get(cid)
+            if snap is None:
+                continue
+            keep = [b for b in snap.blocks if getattr(b, "source", None) != "pdf_import"]
+            snap.blocks = keep + blocks
+            # Stamp with the board's own clock, not the wall clock. The demo lab
+            # is anchored to the start of the week, so a wall-clock stamp reads
+            # as evidence from the future and the freshness gate goes negative.
+            snap.fetched_at = self.now
+            applied += len(blocks)
+        return applied
+
+    def imports(self) -> dict:
+        """Upload history, plus the blocks still waiting on a human."""
+        rows = [dict(r) for r in self.store.imports(limit=15)]
+        for row in rows:
+            row["blockers"] = _loads(row.get("blockers"))
+            row["notes"] = _loads(row.get("notes"))
+            row["schedulable"] = bool(row.get("schedulable"))
+            row["tier_rule"] = TIER_RULES.get(row.get("tier"), "")
+            row.pop("payload", None)
+        pending = [
+            {
+                "block_id": b["block_id"],
+                "coordinator_id": b["coordinator_id"],
+                "coordinator": getattr(
+                    self.state.coordinators.get(b["coordinator_id"]), "name",
+                    b["coordinator_id"]),
+                "start": b["start_ts"],
+                "end": b["end_ts"],
+                "import_id": b["import_id"],
+            }
+            for b in (dict(r) for r in self.store.import_blocks())
+            if not b["reviewed"]
+        ]
+        confirmed = len(self.store.confirmed_blocks())
+        return {
+            "imports": rows,
+            "pending_review": pending,
+            "confirmed_blocks": confirmed,
+            "last_import": self.last_import,
+            "color_map": self.color_map_state(),
+        }
+
+    def review_import_block(self, block_id: str, confirmed: bool, reviewer: str) -> dict:
+        with self._lock:
+            if not self.store.review_block(block_id, confirmed, reviewer or "coordinator"):
+                raise KeyError(f"No such block: {block_id}")
+            applied = self._apply_confirmed_blocks()
+            self._log(
+                f"Calendar block {'confirmed' if confirmed else 'rejected'} on review."
+            )
+        out = self.imports()
+        out["applied_blocks"] = applied
+        return out
 
     def _log(self, message: str) -> None:
         self.activity.insert(

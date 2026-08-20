@@ -167,6 +167,36 @@ CREATE TABLE IF NOT EXISTS calendar_sync_log (
     events_changed INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS calendar_import (
+    import_id     TEXT PRIMARY KEY,
+    uploaded_at   TEXT NOT NULL,
+    source_file   TEXT NOT NULL,
+    source_hash   TEXT NOT NULL,
+    view_type     TEXT NOT NULL,
+    tier          INTEGER NOT NULL,
+    schedulable   INTEGER NOT NULL,
+    date_range    TEXT,
+    entry_count   INTEGER NOT NULL,
+    block_count   INTEGER NOT NULL,
+    blockers      TEXT,
+    notes         TEXT,
+    payload       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS calendar_import_block (
+    block_id       TEXT PRIMARY KEY,
+    import_id      TEXT NOT NULL,
+    run_id         TEXT NOT NULL,
+    coordinator_id TEXT NOT NULL,
+    start_ts       TEXT NOT NULL,
+    end_ts         TEXT NOT NULL,
+    reviewed       INTEGER NOT NULL DEFAULT 0,
+    confirmed      INTEGER NOT NULL DEFAULT 1,
+    reviewed_by    TEXT,
+    reviewed_at    TEXT,
+    source_hash    TEXT
+);
+
 CREATE TABLE IF NOT EXISTS optimizer_shadow (
     shadow_id        TEXT PRIMARY KEY,
     period_start     TEXT NOT NULL,
@@ -477,6 +507,72 @@ class AuditStore:
         self._commit()
 
     # -- reads ---------------------------------------------------------------
+
+    def record_import(self, result) -> None:
+        """Persist an upload and its blocks. Blocks land unreviewed by design."""
+        import json as _json
+        import uuid as _uuid
+
+        d = result.to_dict()
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO calendar_import (import_id, uploaded_at, "
+                "source_file, source_hash, view_type, tier, schedulable, date_range, "
+                "entry_count, block_count, blockers, notes, payload) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    d["import_id"], d["uploaded_at"], d["source_file"], d["source_hash"],
+                    d["view_type"], d["tier"], 1 if d["schedulable"] else 0,
+                    d["date_range"], d["entry_count"], d["block_count"],
+                    _json.dumps(d["blockers"]), _json.dumps(d["notes"]), _json.dumps(d),
+                ),
+            )
+            for block in result.blocks:
+                self.conn.execute(
+                    "INSERT OR REPLACE INTO calendar_import_block (block_id, import_id, "
+                    "run_id, coordinator_id, start_ts, end_ts, reviewed, confirmed, "
+                    "source_hash) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        _uuid.uuid4().hex[:12], d["import_id"], block.run_id,
+                        block.coordinator_id, block.start.isoformat(),
+                        block.end.isoformat(), 1 if block.reviewed else 0,
+                        1 if block.confirmed else 0, block.source_hash,
+                    ),
+                )
+            self.conn.commit()
+
+    def review_block(self, block_id: str, confirmed: bool, reviewer: str) -> bool:
+        """Record a human decision on one parsed block."""
+        from datetime import datetime as _dt
+
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE calendar_import_block SET reviewed=1, confirmed=?, "
+                "reviewed_by=?, reviewed_at=? WHERE block_id=?",
+                (1 if confirmed else 0, reviewer, _dt.now().isoformat(timespec="seconds"),
+                 block_id),
+            )
+            self.conn.commit()
+            return cur.rowcount > 0
+
+    def imports(self, limit: int = 25) -> List[sqlite3.Row]:
+        return self.query(
+            "SELECT * FROM calendar_import ORDER BY uploaded_at DESC LIMIT ?", (limit,)
+        )
+
+    def import_blocks(self, import_id: Optional[str] = None) -> List[sqlite3.Row]:
+        if import_id:
+            return self.query(
+                "SELECT * FROM calendar_import_block WHERE import_id=? "
+                "ORDER BY coordinator_id, start_ts", (import_id,))
+        return self.query(
+            "SELECT * FROM calendar_import_block ORDER BY start_ts")
+
+    def confirmed_blocks(self) -> List[sqlite3.Row]:
+        """Only reviewed-and-confirmed blocks are evidence."""
+        return self.query(
+            "SELECT * FROM calendar_import_block WHERE reviewed=1 AND confirmed=1 "
+            "ORDER BY coordinator_id, start_ts")
 
     def query(self, sql: str, params: Sequence[Any] = ()) -> List[sqlite3.Row]:
         with self._lock:

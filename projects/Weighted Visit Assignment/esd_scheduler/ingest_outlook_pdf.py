@@ -33,7 +33,7 @@ import os
 import re
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional, Sequence, Tuple
 
 # Outlook's category palette. Saturated = the event is shown solid (busy);
@@ -381,6 +381,250 @@ def _nearest_chip(chips, x, y, x_tol=14.0, y_tol=7.0):
         if d < best_d:
             best, best_d = _COLOR_TO_HUE[hexc], d
     return best
+
+
+# ---------------------------------------------------------------------------
+# View detection and the work-week / day parser
+# ---------------------------------------------------------------------------
+
+WEEKDAY_NAMES = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday",
+                 "Friday", "Saturday")
+HOUR_LABEL = re.compile(r"^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$", re.I)
+
+VIEW_MONTH = "month"
+VIEW_WORK_WEEK = "work_week"
+VIEW_DAY = "day"
+VIEW_UNKNOWN = "unknown"
+
+
+def _find_gutter(spans, grid_left: Optional[float] = None):
+    """Locate the hour column of a time-gridded view, or return None.
+
+    A month grid is full of hour labels too — every event prints its start
+    time — so "there are hour labels" is not the test. A real gutter is a
+    column of labels whose clock time rises strictly with y, spans several
+    hours, and sits left of the day columns. A month grid fails all three:
+    its times repeat down the page as each week restarts the clock.
+    """
+    by_x = {}
+    for s in spans:
+        m = HOUR_LABEL.match(s["text"].strip())
+        if not m:
+            continue
+        hour = int(m.group(1)) % 12
+        if m.group(3).upper() == "PM":
+            hour += 12
+        clock = hour + int(m.group(2) or 0) / 60.0
+        y = (s["bbox"][1] + s["bbox"][3]) / 2
+        by_x.setdefault(round(s["bbox"][0] / 4) * 4, []).append((y, clock))
+
+    best = None
+    for x, points in by_x.items():
+        if len(points) < 5:
+            continue
+        if grid_left is not None and x > grid_left + 4:
+            continue           # inside the grid: these are event start times
+        points.sort()
+        clocks = [c for _, c in points]
+        if any(b <= a for a, b in zip(clocks, clocks[1:])):
+            continue           # repeats or goes backwards: not a clock axis
+        if clocks[-1] - clocks[0] < 4:
+            continue
+        if best is None or len(points) > len(best[1]):
+            best = (x, points)
+    return best
+
+
+def _fit(points):
+    """Least squares y -> clock hour, with the fit quality that earned it."""
+    n = len(points)
+    mean_y = sum(p[0] for p in points) / n
+    mean_h = sum(p[1] for p in points) / n
+    denom = sum((p[0] - mean_y) ** 2 for p in points)
+    if denom == 0:
+        return None
+    slope = sum((p[0] - mean_y) * (p[1] - mean_h) for p in points) / denom
+    intercept = mean_h - slope * mean_y
+    ss_res = sum((h - (slope * y + intercept)) ** 2 for y, h in points)
+    ss_tot = sum((h - mean_h) ** 2 for _, h in points)
+    r2 = 1.0 if ss_tot == 0 else 1 - ss_res / ss_tot
+    return slope, intercept, r2
+
+
+def _page_spans(page):
+    out = []
+    for block in page.get_text("dict")["blocks"]:
+        for line in block.get("lines", []):
+            for span in line["spans"]:
+                if span["text"].strip():
+                    out.append(span)
+    return out
+
+
+def detect_view_type(page) -> str:
+    """Month grid, work-week, or single day.
+
+    The distinction decides what the export is worth. A month grid prints a
+    start time and nothing else, so it can never support a time-level conflict
+    check; a work-week prints a time gutter, so an event's height *is* its
+    duration. Erring permissive here is how a board starts trusting a
+    start-time-only export as if it carried intervals.
+    """
+    spans = _page_spans(page)
+    weekday_headers = [s for s in spans if s["text"].strip() in WEEKDAY_NAMES]
+    grid_left = min((s["bbox"][0] for s in weekday_headers), default=None)
+
+    gutter = _find_gutter(spans, grid_left)
+    if gutter is not None:
+        fit = _fit(gutter[1])
+        if fit and fit[2] >= 0.98:
+            return VIEW_WORK_WEEK if len(weekday_headers) >= 2 else VIEW_DAY
+
+    if len(weekday_headers) == 7:
+        return VIEW_MONTH
+    return VIEW_UNKNOWN
+
+
+def _gutter_scale(spans, grid_left=None):
+    gutter = _find_gutter(spans, grid_left)
+    if gutter is None:
+        return None
+    fit = _fit(gutter[1])
+    if fit is None or fit[2] < 0.98:
+        return None
+    return fit[0], fit[1]
+
+
+def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestResult":
+    """Parse a work-week or day print into real intervals.
+
+    An event box's top and bottom edges are its start and end once the time
+    gutter gives us pixels-to-hours, which is the whole reason this view is
+    worth asking for: it yields the durations a month grid cannot.
+    """
+    import fitz
+
+    doc = fitz.open(path)
+    page = doc[0]
+    result = PdfIngestResult(source_file=os.path.basename(path))
+    result.calendar_view_type = detect_view_type(page)
+
+    spans = _page_spans(page)
+    headers_all = [s for s in spans if s["text"].strip() in WEEKDAY_NAMES]
+    grid_left = min((s["bbox"][0] for s in headers_all), default=None)
+    scale = _gutter_scale(spans, grid_left)
+    if scale is None:
+        result.unresolved.append(
+            "NO TIME GUTTER FOUND: could not map the page to clock hours, so no "
+            "interval can be read. Re-export as Work Week with the time column "
+            "visible.")
+        return result
+    slope, intercept = scale
+
+    # Day columns from the weekday headers, plus their dates if printed.
+    headers = sorted(
+        (s for s in spans if s["text"].strip() in WEEKDAY_NAMES),
+        key=lambda s: s["bbox"][0])
+    if not headers:
+        result.unresolved.append("NO DAY COLUMNS FOUND in a time-gridded view.")
+        return result
+    columns = [s["bbox"][0] for s in headers]
+    col_width = (
+        (columns[-1] - columns[0]) / max(1, len(columns) - 1)
+        if len(columns) > 1 else page.rect.width - columns[0])
+
+    dates = _column_dates(spans, columns, headers, year_hint)
+    result.visible_date_range = (
+        f"{min(dates.values()).isoformat()} to {max(dates.values()).isoformat()}"
+        if dates else "unknown")
+
+    # Event boxes: filled rectangles in a calendar hue, tall enough to be an
+    # event rather than a rule or a header band.
+    for drawing in page.get_drawings():
+        hexc = _hex_of(drawing.get("fill"))
+        if hexc is None or hexc not in _COLOR_TO_HUE:
+            continue
+        r = drawing["rect"]
+        if r.height < 4 or r.width < 8:
+            continue
+        ci = min(range(len(columns)), key=lambda i: abs(columns[i] - r.x0))
+        if not (columns[ci] - 6 <= r.x0 <= columns[ci] + col_width):
+            continue
+        day = dates.get(ci)
+        if day is None:
+            continue
+        start_h = slope * r.y0 + intercept
+        end_h = slope * r.y1 + intercept
+        if end_h <= start_h:
+            continue
+        hue, tone = _COLOR_TO_HUE[hexc]
+        result.entries.append(
+            PdfEntry(
+                day=day.isoformat(),
+                start_time=_hours_to_clock(start_h),
+                end_time=_hours_to_clock(end_h),
+                status_label="tentative" if tone == "pale" else "busy",
+                event_title=None,
+                calendar_color_id=hue,
+                participant=None,
+                confidence_score=0.8,
+                evidence_text=f"{_hours_to_clock(start_h)}-{_hours_to_clock(end_h)}",
+                uncertain=False,
+            )
+        )
+
+    if not result.entries:
+        result.unresolved.append(
+            "NO EVENT BLOCKS DETECTED. If the calendar really is empty this is "
+            "correct; otherwise check the export used a colour theme.")
+    return result
+
+
+def _column_dates(spans, columns, headers, year_hint):
+    """Dates printed under each weekday header, if the export shows them."""
+    out = {}
+    header_y = headers[0]["bbox"][3]
+    for s in spans:
+        if s["bbox"][1] > header_y + 40 or s["bbox"][1] < header_y - 20:
+            continue
+        m = re.match(r"^([A-Z][a-z]{2})?\s*(\d{1,2})$", s["text"].strip())
+        if not m:
+            continue
+        ci = min(range(len(columns)), key=lambda i: abs(columns[i] - s["bbox"][0]))
+        month = MONTHS.get(m.group(1)) if m.group(1) else None
+        if month and year_hint:
+            try:
+                out[ci] = date(year_hint, month, int(m.group(2)))
+            except ValueError:
+                pass
+    if not out and year_hint:
+        # No dates printed: fall back to the current week, which is what an
+        # undated work-week export means in practice.
+        monday = date.today() - timedelta(days=date.today().weekday())
+        for i in range(len(columns)):
+            out[i] = monday + timedelta(days=i)
+    return out
+
+
+def _hours_to_clock(hours: float) -> str:
+    hours = max(0.0, min(23.999, hours))
+    h = int(hours)
+    m = int(round((hours - h) * 60))
+    if m == 60:
+        h, m = h + 1, 0
+    return f"{h:02d}:{m:02d}"
+
+
+def load(path: str, year_hint: Optional[int] = None) -> "PdfIngestResult":
+    """Parse any Outlook PDF print, choosing the right reader for its view."""
+    import fitz
+
+    doc = fitz.open(path)
+    view = detect_view_type(doc[0])
+    doc.close()
+    if view in (VIEW_WORK_WEEK, VIEW_DAY):
+        return extract_work_week(path, year_hint)
+    return extract(path, year_hint)
 
 
 # ---------------------------------------------------------------------------

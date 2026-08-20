@@ -251,10 +251,158 @@ def test_reset_clears_assignments():
            "reset left assignments behind")
 
 
+# --- calendar uploads ------------------------------------------------------
+
+
+def _clear_colours():
+    """Drop any confirmed legend so the unconfirmed path can be tested for real."""
+    path = os.environ["ESD_COLOR_MAP_PATH"]
+    if os.path.exists(path):
+        os.remove(path)
+
+
+def _upload(path, filename=None):
+    import base64 as _b64
+
+    with open(path, "rb") as fh:
+        blob = fh.read()
+    return call("POST", "/api/calendar/upload", {
+        "filename": filename or os.path.basename(path),
+        "data": _b64.b64encode(blob).decode(),
+    })
+
+
+def test_month_upload_is_tier_three_and_never_schedulable():
+    """A month grid has no end times, so it must not be able to book anything."""
+    status, body = _upload(MONTH_PDF)
+    expect(status == 200, f"month upload returned {status}: {body}")
+    expect(body["view_type"] == "month", f"expected month view, got {body['view_type']}")
+    expect(body["tier"] == 3, f"month must be tier 3, got tier {body['tier']}")
+    expect(body["schedulable"] is False, "a month grid must never be schedulable")
+    expect(body["block_count"] == 0, "a month grid must not produce bookable blocks")
+    expect(body["entry_count"] > 0, "month upload parsed nothing at all")
+    expect(any("END TIMES" in b for b in body["blockers"]),
+           "month upload must say plainly that end times are missing")
+
+
+def test_upload_rejects_a_file_that_is_not_a_pdf():
+    import base64 as _b64
+
+    status, body = call("POST", "/api/calendar/upload", {
+        "filename": "notes.pdf",
+        "data": _b64.b64encode(b"this is not a pdf").decode(),
+    })
+    expect(status == 400, f"non-PDF upload returned {status}")
+    expect("PDF" in body.get("error", ""), f"unhelpful error: {body}")
+
+
+def test_unconfirmed_colour_map_attributes_to_nobody():
+    """Without a confirmed legend, a parsed block must not land on a person."""
+    _clear_colours()
+    status, body = _upload(WEEK_PDF)
+    expect(status == 200, f"work-week upload returned {status}: {body}")
+    expect(body["tier"] == 2, f"work week must be tier 2, got {body['tier']}")
+    expect(body["block_count"] == 0,
+           "an unconfirmed colour map must not attribute blocks to anyone")
+    expect(any("COLOUR MAP NOT CONFIRMED" in b for b in body["blockers"]),
+           f"missing the unconfirmed-map blocker: {body['blockers']}")
+
+
+def test_colour_map_needs_a_named_confirmer():
+    status, body = call("POST", "/api/calendar/colors",
+                        {"map": {"navy": "C01"}, "confirmed_by": ""})
+    expect(status == 400, f"anonymous confirmation returned {status}")
+
+
+def test_colour_map_rejects_coordinators_not_on_the_roster():
+    status, body = call("POST", "/api/calendar/colors",
+                        {"map": {"navy": "NOT_A_REAL_ID"}, "confirmed_by": "Coordinator"})
+    expect(status == 400, f"off-roster id returned {status}: {body}")
+
+
+def _confirm_colours():
+    status, body = call("POST", "/api/calendar/colors", {
+        "map": {"navy": "C01", "teal": "C02", "blue": "C03",
+                "orange": "C04", "green": "C05", "yellow": "C06"},
+        "confirmed_by": "Test Coordinator",
+    })
+    expect(status == 200, f"saving the colour map returned {status}: {body}")
+    expect(body["confirmed"] is True, "colour map did not stick")
+    return body
+
+
+def test_work_week_upload_becomes_reviewable_blocks_with_real_intervals():
+    _confirm_colours()
+    _, before = call("GET", "/api/calendar/imports")
+
+    status, body = _upload(WEEK_PDF)
+    expect(status == 200, f"work-week upload returned {status}")
+    expect(body["tier"] == 2 and body["schedulable"] is True,
+           "a timed export must be schedulable")
+    expect(body["block_count"] == 6, f"expected 6 blocks, got {body['block_count']}")
+    expect(body["pending_review"] == 6, "every fresh block must await review")
+
+    # The invariant: uploading alone adds no evidence, whatever was confirmed
+    # by an earlier upload.
+    _, after = call("GET", "/api/calendar/imports")
+    expect(after["confirmed_blocks"] == before["confirmed_blocks"],
+           "an upload must not create evidence before anyone has reviewed it")
+
+
+def test_only_confirmed_blocks_become_evidence():
+    # Self-contained: tests run in name order, so this cannot lean on another
+    # test having uploaded first.
+    _confirm_colours()
+    _upload(WEEK_PDF)
+
+    _, imports = call("GET", "/api/calendar/imports")
+    pending = imports["pending_review"]
+    expect(pending, "no pending blocks to review")
+    before = imports["confirmed_blocks"]
+
+    status, body = call("POST", "/api/calendar/review",
+                        {"block_id": pending[0]["block_id"], "confirmed": True,
+                         "reviewer": "Test Coordinator"})
+    expect(status == 200, f"review returned {status}: {body}")
+    expect(body["confirmed_blocks"] == before + 1,
+           "confirming a block did not add evidence")
+
+    status, body = call("POST", "/api/calendar/review",
+                        {"block_id": pending[1]["block_id"], "confirmed": False,
+                         "reviewer": "Test Coordinator"})
+    expect(status == 200, f"reject returned {status}")
+    expect(body["confirmed_blocks"] == before + 1,
+           "a rejected block must never count as evidence")
+
+
+def test_review_of_an_unknown_block_is_404():
+    status, _ = call("POST", "/api/calendar/review",
+                     {"block_id": "nope", "confirmed": True})
+    expect(status == 404, f"unknown block returned {status}")
+
+
+def test_board_carries_calendar_state_in_one_round_trip():
+    _, board = call("GET", "/api/board")
+    expect("calendar" in board, "board must expose calendar state")
+    expect("color_map" in board["calendar"], "board must expose the colour map state")
+
+
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     tmp = tempfile.mkdtemp(prefix="visitboard-test-")
+    # Never let a test rewrite the real confirmed legend in config/.
+    os.environ["ESD_COLOR_MAP_PATH"] = os.path.join(tmp, "calendar-colors.json")
+
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.join(ROOT_DIR, "tests", "fixtures"))
+    from make_work_week_pdf import build as build_week_pdf  # noqa: E402
+    from make_month_pdf import build as build_month_pdf  # noqa: E402
+
+    # Both fixtures are synthetic. A real month export prints event titles for
+    # every overlaid calendar, so one can never be committed here.
+    WEEK_PDF = build_week_pdf(os.path.join(tmp, "work-week.pdf"))
+    MONTH_PDF = build_month_pdf(os.path.join(tmp, "month.pdf"))
     httpd = srv.build_server(port=0, db_path=os.path.join(tmp, "test.db"))
     BASE = f"http://127.0.0.1:{httpd.server_address[1]}"
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)

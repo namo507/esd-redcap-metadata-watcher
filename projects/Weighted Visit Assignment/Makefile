@@ -1,6 +1,7 @@
 PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
+        import-calendar \
         serve serve-quiet static publish \
         install-automation uninstall-automation deck clean
 
@@ -15,6 +16,7 @@ help:
 	@echo "  make publish              build it and deploy to Netlify"
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
+	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
 	@echo "  make drift                weekly drift metrics to stdout"
 	@echo "  make debrief              write reports/debrief-<week>.md and .html"
 	@echo "  make calibrate            recalibrate the review band from the audit log"
@@ -55,6 +57,10 @@ week:
 
 sync:
 	$(PY) -m esd_scheduler sync
+
+import-calendar:
+	@test -n "$(FILE)" || (echo "usage: make import-calendar FILE=path/to/calendar.pdf" && exit 1)
+	$(PY) -m esd_scheduler import-calendar "$(FILE)" --record
 
 drift:
 	$(PY) -m esd_scheduler drift

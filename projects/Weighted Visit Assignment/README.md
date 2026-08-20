@@ -115,11 +115,44 @@ simplex, per-decision selection stability, tie-breaks logged with their seed.
 | `python -m esd_scheduler score V001` | explain one visit's ranking, line by line |
 | `python -m esd_scheduler plan-week` | greedy vs optimiser, with measured regret |
 | `python -m esd_scheduler sync` | pull calendars, record the SLO |
+| `python -m esd_scheduler import-calendar cal.pdf` | read an Outlook PDF print (`--record` to log it) |
 | `python -m esd_scheduler drift` | weekly drift metrics |
 | `python -m esd_scheduler debrief` | write the weekly debrief |
 | `python -m esd_scheduler calibrate --write` | recalibrate the review band from the log |
 | `python -m esd_scheduler sensitivity` | OAT, criticality, redundancy, revealed preference |
 | `python -m esd_scheduler ahp judgments.json` | derive weights from pairwise comparisons |
+
+## Uploading an Outlook calendar
+
+Print the shared Outlook calendar to PDF and drop it on **Sync calendars** in the
+board, or run `make import-calendar FILE=cal.pdf`. What the upload is worth
+depends entirely on which view was printed, and the board will not pretend
+otherwise.
+
+| Printed view | Tier | What it yields | Can it decide? |
+|---|---|---|---|
+| Work Week / Day | 2 | real start **and end** times | yes, once each block is confirmed |
+| Month | 3 | day-level workload only | never confirms and never vetoes |
+
+**Print Work Week.** A month grid prints a start time and no end time, so it
+contains no intervals to schedule against; worse, each day cell silently stops at
+about seven rows with no "+N more" marker, and it is the afternoons that get cut.
+The board still reads a month export — it is a fair signal of how loaded a day
+looks — but it will not let that signal claim anybody is free.
+
+Two things gate an upload before it can affect anyone:
+
+1. **The colour legend.** Outlook stacks every shared calendar on one page and
+   distinguishes them only by colour, and the print carries no legend. Match each
+   colour to a person once, under *Match colours to people*; until that is
+   confirmed, entries are parsed and counted but attributed to nobody. A guessed
+   attribution is worse than none, because it moves the wrong person's workload.
+2. **Human review.** Every block read off a PDF arrives unconfirmed, and an
+   unconfirmed block is evidence of *nothing* — it will not block an assignment.
+   Confirm or reject each one under *Confirm what was read*.
+
+Uploaded PDFs are written to `data/uploads/`, which is gitignored: a month export
+carries event titles for everyone on the page.
 
 ## Status
 

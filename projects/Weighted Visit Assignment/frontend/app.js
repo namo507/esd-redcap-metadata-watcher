@@ -7,7 +7,7 @@
 "use strict";
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
-            section: "week", assignments: {} };
+            section: "week", assignments: {}, lastImport: null };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -198,7 +198,7 @@ const SECTIONS = {
   week:     ["The week", "Plan the week.", "Every visit on the board, on the day it falls. Colour tells you what still needs a decision."],
   assign:   ["Next visit assignment", "Assign a visit.", "Pick a visit. The board checks every calendar, rules out who cannot go, and explains who it would send."],
   workload: ["Fair shares", "How the work is spread.", "Visits, hours, out-of-hours duty and van trips across the team."],
-  sync:     ["Evidence", "Sync calendars.", "One coordinator at a time. Nothing counts until a human has confirmed it."],
+  sync:     ["Evidence", "Sync calendars.", "Upload the Outlook print. Nothing counts until a human has confirmed it."],
   data:     ["Records", "Data and exports.", "Take the audit trail with you, or bring the roster in."],
 };
 
@@ -497,8 +497,22 @@ function drawEquity() {
     </tr>`).join("")}</tbody>`;
 }
 
+const TIER_WORD = {
+  1: "Live Outlook feed",
+  2: "Timed export",
+  3: "Month grid",
+};
+
 function drawSync() {
-  const h = S.board.health;
+  drawSyncRoster();
+  drawUpload();
+  drawImportResult();
+  drawColorMatch();
+  drawReviewQueue();
+  drawImportHistory();
+}
+
+function drawSyncRoster() {
   $("syncgrid").innerHTML = S.board.roster.map((r) => {
     const mins = r.evidence_age_minutes;
     const state = mins == null ? "none" : mins <= 15 ? "fresh" : mins <= 60 ? "stale" : "old";
@@ -516,21 +530,262 @@ function drawSync() {
       <div class="syncmeta">${r.blocks_reviewed || 0} of ${r.blocks_total || 0} detected blocks confirmed</div>
     </div>`;
   }).join("");
+  $("sync-capture").innerHTML = "";
+}
 
-  $("sync-capture").innerHTML = STATIC
-    ? `<div class="notice notice-warn" style="margin-top:1rem"><span>&#9432;</span><span>
-        Capturing a calendar runs an image pipeline on the machine hosting the
-        board, so it is available when you run <code>make serve</code> locally,
-        not on this public copy. What you see above is the evidence state the
-        gates actually read.</span></div>`
-    : `<div class="assign-row" style="margin-top:1rem">
-         <label class="btn btn-ghost" for="sync-file">Choose a calendar image&hellip;</label>
-         <input id="sync-file" type="file" accept="image/*" hidden>
-         <select class="select" id="sync-who" aria-label="Coordinator">
-           ${S.board.roster.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("")}
-         </select>
-         <span class="note">Day or work-week view only.</span>
-       </div>`;
+function drawUpload() {
+  const box = $("sync-upload");
+  if (STATIC) {
+    box.innerHTML = `<div class="notice notice-warn"><span>&#9432;</span><span>
+      Uploading runs the PDF reader on the machine hosting the board, so it works
+      when you run <code>make serve</code> in the lab, not on this public copy.
+      Everything below shows the evidence state the gates actually read.</span></div>`;
+    return;
+  }
+  box.innerHTML = `
+    <div class="uploadzone" id="dropzone">
+      <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden>
+      <div class="uploadzone-inner">
+        <div class="uploadzone-title">Drop the Outlook PDF here</div>
+        <div class="uploadzone-sub">or</div>
+        <label class="btn btn-primary" for="pdf-file">Choose a PDF&hellip;</label>
+        <div class="uploadzone-hint">Work Week or Day view gives schedulable times. Month view gives workload only.</div>
+      </div>
+    </div>`;
+
+  const input = $("pdf-file");
+  const zone = $("dropzone");
+  input.addEventListener("change", () => {
+    if (input.files && input.files[0]) uploadPdf(input.files[0]);
+  });
+  ["dragenter", "dragover"].forEach((evt) =>
+    zone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      zone.classList.add("is-over");
+    }));
+  ["dragleave", "drop"].forEach((evt) =>
+    zone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      zone.classList.remove("is-over");
+    }));
+  zone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) uploadPdf(file);
+  });
+}
+
+function readAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("The file could not be read."));
+    reader.onload = () => {
+      const out = String(reader.result || "");
+      resolve(out.includes(",") ? out.split(",")[1] : out);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadPdf(file) {
+  const zone = $("dropzone");
+  if (zone) zone.classList.add("is-busy");
+  $("sync-result").innerHTML =
+    `<div class="notice"><span>&#8987;</span><span>Reading ${esc(file.name)}&hellip;</span></div>`;
+  try {
+    const data = await readAsBase64(file);
+    const out = await api("/api/calendar/upload", {
+      method: "POST",
+      body: JSON.stringify({ filename: file.name, data }),
+    });
+    S.lastImport = out;
+    await refresh();
+    setSection("sync");
+    toast(out.schedulable
+      ? `Read ${out.block_count} blocks. Confirm them below.`
+      : `Read ${out.entry_count} entries as a workload signal only.`,
+      !out.schedulable);
+  } catch (err) {
+    $("sync-result").innerHTML =
+      `<div class="notice notice-alert"><span>&#9888;</span><span>${esc(err.message)}</span></div>`;
+    toast(err.message, true);
+  } finally {
+    if (zone) zone.classList.remove("is-busy");
+  }
+}
+
+function drawImportResult() {
+  const box = $("sync-result");
+  if (!box) return;
+  const imp = S.lastImport || (S.board.calendar && S.board.calendar.last_import);
+  if (!imp) { box.innerHTML = ""; return; }
+
+  const tier = imp.tier;
+  const cls = tier === 2 ? "ok" : "warn";
+  box.innerHTML = `
+    <div class="importcard is-${cls}">
+      <div class="importhead">
+        <div>
+          <div class="import-file">${esc(imp.source_file)}</div>
+          <div class="cand-sub">${esc(imp.date_range || "date range not printed")}</div>
+        </div>
+        <span class="tierbadge is-t${tier}">${esc(TIER_WORD[tier] || "Unknown")}</span>
+      </div>
+      <div class="importstats">
+        <div><b>${imp.entry_count}</b><span>entries read</span></div>
+        <div><b>${imp.block_count}</b><span>bookable blocks</span></div>
+        <div><b>${imp.pending_review}</b><span>awaiting review</span></div>
+      </div>
+      <div class="importverdict">${tier === 2
+        ? "This export has real start and end times, so once you confirm the blocks below the board will schedule around them."
+        : "This is a month grid. It shows how loaded each day looks, but it cannot say when anyone is free. <b>Re-print the same dates as Work Week</b> to make it schedulable."}</div>
+      ${(imp.blockers || []).length ? `<ul class="importlist">${
+        imp.blockers.map((b) => `<li class="is-blocker">${esc(b)}</li>`).join("")
+      }</ul>` : ""}
+      ${(imp.notes || []).length ? `<ul class="importlist">${
+        imp.notes.map((n) => `<li>${esc(n)}</li>`).join("")
+      }</ul>` : ""}
+    </div>`;
+}
+
+function drawColorMatch() {
+  const cal = S.board.calendar || {};
+  const cmap = cal.color_map || {};
+  const hues = Object.keys(cmap.hues_seen || {}).filter((h) => h !== "unknown");
+  const card = $("sync-colors-card");
+  if (STATIC || !hues.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const roster = cmap.roster || [];
+  const rows = hues.map((hue) => {
+    const chosen = (cmap.map || {})[hue] || "";
+    return `<div class="colorrow">
+      <span class="swatch swatch-${esc(hue)}" title="${esc(hue)}"></span>
+      <div class="colorname">${esc(hue)}<span class="cand-sub">${cmap.hues_seen[hue]} ${cmap.hues_seen[hue] === 1 ? "entry" : "entries"}</span></div>
+      <select class="select colorpick" data-hue="${esc(hue)}">
+        <option value="">Not matched yet</option>
+        ${roster.map((r) => `<option value="${esc(r.coordinator_id)}"${
+          r.coordinator_id === chosen ? " selected" : ""
+        }>${esc(r.name)}</option>`).join("")}
+      </select>
+    </div>`;
+  }).join("");
+
+  $("sync-colors").innerHTML = `
+    ${cmap.confirmed ? `<div class="notice"><span>&#10003;</span><span>
+      Confirmed by ${esc(cmap.confirmed_by || "someone")}${
+        cmap.confirmed_at ? " on " + esc(String(cmap.confirmed_at).slice(0, 10)) : ""
+      }. Change it below if the colours move.</span></div>`
+      : `<div class="notice notice-warn"><span>&#9888;</span><span>
+      Not confirmed yet, so no upload is attributed to anyone.</span></div>`}
+    <div class="colorlist">${rows}</div>
+    <div class="assign-row" style="margin-top:1rem">
+      <input class="select" id="color-by" placeholder="Your name" style="min-width:16ch"
+             value="${esc(cmap.confirmed_by || "")}">
+      <button class="btn btn-primary" id="color-save" type="button">Confirm colours</button>
+      <span class="note">The PDF cannot check this, so it is recorded against your name.</span>
+    </div>`;
+
+  $("color-save").addEventListener("click", saveColors);
+}
+
+async function saveColors() {
+  const map = {};
+  document.querySelectorAll(".colorpick").forEach((el) => {
+    if (el.value) map[el.dataset.hue] = el.value;
+  });
+  const by = ($("color-by").value || "").trim();
+  try {
+    await api("/api/calendar/colors", {
+      method: "POST",
+      body: JSON.stringify({ map, confirmed_by: by }),
+    });
+    await refresh();
+    setSection("sync");
+    toast("Colours confirmed. Upload the PDF again to attribute it.");
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function drawReviewQueue() {
+  const cal = S.board.calendar || {};
+  const pending = cal.pending_review || [];
+  const card = $("sync-review-card");
+  if (STATIC || !pending.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  $("sync-review").innerHTML = `
+    <div class="reviewlist">${pending.slice(0, 40).map((b) => `
+      <div class="reviewrow" data-block="${esc(b.block_id)}">
+        <div>
+          <div class="cand-name">${esc(b.coordinator)}</div>
+          <div class="cand-sub">${esc(prettyBlock(b.start, b.end))}</div>
+        </div>
+        <div class="reviewacts">
+          <button class="btn btn-ghost" data-act="reject" type="button">Not real</button>
+          <button class="btn btn-primary" data-act="confirm" type="button">Confirm</button>
+        </div>
+      </div>`).join("")}</div>
+    ${pending.length > 40 ? `<p class="note">${pending.length - 40} more waiting.</p>` : ""}`;
+
+  document.querySelectorAll(".reviewrow .btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".reviewrow");
+      reviewBlock(row.dataset.block, btn.dataset.act === "confirm");
+    });
+  });
+}
+
+function prettyBlock(startIso, endIso) {
+  try {
+    const a = new Date(startIso);
+    const b = new Date(endIso);
+    const day = a.toLocaleDateString(undefined,
+      { weekday: "short", month: "short", day: "numeric" });
+    const fmt = (d) => d.toLocaleTimeString(undefined,
+      { hour: "numeric", minute: "2-digit" });
+    return `${day}, ${fmt(a)} – ${fmt(b)}`;
+  } catch (e) {
+    return `${startIso} – ${endIso}`;
+  }
+}
+
+async function reviewBlock(blockId, confirmed) {
+  try {
+    await api("/api/calendar/review", {
+      method: "POST",
+      body: JSON.stringify({
+        block_id: blockId,
+        confirmed,
+        reviewer: (($("color-by") || {}).value || "coordinator").trim(),
+      }),
+    });
+    await refresh();
+    setSection("sync");
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+function drawImportHistory() {
+  const cal = S.board.calendar || {};
+  const rows = cal.imports || [];
+  const card = $("sync-history-card");
+  if (!rows.length) { card.hidden = true; return; }
+  card.hidden = false;
+  $("sync-history").innerHTML = `
+    <div class="tablewrap"><table class="tbl">
+      <thead><tr><th>Uploaded</th><th>File</th><th>View</th>
+      <th>Entries</th><th>Blocks</th><th>Can schedule</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td>${esc(String(r.uploaded_at || "").replace("T", " ").slice(0, 16))}</td>
+        <td>${esc(r.source_file)}</td>
+        <td>${esc(TIER_WORD[r.tier] || r.view_type)}</td>
+        <td>${r.entry_count}</td>
+        <td>${r.block_count}</td>
+        <td>${r.schedulable ? "Yes" : "No — workload only"}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
 }
 
 function csv(rows) {
