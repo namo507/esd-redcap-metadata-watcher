@@ -1,0 +1,336 @@
+
+# ESD Visitboard — Unified Prototype Implementation Prompt
+## Single, Manageable Backend + Frontend Build Spec (v1 Prototype)
+
+**Purpose of this document:** everything discussed so far — the sandbox feedback transcript, the Tier 1/2/2.5/3 calendar-evidence doctrine, and the deep architecture/CV research report — gets distilled here into **one buildable, low-complexity prototype spec**. The goal is not to implement every mechanism described in the research report at once. It's to ship a small, coherent system that a single developer can maintain, that already encodes the lab's real constraints correctly, and that has clean seams to grow into the fuller Graph-API/CSP system later without a rewrite.
+
+This is written as a direct engineering prompt. Copy sections into your issue tracker or hand them to a code-generation agent as-is.
+
+---
+
+## 1. Design principle: one small backend, one small frontend, one obvious data flow
+
+Everything reviewed so far (the tiering doctrine, the OpenCV pipeline, the CSP/scoring engine, the DB schema) is **correct in substance** but was scoped for a mature, multi-module system (`esd_scheduler/` with `feasibility.py`, `evidence.py`, `scoring.py`, `drift.py`, `store.py`, `calendarsync.py`, `cli.py`, plus a computer-vision microservice). That's the right end state. It is **not** the right v1 prototype, because too many moving modules is exactly what makes a solo-maintained lab tool fall over.
+
+Collapse it into this shape instead:
+
+```
+esd_scheduler/
+├── app.py                 # single FastAPI app: routes + startup wiring
+├── models.py               # SQLAlchemy models (one file, all tables)
+├── db.py                   # engine/session setup, SQLite for prototype
+├── constraints.py          # hard-constraint filters (Section 3 of the research report)
+├── scoring.py               # soft-constraint cost function (Section 3)
+├── vision.py                # OpenCV grid + saturation pipeline (Section 4)
+├── seed_data.py             # one-time loader: staff, assessments, reliability matrix
+└── static/
+    ├── index.html           # existing Netlify dashboard, extended
+    ├── sync-review.html      # new: calendar-sync review screen
+    └── app.js
+```
+
+That's it — **six Python files and a static folder.** No microservice split, no `drift.py`/`ranking.py`/`report.py` yet, no CLI tool, no separate ingestion service for the PDF path. Everything from the two prior deep-dive docs is either folded into one of these six files or explicitly deferred to §7 (Roadmap) rather than built now.
+
+**Why this collapse is safe:** the core insight that survives from the tiering doctrine — a Layer-1 feasibility check must be able to say "I don't know" instead of guessing — doesn't require four separate modules. It requires exactly one function, `constraints.is_feasible(candidate, evidence)`, that returns `feasible | infeasible | insufficient_evidence`, and one rule about which evidence sources are allowed to return anything other than `insufficient_evidence`. That fits in `constraints.py` at prototype scale.
+
+---
+
+## 2. Stack choice (optimized for "easy to manage and maintain," not for scale)
+
+| Layer | Choice | Why |
+|---|---|---|
+| Backend framework | **FastAPI** (Python) | Async-friendly for the sync-loop, automatic OpenAPI docs for free, and it's the same language as the OpenCV pipeline — no cross-language service boundary to maintain. |
+| Database | **SQLite** via SQLAlchemy | Zero ops. A single `.db` file you can back up by copying it. Upgrading to Postgres later is a one-line connection-string change because SQLAlchemy is already the abstraction layer. |
+| Computer vision | **OpenCV (`opencv-python-headless`) + NumPy**, in-process | No separate microservice for the prototype — call `vision.py` functions directly from the FastAPI route. A network hop between "upload calendar image" and "process it" buys you nothing at this scale and doubles your deployment surface. |
+| Frontend | **Plain HTML/JS on top of your existing Netlify site**, calling the FastAPI backend over CORS-enabled REST | You already have a working, "beautiful" frontend per your own note — don't rebuild it. Add two new pieces: the "Sync Calendars" button/panel and the block-review screen. |
+| Hosting | Backend on a small always-on box or a free-tier Python host (Render/Fly.io/Railway); frontend stays on Netlify as-is | Keeps the thing you already shipped untouched; the new backend is additive. |
+
+This directly answers "easy to manage and maintain": one language end-to-end (Python + vanilla JS), one file per concern, one database file, no message queue, no microservices, no OCR unless a fallback path is actually triggered.
+
+---
+
+## 3. Database schema — the minimum viable version of the research report's schema
+
+The research report's schema is correct; trim it to only what the prototype's three screens (visit list → sync calendars → ranked assignment) actually touch. Everything else (Communication_Logs escalation state machine, van/vehicle optimization, out-of-hours tally, skill-scarcity index) is **real and important, but deferred to §7 P1/P2** — build the skeleton columns now so migration later is additive, not a rewrite.
+
+```python
+# models.py — SQLAlchemy, one file
+
+class Staff(Base):
+    __tablename__ = "staff"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    role = Column(String)                     # Clinician | Tech | GradStudent
+    van_trained = Column(Boolean, default=False)
+    in_lab_day = Column(Integer, nullable=True)   # 0=Mon ... 4=Fri, forbidden day for off-site
+    out_of_hours_count = Column(Integer, default=0)   # deferred use, keep the column now
+
+class Assessment(Base):
+    __tablename__ = "assessment"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)     # ADOS, Mullen, CSBS, Bayley, ...
+
+class StaffAssessment(Base):
+    __tablename__ = "staff_assessment"
+    staff_id = Column(Integer, ForeignKey("staff.id"), primary_key=True)
+    assessment_id = Column(Integer, ForeignKey("assessment.id"), primary_key=True)
+    status = Column(String)                   # RELIABLE | IN_TRAINING
+
+class Participant(Base):
+    __tablename__ = "participant"
+    id = Column(Integer, primary_key=True)
+    study = Column(String)                    # NANO | IPSA | Sibling
+    dob = Column(Date)
+    due_date = Column(Date, nullable=True)    # for PT adjustment
+    preferred_contact_method = Column(String) # Text | Email | Call  <-- the open item from the meeting
+    van_inaccessible = Column(Boolean, default=False)
+
+class Visit(Base):
+    __tablename__ = "visit"
+    id = Column(Integer, primary_key=True)
+    participant_id = Column(Integer, ForeignKey("participant.id"))
+    visit_month = Column(Integer)             # 1,2,3,6,9,12,24,36
+    ideal_date = Column(Date)
+    status = Column(String)                   # FUTURE | IN_PROGRESS | SCHEDULED | COMPLETED | RESCHEDULED | SKIPPED
+    assigned_staff_ids = Column(String, nullable=True)  # simple CSV of staff.id for the prototype
+
+class CalendarSyncRun(Base):
+    __tablename__ = "calendar_sync_run"
+    id = Column(Integer, primary_key=True)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime, nullable=True)
+
+class CalendarBlock(Base):
+    __tablename__ = "calendar_block"
+    id = Column(Integer, primary_key=True)
+    sync_run_id = Column(Integer, ForeignKey("calendar_sync_run.id"))
+    staff_id = Column(Integer, ForeignKey("staff.id"))
+    day = Column(Date)
+    start_time = Column(Time)
+    end_time = Column(Time)
+    status = Column(String)                   # busy | free | unknown
+    confidence = Column(Float)
+    reviewed = Column(Boolean, default=False)  # did a human confirm this block?
+    source_image_hash = Column(String, nullable=True)
+```
+
+Two deliberate simplifications vs. the fuller schema in the research doc, both reversible later:
+
+- `assigned_staff_ids` as a CSV string instead of a join table — fine at this volume (a handful of coordinators, dozens of visits/month), and trivially normalized into a real join table once you actually need to query "all visits assigned to Sanjana" efficiently.
+- No separate `Communication_Logs` table yet — `preferred_contact_method` lives directly on `Participant` for now, matching the meeting's ask to "confirm current family communication method," without standing up the full escalation state machine from the research report until §7 P1.
+
+---
+
+## 4. Backend logic — three routes, in order of build priority
+
+### 4.1 `POST /api/sync-calendars` (build first — this is the feedback's centerpiece)
+
+```python
+# app.py (excerpt)
+
+@app.post("/api/sync-calendars")
+async def sync_calendars(images: dict[str, UploadFile]):
+    """
+    images: { "sanjana": <file>, "lauren": <file>, ... }
+    One image per coordinator — never a combined multi-person screenshot.
+    """
+    run = CalendarSyncRun(started_at=datetime.utcnow())
+    db.add(run); db.commit()
+
+    results = {}
+    for staff_name, image_file in images.items():
+        staff = get_staff_by_name(staff_name)
+        raw = await image_file.read()
+        blocks = vision.extract_blocks(raw)          # see 4.3 / vision.py
+        for b in blocks:
+            db.add(CalendarBlock(
+                sync_run_id=run.id, staff_id=staff.id,
+                day=b.day, start_time=b.start, end_time=b.end,
+                status=b.status, confidence=b.confidence,
+                reviewed=False, source_image_hash=hashlib.sha256(raw).hexdigest(),
+            ))
+        results[staff_name] = {"detected": len(blocks), "run_id": run.id}
+    db.commit()
+    run.completed_at = datetime.utcnow(); db.commit()
+    return {"run_id": run.id, "per_coordinator": results}
+```
+
+This is a **synchronous loop over uploaded images**, matching the meeting's description exactly ("for each coordinator, print/capture the image... loop"). No background job queue, no websockets — for six coordinators this completes in well under a second of CV time plus upload time, so a simple request/response is genuinely sufficient. Add a progress indicator on the frontend using simple incremental fetch calls per coordinator if the six-image upload feels slow in practice; don't build streaming infrastructure preemptively.
+
+### 4.2 `GET /api/sync-runs/{run_id}/review` — the review screen's data source (build second)
+
+Returns every `CalendarBlock` for that run, unreviewed first, so the frontend can render the confirm/reject overlay described in the prior discussion.
+
+### 4.3 `vision.py` — the block-detection pipeline (build alongside 4.1)
+
+This is a direct, simplified translation of the research report's OpenCV pipeline (Section on Computer Vision Pipeline). Trim its scope to the single most important rule from your own meeting notes: **presence/absence of a colored block is the base signal; color/pattern classification is a fallback, and OCR is a last resort behind a config flag, off by default.**
+
+```python
+# vision.py
+
+import cv2, numpy as np
+from dataclasses import dataclass
+from datetime import date, time
+
+@dataclass
+class DetectedBlock:
+    day: date
+    start: time
+    end: time
+    status: str        # "busy" | "unknown"
+    confidence: float
+
+def extract_blocks(image_bytes: bytes, day_anchor: date,
+                    calendar_start_hour: int = 8, calendar_end_hour: int = 18) -> list[DetectedBlock]:
+    img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, binarized = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+
+    h, w = binarized.shape
+    v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, h // 40))
+    h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (w // 40, 1))
+    v_lines = cv2.dilate(cv2.erode(binarized, v_kernel), v_kernel)
+    h_lines = cv2.dilate(cv2.erode(binarized, h_kernel), h_kernel)
+    grid = cv2.addWeighted(v_lines, 0.5, h_lines, 0.5, 0.0)
+
+    contours, _ = cv2.findContours(grid, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    boxes = sorted((cv2.boundingRect(c) for c in contours), key=lambda b: (b[0], b[1]))
+
+    blocks = []
+    total_minutes = (calendar_end_hour - calendar_start_hour) * 60
+    for (x, y, bw, bh) in boxes:
+        if bw < 5 or bh < 5:            # skip degenerate contours
+            continue
+        roi = img[y:y+bh, x:x+bw]
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        mean_saturation = float(np.mean(hsv[:, :, 1]))
+
+        frac_top = y / h
+        minute_offset = int(frac_top * total_minutes)
+        start = _minutes_to_time(calendar_start_hour * 60 + minute_offset)
+        end = _minutes_to_time(calendar_start_hour * 60 + minute_offset + 30)
+
+        if mean_saturation > 40:       # tune per real capture; start conservative
+            blocks.append(DetectedBlock(day=day_anchor, start=start, end=end,
+                                         status="busy", confidence=min(mean_saturation / 100, 0.95)))
+        # low-saturation cells are simply not emitted — absence IS the free signal,
+        # matching "only busy ever shows up" from the meeting. No "free" rows are written.
+    return blocks
+
+def _minutes_to_time(total_minutes: int) -> time:
+    return time(hour=total_minutes // 60, minute=total_minutes % 60)
+```
+
+Two things kept deliberately out of this v1 function, on purpose:
+- **No color-to-status classification (busy vs. tentative vs. free-marked) yet.** The meeting flagged this as a real edge case ("if people mark themselves busy versus free we may need... slightly more advanced processing"), but also correctly identified it as unnecessary complexity for a first pass, since most Outlook setups only ever render "Busy." Add a `classify_status_by_color(roi, staff_calendar_profile)` function in `vision.py` only once you've confirmed at least one real coordinator's calendar needs it — gate it behind a per-staff config dict, not a global switch.
+- **No OCR at all**, anywhere in this file. If you hit a real case where color/pattern truly can't disambiguate, add a narrowly-scoped `ocr_fallback.py` later rather than importing `pytesseract` into the main pipeline — keep the "no OCR needed" property visible in the file structure itself, so nobody accidentally makes OCR load-bearing.
+
+### 4.4 `constraints.py` + `scoring.py` — ranked coordinator output (build third)
+
+This is where the meeting's literal requested output — **"ranked coordinator assignments for specific visit windows"** — gets produced. Implement the research report's hard-filter list and soft cost function, but only the pieces the current roster/data actually needs for the prototype:
+
+```python
+# constraints.py
+
+def eligible_staff(visit: Visit, staff_pool: list[Staff], required_assessments: list[str]) -> list[Staff]:
+    out = []
+    for s in staff_pool:
+        reliable = {sa.assessment.name for sa in s.staff_assessments if sa.status == "RELIABLE"}
+        if not set(required_assessments).issubset(reliable):
+            continue
+        if visit.ideal_date.weekday() == s.in_lab_day:
+            continue
+        if visit.ideal_date.weekday() == 4:   # Friday prohibition
+            continue
+        out.append(s)
+    return out
+
+def has_evidence_conflict(staff: Staff, window_start, window_end, blocks: list[CalendarBlock]) -> bool | None:
+    """Returns True (conflict), False (clear), or None (insufficient evidence -> never guess)."""
+    relevant = [b for b in blocks if b.staff_id == staff.id and b.day == window_start.date()]
+    if not relevant:
+        return None   # no synced evidence for this coordinator/day — do not assume free
+    for b in relevant:
+        if b.status == "busy" and _overlaps(window_start, window_end, b.start_time, b.end_time):
+            return True
+    return False
+```
+
+```python
+# scoring.py — trimmed cost function; skill-scarcity and van-optimization deferred to §7
+
+def score_pair(clinician: Staff, tech: Staff, visit: Visit) -> tuple[float, str]:
+    score = 0.0
+    reasons = []
+    if clinician.out_of_hours_count > AVERAGE_OOH:
+        score += 2.0; reasons.append("higher recent out-of-hours load")
+    if not clinician.van_trained and requires_van(visit):
+        score += 5.0; reasons.append("not van-trained but van required")
+    return score, "; ".join(reasons) or "no penalties"
+
+def rank_candidates(visit: Visit, eligible: list[Staff], blocks: list[CalendarBlock]) -> list[dict]:
+    ranked = []
+    for staff in eligible:
+        conflict = has_evidence_conflict(staff, visit_window_start(visit), visit_window_end(visit), blocks)
+        if conflict is True:
+            continue                       # hard fail — real conflict
+        if conflict is None:
+            ranked.append({"staff": staff.name, "score": None, "note": "insufficient calendar evidence — sync first"})
+            continue
+        s, reason = score_pair(staff, ...)  # simplified for single-role prototype
+        ranked.append({"staff": staff.name, "score": s, "note": reason})
+    ranked.sort(key=lambda r: (r["score"] is None, r["score"] or 0))
+    return ranked[:3]
+```
+
+The one non-negotiable carried over from every prior discussion in this thread: **`has_evidence_conflict` returns three states, not two.** A coordinator with no synced calendar block for that day is never silently treated as available. This single design choice is what prevents the exact double-booking failure mode both the calendar-ingestion doc and the deep research report independently warned about.
+
+---
+
+## 5. Frontend additions — two screens, layered onto the existing Netlify site
+
+### 5.1 "Sync Calendars" panel (extends `index.html`)
+
+- One button, "Sync Calendars," plus a small per-coordinator upload slot (file picker, one per roster member) for the prototype's manual-capture stage. This matches the build order from the earlier discussion: manual upload first, automated print-trigger later.
+- On click: `POST` all six images to `/api/sync-calendars`, show a simple per-coordinator checklist (✅/⚠️) as each result resolves, then auto-navigate to the review screen.
+- A small "last synced: 2 minutes ago" label sourced from `CalendarSyncRun.completed_at`, always visible near the ranked-assignment view — this directly answers the meeting's "who knows the last time it pulled the calendars" concern without adding any new backend logic.
+
+### 5.2 `sync-review.html` — the block-confirmation screen
+
+- Fetch `GET /api/sync-runs/{run_id}/review`.
+- For each coordinator, show their uploaded image with translucent colored rectangles drawn over the detected blocks (simple `<canvas>` overlay using the stored bounding-box coordinates), labeled with inferred time range and "busy."
+- A checkmark/✗ per block; unconfirmed blocks stay `reviewed = False` and are excluded from `has_evidence_conflict` until confirmed — mirrors the "review before it counts" rule that was central to the earlier calendar-ingestion strategy.
+- This is the single screen worth spending the most design time on: it's the artifact that lets you show the lab "yes, this is reading your calendar correctly" before anyone trusts it for real scheduling.
+
+### 5.3 Ranked-assignment view (extends the existing dashboard)
+
+- For a selected visit, call a new `GET /api/visits/{id}/ranked-candidates`, which wraps `rank_candidates`.
+- Render as a simple ranked list/table: coordinator name, score, one-line reason, and — critically — a visibly distinct row style for `"insufficient calendar evidence — sync first"` results, so a scheduler is never left guessing why someone isn't ranked.
+- Add the `preferred_contact_method` field from `Participant` right next to the visit header, satisfying the meeting's ask to "confirm current family communication method" as a visible, not buried, piece of context.
+
+---
+
+## 6. What's intentionally NOT in this prototype (and why that's the right call)
+
+| Deferred | Why it's safe to defer | Where it's already specced for later |
+|---|---|---|
+| Microsoft Graph `getSchedule` integration | Real API integration needs IT governance sign-off (Data Sharing Agreement, MFA, TLS 1.3) per the deep research report — a multi-week institutional process, not a coding task. The vision pipeline's evidence shape should stay swappable so Graph can replace it per-coordinator later. | Research report's "Enterprise Integration Alternative" section |
+| Full Communication_Logs escalation state machine | The prototype only needs the *current* preferred channel surfaced, not the full multi-day escalation cron job, to satisfy this round's feedback. | Research report's "State Machine Implementation for Communication Protocols" |
+| Van/vehicle optimization, skill-scarcity indexing, out-of-hours equity scoring | Real and valuable, but each is an independent scoring term that can be added to `scoring.py` incrementally without touching the sync pipeline or the DB shape defined here. | Research report's "Soft Constraint Optimization" section |
+| Month-view PDF ingestion / multi-tier evidence doctrine (Tier 1/2/2.5/3) | That doctrine matters once multiple *kinds* of calendar evidence coexist (live API + PDF + vision capture). At prototype scale you have exactly one evidence source (vision capture), so the three-state `has_evidence_conflict` return already captures the one rule that matters ("don't guess") without needing the full tiering machinery. | Prior calendar-ingestion strategy doc |
+| Background cron jobs (daily "Appointments to Schedule" shifting, nightly reconciliation) | Not needed until the visit list itself needs to auto-populate from participant DOB math; for the prototype, seed `Visit` rows manually or with a simple one-off script. | Research report's "Temporal Mathematics of Visit Windows" section |
+| CI/CD, containerization, multi-environment config | Adds maintenance surface with no payoff until more than one person needs to deploy this. | — |
+
+---
+
+## 7. Build order (this is the actual prompt sequence to execute, in order)
+
+1. **`db.py` + `models.py`** — stand up SQLite, run `Base.metadata.create_all()`, write `seed_data.py` to load the current staff roster and reliability matrix from the scheduling manual (Emma, Sanjana, Lauren, Makenzie, Ramiro) plus a handful of test `Participant`/`Visit` rows.
+2. **`vision.py`** — implement `extract_blocks` exactly as in §4.3, test it against 2–3 real single-coordinator calendar screenshots (day or work-week view — reject month-grid captures with a clear error message rather than silently mis-extracting them).
+3. **`POST /api/sync-calendars`** in `app.py` — wire the upload loop to `vision.py`, write `CalendarSyncRun`/`CalendarBlock` rows.
+4. **`sync-review.html`** — build the overlay-and-confirm screen; this is the artifact to demo back to the lab before building anything downstream of it.
+5. **`constraints.py` + `scoring.py`** — implement `eligible_staff`, the three-state `has_evidence_conflict`, and the trimmed `score_pair`/`rank_candidates`.
+6. **`GET /api/visits/{id}/ranked-candidates`** + the ranked-assignment view in the existing dashboard, including the visible "insufficient evidence" state and the `preferred_contact_method` field.
+7. **Only after all six steps work end-to-end**, revisit §6's deferred list and pick the next single item to build — not all of them at once.
+
+Each step produces something independently demoable, which is the actual point of keeping this unified and small: at every step of the build, you have a working system, not a half-finished multi-module architecture.
