@@ -135,9 +135,20 @@ cannot be read, so the caller states the visible range rather than the board
 assuming one; a wrong axis would shift every event by hours. And an image with
 no ruled grid is rejected outright, because there is nothing to measure against.
 
-Verified against a rendered copy of the test calendar: every non-overlapping
-event comes back with the right day, time and colour. Events drawn overlapping
-in one column are the known limit &mdash; they merge into a single block.
+**Measured, not claimed.** Rendering the lab's own work-week print to a
+screenshot and reading it back gives **55 of 69 blocks exactly right** &mdash; same
+day, same start, same end as the PDF route. Five more land within half an hour,
+and nine have no counterpart in the PDF at all. Nothing from an image commits
+without review, so those nine reach a person rather than the schedule.
+
+Two things it will not do. It leaves a block **unattributed** when more than one
+calendar's colour appears inside it, because merged events mean the board can
+see the time is taken but not whose. And it refuses outright when the hour
+column cannot be read and no range was given, rather than assuming one.
+
+OCR is optional. Install it with `brew install tesseract` and
+`pip install pytesseract` and the hour column is read automatically; without it
+the caller states the visible range instead.
 
 ## Two clocks
 

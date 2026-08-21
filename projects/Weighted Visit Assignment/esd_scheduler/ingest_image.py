@@ -34,7 +34,7 @@ from .ingest_outlook_pdf import PdfEntry, PdfIngestResult, _nearest_hue, match_c
 MIN_BLOCK_W = 14
 MIN_BLOCK_H = 8
 # Saturation floor for "this is a coloured event, not the page".
-MIN_SAT = 60
+MIN_SAT = 30
 MIN_VAL = 25
 
 
@@ -115,8 +115,29 @@ def find_blocks(image) -> List[Tuple[int, int, int, int, Tuple[int, int, int]]]:
         rgb = (int(r), int(g), int(b))
         if min(rgb) > 235 or max(rgb) < 18:
             continue          # page or ink, not a calendar colour
-        out.append((x, y, w, h, rgb))
+        # How many different calendars are inside this block. Events stacked in
+        # one column merge into a single contour, and taking the median then
+        # names whichever covered the most pixels -- crediting a whole day to
+        # one person when five calendars are involved. Counting distinct hues
+        # catches that, and ignores the text drawn on top because letters are
+        # neutral and match no calendar colour.
+        out.append((x, y, w, h, rgb, _hue_shares(patch)))
     return out
+
+
+def _hue_shares(patch) -> Dict[str, float]:
+    """Share of a block's pixels belonging to each calendar hue."""
+    import numpy as np
+
+    step = max(1, len(patch) // 400)          # a sample is enough, and is fast
+    counts: Dict[str, int] = {}
+    sampled = patch[::step]
+    for b, g, r in sampled:
+        hit = _nearest_hue((int(r) << 16) | (int(g) << 8) | int(b))
+        if hit:
+            counts[hit[0]] = counts.get(hit[0], 0) + 1
+    total = max(1, len(sampled))
+    return {hue: n / total for hue, n in counts.items()}
 
 
 def find_grid(image, blocks=None) -> Optional[ImageGrid]:
@@ -136,8 +157,11 @@ def find_grid(image, blocks=None) -> Optional[ImageGrid]:
 
     height, width = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
-                                   cv2.THRESH_BINARY_INV, 15, 10)
+    # A plain light threshold, not an adaptive one. Outlook draws its hour rules
+    # in a very pale grey, and adaptive thresholding dropped them while happily
+    # keeping the darker rules around the all-day banner -- so the "grid" came
+    # out as the banner band, a hundred pixels tall and in the wrong place.
+    binary = ((gray <= 245).astype(np.uint8)) * 255
 
     h_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (max(20, width // 12), 1))
     v_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(20, height // 12)))
@@ -157,35 +181,151 @@ def find_grid(image, blocks=None) -> Optional[ImageGrid]:
             out.append(int(sum(g) / len(g)))
         return out
 
-    rows = _positions(h_lines, 1, width * 0.45)
     cols = _positions(v_lines, 0, height * 0.35)
-    if len(rows) < 2 or len(cols) < 2:
+    if len(cols) < 2:
         return None
 
-    top, bottom = rows[0], rows[-1]
+    # The day separators run the exact height of the timed area, so their own
+    # vertical extent bounds it. Horizontal rules were the obvious source and a
+    # worse one: an all-day band above the grid contributes its own rules, and
+    # event blocks contribute edges, so the "longest evenly spaced run" of them
+    # could settle on the wrong stripe of the page entirely.
+    ink = v_lines.max(axis=1)
+    rows_on = [i for i, v in enumerate(ink) if v > 0]
+    if len(rows_on) < 20:
+        return None
+    top, bottom = rows_on[0], rows_on[-1]
     left, right = cols[0], cols[-1]
+    if bottom - top < 40 or right - left < 40:
+        return None
     return ImageGrid(left, top, right, bottom, [])
 
 
-def read_hours(path: str) -> Optional[Tuple[float, float]]:
-    """Read the first and last hour label, when an OCR engine is installed."""
+def _evenly_spaced(positions: Sequence[int], tolerance: float = 0.18) -> List[int]:
+    """The longest run of lines at a constant pitch.
+
+    An hour grid is uniform by construction; the rules around a header or an
+    all-day band are not. Picking the longest evenly spaced run therefore finds
+    the timed area and ignores the chrome above it, without needing to know
+    anything about the particular calendar's layout.
+    """
+    if len(positions) < 3:
+        return list(positions)
+    best: List[int] = []
+    for i in range(len(positions) - 1):
+        for j in range(i + 1, len(positions)):
+            pitch = positions[j] - positions[i]
+            if pitch <= 4:
+                continue
+            run = [positions[i], positions[j]]
+            for k in range(j + 1, len(positions)):
+                expected = run[-1] + pitch
+                if abs(positions[k] - expected) <= max(3.0, pitch * tolerance):
+                    run.append(positions[k])
+            if len(run) > len(best):
+                best = run
+    return best if len(best) >= 3 else list(positions)
+
+
+def read_time_axis(path: str, grid: "ImageGrid"):
+    """Fit pixel y to clock hours by reading the hour column, if OCR is installed.
+
+    Three things make this work where a naive whole-page OCR does not:
+
+    * **Only the gutter is read.** A calendar is full of numbers -- dates,
+      column headers, text inside events -- and scanning all of them and taking
+      the smallest and largest looked reasonable and returned 1 AM to 12 PM for
+      a page whose gutter runs 8 AM to 5 PM.
+    * **The strip is upscaled first.** Hour labels are around ten pixels tall at
+      screen resolution, which is below what Tesseract reads reliably.
+    * **Positions are fitted, not just values.** Each recognised label carries a
+      y coordinate, so the axis comes from a least-squares fit through them.
+      That tolerates a label being misread or missed entirely, where taking the
+      first and last does not.
+
+    Returns ``(slope, intercept, first_hour, last_hour)``, or None. The hour
+    range matters as much as the fit: the column separators often run through
+    an all-day band above the timed grid and past its last rule, so the labels
+    are the only thing that says which part of the page is actually clock time.
+    """
     if not ocr_available():
         return None
     import re
 
+    import numpy as np
     import pytesseract
     from PIL import Image
 
-    text = pytesseract.image_to_string(Image.open(path))
-    found = []
-    for match in re.finditer(r"\b(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\b", text, re.I):
-        hour = int(match.group(1)) % 12
-        if match.group(3).upper() == "PM":
-            hour += 12
-        found.append(hour + int(match.group(2) or 0) / 60.0)
-    if len(found) < 2:
+    strip_right = max(24, grid.left)
+    image = Image.open(path).convert("L")
+    if strip_right < 12 or grid.height < 20:
         return None
-    return min(found), max(found)
+    strip = image.crop((0, max(0, grid.top - 40), strip_right,
+                        min(image.height, grid.bottom + 40)))
+    scale = 4
+    strip = strip.resize((strip.width * scale, strip.height * scale),
+                         Image.LANCZOS)
+
+    data = pytesseract.image_to_data(
+        strip, config="--psm 6", output_type=pytesseract.Output.DICT)
+
+    label = re.compile(r"^(\d{1,2})(?::(\d{2}))?\s*([AP])M?$", re.I)
+    points = []
+    words = data["text"]
+    for i, raw in enumerate(words):
+        text = (raw or "").strip().replace(" ", "")
+        if not text:
+            continue
+        # Tesseract often splits "8 AM" into two boxes; stitch a bare number to
+        # the meridiem that follows it on the same line.
+        combined = text
+        if combined.isdigit() and i + 1 < len(words):
+            nxt = (words[i + 1] or "").strip()
+            if nxt.upper() in ("AM", "PM", "A", "P"):
+                combined = combined + nxt
+        m = label.match(combined)
+        if not m:
+            continue
+        hour = int(m.group(1)) % 12
+        if m.group(3).upper() == "P":
+            hour += 12
+        clock = hour + int(m.group(2) or 0) / 60.0
+        y_top = data["top"][i] / scale + max(0, grid.top - 40)
+        y_mid = y_top + data["height"][i] / (2 * scale)
+        points.append((y_mid, clock))
+
+    if len(points) < 3:
+        return None
+    points.sort()
+    clocks = [c for _, c in points]
+    # A clock axis only ever goes forwards. Anything else is a misread.
+    if any(b < a for a, b in zip(clocks, clocks[1:])):
+        points = _longest_rising(points)
+        if len(points) < 3:
+            return None
+
+    ys = np.array([p[0] for p in points], dtype=float)
+    hs = np.array([p[1] for p in points], dtype=float)
+    slope, intercept = np.polyfit(ys, hs, 1)
+    if slope <= 0:
+        return None
+    predicted = slope * ys + intercept
+    if float(np.max(np.abs(predicted - hs))) > 1.0:
+        return None                 # the fit does not describe the labels
+    return float(slope), float(intercept), float(hs.min()), float(hs.max())
+
+
+def _longest_rising(points):
+    """Longest run of labels whose clock time keeps increasing."""
+    best, run = [], [points[0]]
+    for prev, cur in zip(points, points[1:]):
+        if cur[1] > prev[1]:
+            run.append(cur)
+        else:
+            if len(run) > len(best):
+                best = run
+            run = [cur]
+    return best if len(best) > len(run) else run
 
 
 def extract(
@@ -214,15 +354,6 @@ def extract(
             "is nothing here to read.")
         return result
 
-    if hours is None:
-        hours = read_hours(path)
-    if hours is None:
-        result.unresolved.append(
-            "TIME RANGE UNKNOWN: no OCR engine is installed, so the hour column "
-            "could not be read. Say which hours the image covers and it can be "
-            "read, or print the calendar to PDF, where the times are exact.")
-        return result
-
     grid = find_grid(image, blocks)
     if grid is None:
         result.unresolved.append(
@@ -231,7 +362,18 @@ def extract(
             "calendar view works; a photograph of a wall planner does not.")
         return result
 
-    span = max(0.5, hours[1] - hours[0])
+    # The hour column, read directly, beats a stated range: it maps every pixel
+    # rather than assuming the grid's top and bottom edges are the first and
+    # last labels.
+    axis = read_time_axis(path, grid)
+    if axis is None and hours is None:
+        result.unresolved.append(
+            "TIME RANGE UNKNOWN: the hour column could not be read"
+            + ("" if ocr_available() else " because no OCR engine is installed")
+            + ". Say which hours the image covers, or print the calendar to PDF, "
+              "where the times are exact.")
+        return result
+    span = max(0.5, (hours[1] - hours[0]) if hours else 1.0)
     # Even division rather than clustered line positions. A calendar's day
     # columns are equal by construction, and reading them off detected lines
     # split every rule into two columns because a drawn line is several pixels
@@ -242,10 +384,14 @@ def extract(
 
     # Only blocks inside the ruled area are events. The header legend sits above
     # it and is exactly what dragged the time axis wrong before.
+    # Overlap the grid rather than sit strictly inside it. An event box is
+    # commonly drawn a few pixels over the rule that bounds its column, and
+    # requiring containment silently dropped a whole day's column.
+    pad = max(6, int(grid.width * 0.01))
     inside = [
         b for b in blocks
-        if b[1] >= grid.top - 2 and b[1] + b[3] <= grid.bottom + 2
-        and b[0] >= grid.left - 2 and b[0] + b[2] <= grid.right + 2
+        if b[1] >= grid.top - pad and b[1] + b[3] <= grid.bottom + pad
+        and grid.left <= b[0] + b[2] / 2 <= grid.right
     ]
     if not inside:
         result.unresolved.append(
@@ -253,21 +399,50 @@ def extract(
             "them sit outside the ruled calendar area.")
         return result
 
-    for x, y, w, h, rgb in sorted(inside, key=lambda b: (b[1], b[0])):
+    # Same correction the PDF reader makes: an event box is inset inside its
+    # slot, so every edge reads a few minutes early by a constant amount. Fit
+    # that constant off the blocks themselves rather than hardcoding it.
+    from .ingest_outlook_pdf import _calibrate_offset
+
+    raw = []
+    for x, y, w, h, rgb, shares in sorted(inside, key=lambda b: (b[1], b[0])):
+        if not (grid.top <= y + h / 2 <= grid.bottom):
+            continue
+        if axis is not None:
+            midpoint = axis[0] * (y + h / 2) + axis[1]
+            if not (axis[2] - 0.25 <= midpoint <= axis[3] + 1.25):
+                continue
+            a, b_ = axis[0] * y + axis[1], axis[0] * (y + h) + axis[1]
+        else:
+            a = hours[0] + (y - grid.top) / grid.height * span
+            b_ = hours[0] + (y + h - grid.top) / grid.height * span
+        raw.append((x, y, w, h, rgb, shares, a, b_))
+    shift = _calibrate_offset([t for r in raw for t in (r[6], r[7])])
+    result.axis_source = "ocr" if axis is not None else "stated"
+
+    mixed = 0
+    for x, y, w, h, rgb, shares, start, end in raw:
         centre = x + w / 2
         ci = min(range(len(columns)),
                  key=lambda i: abs((columns[i][0] + columns[i][1]) / 2 - centre))
         day = day_start + timedelta(days=ci)
-        start = hours[0] + (y - grid.top) / grid.height * span
-        end = hours[0] + (y + h - grid.top) / grid.height * span
-        if end - start < 0.08:
+        start += shift
+        end += shift
+        if end - start < 0.15:      # under nine minutes: chrome, not an event
             continue
         rgb_int = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2]
+        # Two or more calendars each holding a real share of the block means
+        # the board can see the time is taken but not whose it is.
+        blended = len([h for h in shares.values() if h >= 0.18]) > 1
         label = None
-        if legend:
-            hit = match_colour(rgb_int, legend)
-            label = hit[0] if hit else None
-        hue = _nearest_hue(rgb_int)
+        hue = None
+        if not blended:
+            if legend:
+                hit = match_colour(rgb_int, legend)
+                label = hit[0] if hit else None
+            hue = _nearest_hue(rgb_int)
+        else:
+            mixed += 1
         result.entries.append(PdfEntry(
             day=day.isoformat(),
             start_time=_clock(start),
@@ -276,17 +451,28 @@ def extract(
             event_title=None,
             calendar_color_id=hue[0] if hue else None,
             participant=None,
-            confidence_score=0.45,
-            evidence_text=f"image block {w}x{h}px",
+            confidence_score=0.2 if blended else 0.45,
+            evidence_text=(f"image block {w}x{h}px"
+                           + (" (several calendars overlap here)" if blended else "")),
             uncertain=True,
             calendar_label=label,
         ))
 
+    if mixed:
+        result.unresolved.append(
+            f"OVERLAPPING EVENTS on {mixed} block(s): more than one calendar's "
+            "colour appears inside the same block, so the board can tell that "
+            "the time is taken but not whose it is. Those blocks are left "
+            "unattributed rather than credited to whichever colour covered the "
+            "most pixels.")
+
+    how = ("the hour column was read by OCR" if axis is not None
+           else "the clock axis was interpolated from the range you gave")
     result.unresolved.append(
-        "READ FROM AN IMAGE: block positions were measured in pixels and the "
-        "clock axis was interpolated, so every time here is approximate. Each "
-        "entry needs confirming before it counts. A PDF print of the same "
-        "calendar is read exactly and needs none of this.")
+        "READ FROM AN IMAGE: block positions were measured in pixels and "
+        + how + ", so every time here is approximate. Each entry needs "
+        "confirming before it counts. A PDF print of the same calendar is read "
+        "exactly and needs none of this.")
     return result
 
 

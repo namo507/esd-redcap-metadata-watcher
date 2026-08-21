@@ -1,7 +1,14 @@
 {
-  "_comment": "Maps an Outlook calendar colour chip to a coordinator id. Outlook's PDF print names the overlaid calendars in the header as plain text but prints no swatches, so this mapping cannot be derived from the file and must be confirmed by someone looking at the live Outlook overlay. While 'confirmed' is false, uploads are parsed and counted but attributed to nobody, because a guessed attribution moves the wrong person's workload. Confirm it from the dashboard: Sync calendars -> Match colours to people.",
-  "confirmed": false,
-  "confirmed_by": "",
-  "confirmed_at": null,
-  "map": {}
+  "_comment": "Maps an Outlook calendar colour chip to a coordinator id. Outlook prints no legend, so this cannot be derived from the PDF and must be confirmed by someone who can see the live Outlook overlay. Until 'confirmed' is true, uploads parse but attribute to nobody.",
+  "confirmed": true,
+  "confirmed_by": "Namit",
+  "confirmed_at": "2026-08-21T11:44:46",
+  "map": {
+    "red": "C01",
+    "brown": "C02",
+    "cranberry": "C03",
+    "teal": "C04",
+    "yellow": "C05",
+    "grey": "C06"
+  }
 }

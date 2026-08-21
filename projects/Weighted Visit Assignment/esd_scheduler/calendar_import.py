@@ -344,6 +344,7 @@ class ImportResult:
     legend: Dict[str, str] = field(default_factory=dict)
     attribution_source: str = "none"   # legend | stored_map | none
     matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
+    axis_source: Optional[str] = None
     roles: Dict[str, str] = field(default_factory=dict)
     unavailable: List[dict] = field(default_factory=list)
     unresolved_names: List[dict] = field(default_factory=list)
@@ -392,6 +393,7 @@ class ImportResult:
             "availability": self.availability,
             "legend": self.legend,
             "attribution_source": self.attribution_source,
+            "axis_source": self.axis_source,
             "matched_names": self.matched_names,
             "roles": self.roles,
             "role_summary": [
@@ -482,6 +484,7 @@ def import_pdf(
         entry_count=len(parsed.entries),
         blockers=list(parsed.unresolved),
     )
+    result.axis_source = getattr(parsed, "axis_source", None)
 
     for entry in parsed.entries:
         hue = entry.calendar_color_id or "unknown"

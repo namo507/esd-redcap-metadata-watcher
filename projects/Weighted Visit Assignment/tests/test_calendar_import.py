@@ -485,11 +485,13 @@ def test_image_times_match_the_pdf_they_were_rendered_from():
     # can see them whole. Overlapping events in one column are a known limit.
     for want in (("2026-08-18 08:00", "08:30"),
                  ("2026-08-19 10:00", "12:00"),
+                 ("2026-08-19 14:00", "16:00"),
                  ("2026-08-20 15:00", "17:00")):
         expect(want in seen, f"image missed or misread {want}: {sorted(seen)}")
 
 
 def test_an_image_without_a_time_range_refuses_rather_than_guessing():
+    """With no OCR engine and no stated range there is no clock axis to use."""
     from esd_scheduler.ingest_image import extract, ocr_available
 
     if ocr_available():
@@ -498,6 +500,79 @@ def test_an_image_without_a_time_range_refuses_rather_than_guessing():
     expect(not parsed.entries, "times were invented with no clock axis")
     expect(any("TIME RANGE UNKNOWN" in u for u in parsed.unresolved),
            f"no explanation for refusing: {parsed.unresolved}")
+
+
+def test_ocr_reads_the_hour_column_without_being_told_the_range():
+    from esd_scheduler.ingest_image import extract, ocr_available
+
+    if not ocr_available():
+        return                       # nothing to test without an engine installed
+    parsed = extract(WEEK_PNG, day_start=date(2026, 8, 17), n_days=5, hours=None)
+    expect(parsed.entries, "OCR is available but nothing was read")
+    expect(any("read by OCR" in u for u in parsed.unresolved),
+           "the result does not say the axis came from OCR")
+
+
+def test_the_fitted_axis_matches_the_calendar_it_was_read_from():
+    """Grid top and bottom must land on the hours the gutter actually shows."""
+    from esd_scheduler.ingest_image import (
+        _load, find_grid, ocr_available, read_time_axis)
+
+    if not ocr_available():
+        return
+    image = _load(WEEK_PNG)
+    grid = find_grid(image)
+    axis = read_time_axis(WEEK_PNG, grid)
+    expect(axis is not None, "the hour column could not be fitted")
+    top_hour = axis[0] * grid.top + axis[1]
+    bottom_hour = axis[0] * grid.bottom + axis[1]
+    expect(abs(top_hour - 8.0) < 0.2, f"grid top read as {top_hour:.2f}, not 8")
+    expect(abs(bottom_hour - 17.0) < 0.2,
+           f"grid bottom read as {bottom_hour:.2f}, not 17")
+
+
+def test_overlapping_events_are_left_unattributed():
+    """The board can see the time is taken without knowing whose it is."""
+    from esd_scheduler.ingest_image import extract
+
+    parsed = extract(WEEK_PNG, day_start=date(2026, 8, 17), n_days=5,
+                     hours=(8.0, 17.0))
+    # The fixture stacks five calendars in Monday's column.
+    monday = [e for e in parsed.entries if e.day == "2026-08-17"]
+    expect(monday, "the stacked column was dropped entirely")
+    for entry in monday:
+        expect(entry.calendar_color_id is None,
+               "a merged block was credited to one calendar")
+    expect(any("OVERLAPPING EVENTS" in u for u in parsed.unresolved),
+           f"the overlap was not reported: {parsed.unresolved}")
+
+
+def test_the_axis_source_is_reported_not_assumed():
+    """Calling an OCR-read range "assumed" understates what actually happened."""
+    from esd_scheduler.ingest_image import ocr_available
+
+    result = import_pdf(WEEK_PNG, coordinators=ROSTER,
+                        image_hours=None, image_start=date(2026, 8, 17))
+    if ocr_available():
+        expect(result.axis_source == "ocr",
+               f"axis source should be ocr, got {result.axis_source}")
+    else:
+        expect(result.axis_source in (None, "stated"),
+               f"unexpected axis source: {result.axis_source}")
+
+
+def test_no_phantom_events_at_the_grid_edge():
+    from esd_scheduler.ingest_image import extract
+
+    parsed = extract(WEEK_PNG, day_start=date(2026, 8, 17), n_days=5,
+                     hours=(8.0, 17.0))
+    for entry in parsed.entries:
+        start = [int(x) for x in entry.start_time.split(":")]
+        end = [int(x) for x in entry.end_time.split(":")]
+        minutes = (end[0] * 60 + end[1]) - (start[0] * 60 + start[1])
+        expect(minutes >= 9,
+               f"a {minutes}-minute sliver was read as an event: {entry.day} "
+               f"{entry.start_time}-{entry.end_time}")
 
 
 def test_the_header_legend_is_not_mistaken_for_events():

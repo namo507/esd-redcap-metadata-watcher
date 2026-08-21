@@ -133,6 +133,8 @@ class PdfIngestResult:
     timezone: Optional[str] = None
     entries: List[PdfEntry] = field(default_factory=list)
     overflow_cells: List[str] = field(default_factory=list)
+    # Where the clock axis came from on an image import: "ocr" or "stated".
+    axis_source: Optional[str] = None
     # Whole-day "X unavailable for visits" banners, as (day, name, status).
     # Only the derived fields are kept; the raw banner text is never stored.
     unavailability: List[dict] = field(default_factory=list)

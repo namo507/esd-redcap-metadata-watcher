@@ -295,7 +295,11 @@ class LabSession:
             payload = result.to_dict()
             payload["stored_as"] = os.path.basename(path)
             if result.view_type == "image":
-                payload["assumed_hours"] = list(image_hours or (8.0, 18.0))
+                # Only call the range "assumed" when it actually was. If the
+                # hour column was read, saying otherwise understates the result.
+                payload["axis_source"] = result.axis_source
+                if result.axis_source != "ocr":
+                    payload["assumed_hours"] = list(image_hours or (8.0, 18.0))
             self.last_import = payload
             if result.availability:
                 self.availability = result.availability
