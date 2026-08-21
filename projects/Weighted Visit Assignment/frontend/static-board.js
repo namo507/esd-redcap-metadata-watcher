@@ -266,6 +266,7 @@ window.StaticBoard = (function () {
           schedule: DATA.schedule || {rows: [], counts: {}, confirmed: false},
           logic: DATA.logic || {weights: [], gates: []},
           availability: DATA.availability || {week: [], coverage: null},
+          coordinators: DATA.coordinators || {rows: [], days: [], dates: []},
           calendar: DATA.calendar || {
             imports: [], pending_review: [], confirmed_blocks: 0,
             last_import: null, color_map: { confirmed: false, map: {}, hues_seen: {},
@@ -287,6 +288,8 @@ window.StaticBoard = (function () {
       case "/api/reset":
         reset();
         return { ok: true };
+      case "/api/coordinators":
+        return DATA.coordinators || {rows: [], days: [], dates: []};
       case "/api/availability":
         return DATA.availability || {week: [], coverage: null};
       case "/api/logic":
