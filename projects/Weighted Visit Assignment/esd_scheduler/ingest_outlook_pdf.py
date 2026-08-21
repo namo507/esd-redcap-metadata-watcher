@@ -884,13 +884,14 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
         (columns[-1] - columns[0]) / max(1, len(columns) - 1)
         if len(columns) > 1 else page.rect.width - columns[0])
 
-    # Column boundaries sit midway between the day headers. Assigning by
-    # distance to the header text instead misses banners and side-by-side
-    # events, which are drawn from the cell's own left edge -- several points
-    # left of where the header label starts, and further left in each column.
-    bounds = [
-        (columns[i] + columns[i + 1]) / 2 for i in range(len(columns) - 1)
-    ]
+    # Column boundaries sit just left of each day header, not midway between
+    # them. Outlook indents the header text about five points into its cell, so
+    # a midpoint rule put the boundary roughly fifty points early and pushed
+    # everything drawn in the right-hand two-fifths of a column into the next
+    # day -- a Wednesday appointment reported as Thursday, at the right time
+    # and against the right person, which is the hardest kind of wrong to spot.
+    indent = col_width * 0.05
+    bounds = [columns[i + 1] - indent for i in range(len(columns) - 1)]
 
     def column_of(x: float) -> int:
         for i, edge in enumerate(bounds):

@@ -194,8 +194,8 @@ def test_a_stale_colour_map_cannot_turn_a_policy_calendar_into_a_person():
             expect(block.coordinator_id in ROSTER,
                    f"a policy calendar became {block.coordinator_id}")
     timed = [b for b in result.blocks if b.start.hour != 0]
-    expect(len(timed) == 6,
-           f"expected the 6 coordinator events, got {len(timed)}")
+    expect(len(timed) == 7,
+           f"expected the 7 coordinator events, got {len(timed)}")
 
 
 def test_without_a_legend_no_colour_is_attributed_to_anyone():
@@ -366,6 +366,21 @@ def test_all_day_banners_are_whole_days_not_intervals():
     lab_days = sorted({e.day for e in banners
                        if e.calendar_label == "PSYCHOLOGY, ESDI LAB"})
     expect(len(lab_days) >= 2, f"lab banners did not span days: {lab_days}")
+
+
+def test_an_event_in_the_right_of_its_column_stays_in_that_day():
+    """Outlook indents its day headers, so a boundary set midway between them
+    lands about fifty points early and pushes anything drawn in the right-hand
+    part of a column into the next day -- at the right time, against the right
+    person, which is the hardest kind of wrong to notice."""
+    parsed = load(WEEK, year_hint=2026)
+    hits = [e for e in parsed.entries
+            if e.start_time == "10:00" and e.end_time == "10:30"]
+    expect(hits, "the right-aligned event was not read at all")
+    expect(hits[0].day == "2026-08-20",
+           f"drawn in Thursday's column, reported as {hits[0].day}")
+    expect(hits[0].calendar_label == "Oak, Sanjana",
+           f"attributed to {hits[0].calendar_label}")
 
 
 def test_a_dark_shade_is_attributed_to_its_own_calendar():

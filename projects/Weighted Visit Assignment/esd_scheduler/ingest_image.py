@@ -201,6 +201,52 @@ def find_grid(image, blocks=None) -> Optional[ImageGrid]:
     return ImageGrid(left, top, right, bottom, [])
 
 
+DAY_WORDS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+             "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY",
+             "SATURDAY", "SUNDAY")
+
+
+def read_day_columns(path: str, grid: "ImageGrid") -> List[float]:
+    """Left edge of each day column, from the weekday headers above the grid.
+
+    The obvious source is the vertical rules between columns, and on a real
+    Outlook screenshot they are simply not there to find: line detection
+    returns the edges of event blocks instead, and dividing the grid evenly
+    between two of those put several events one column early -- a Thursday
+    appointment reported as Wednesday, with the right time and the right person.
+
+    The day headers are unambiguous and OCR reads them easily, so they anchor
+    the columns instead. Each header is left-aligned in its own column, so its
+    x position is that column's start.
+    """
+    if not ocr_available():
+        return []
+    import pytesseract
+    from PIL import Image
+
+    image = Image.open(path).convert("L")
+    top = max(0, grid.top - 140)
+    band = image.crop((0, top, image.width, min(image.height, grid.top + 20)))
+    scale = 3
+    band = band.resize((band.width * scale, band.height * scale), Image.LANCZOS)
+    data = pytesseract.image_to_data(
+        band, config="--psm 6", output_type=pytesseract.Output.DICT)
+
+    xs = []
+    for i, raw in enumerate(data["text"]):
+        word = (raw or "").strip().strip(",.").upper()
+        if word in DAY_WORDS:
+            xs.append(data["left"][i] / scale)
+    xs.sort()
+    # Collapse a header that OCR split across two boxes.
+    merged: List[float] = []
+    for x in xs:
+        if merged and x - merged[-1] < 30:
+            continue
+        merged.append(x)
+    return merged
+
+
 def _evenly_spaced(positions: Sequence[int], tolerance: float = 0.18) -> List[int]:
     """The longest run of lines at a constant pitch.
 
@@ -374,13 +420,17 @@ def extract(
               "where the times are exact.")
         return result
     span = max(0.5, (hours[1] - hours[0]) if hours else 1.0)
-    # Even division rather than clustered line positions. A calendar's day
-    # columns are equal by construction, and reading them off detected lines
-    # split every rule into two columns because a drawn line is several pixels
-    # wide.
-    step = grid.width / max(1, n_days)
-    columns = [(grid.left + i * step, grid.left + (i + 1) * step)
-               for i in range(n_days)]
+    # Columns from the day headers where OCR can read them, falling back to an
+    # even division of the grid otherwise.
+    starts = read_day_columns(path, grid)
+    if len(starts) >= 2:
+        pitch = (starts[-1] - starts[0]) / max(1, len(starts) - 1)
+        columns = [(starts[i], starts[i] + pitch) for i in range(len(starts))]
+        n_days = len(starts)
+    else:
+        step = grid.width / max(1, n_days)
+        columns = [(grid.left + i * step, grid.left + (i + 1) * step)
+                   for i in range(n_days)]
 
     # Only blocks inside the ruled area are events. The header legend sits above
     # it and is exactly what dragged the time axis wrong before.
@@ -422,6 +472,12 @@ def extract(
 
     mixed = 0
     for x, y, w, h, rgb, shares, start, end in raw:
+        # An event lives in one day column. Something spanning several is
+        # chrome -- a header bar or the all-day strip -- and one of those came
+        # through as a ten-minute appointment.
+        pitch = (columns[0][1] - columns[0][0]) if columns else grid.width
+        if w > pitch * 1.35:
+            continue
         centre = x + w / 2
         ci = min(range(len(columns)),
                  key=lambda i: abs((columns[i][0] + columns[i][1]) / 2 - centre))

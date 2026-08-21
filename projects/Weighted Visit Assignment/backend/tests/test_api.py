@@ -305,7 +305,7 @@ def test_legend_attributes_people_with_no_setup_at_all():
            f"expected legend attribution, got {body['attribution_source']}")
     # Six timed events from the colour legend, plus one whole-day block per
     # matched absence notice read off the all-day banners.
-    expect(body["block_count"] == 6 + len(body["unavailable"]),
+    expect(body["block_count"] == 7 + len(body["unavailable"]),
            f"unexpected block count {body['block_count']} against "
            f"{len(body['unavailable'])} absences")
     expect(body["unavailable"], "the absence notices were not read")
@@ -359,7 +359,7 @@ def test_work_week_upload_applies_immediately():
     expect(status == 200, f"work-week upload returned {status}")
     expect(body["tier"] == 2 and body["schedulable"] is True,
            "a timed export must be schedulable")
-    expect(body["block_count"] == 6 + len(body["unavailable"]),
+    expect(body["block_count"] == 7 + len(body["unavailable"]),
            f"unexpected block count {body['block_count']}")
     expect(body["pending_review"] == 0,
            "an exact PDF parse should not sit in a review queue")

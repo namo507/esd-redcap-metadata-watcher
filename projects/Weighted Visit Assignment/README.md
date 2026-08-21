@@ -136,10 +136,14 @@ assuming one; a wrong axis would shift every event by hours. And an image with
 no ruled grid is rejected outright, because there is nothing to measure against.
 
 **Measured, not claimed.** Rendering the lab's own work-week print to a
-screenshot and reading it back gives **55 of 69 blocks exactly right** &mdash; same
-day, same start, same end as the PDF route. Five more land within half an hour,
-and nine have no counterpart in the PDF at all. Nothing from an image commits
-without review, so those nine reach a person rather than the schedule.
+screenshot and reading it back gives **65 of 68 blocks exactly right** &mdash; same
+day, same start, same end as the PDF route. Two more land within half an hour,
+and one has no counterpart at all. Nothing from an image commits without
+review, so that one reaches a person rather than the schedule.
+
+Day columns are read from the weekday headers, not from the rules between them:
+on a real screenshot those rules are not detectable at all, and line detection
+returns the edges of event blocks instead.
 
 Two things it will not do. It leaves a block **unattributed** when more than one
 calendar's colour appears inside it, because merged events mean the board can

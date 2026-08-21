@@ -40,6 +40,11 @@ COLOUR = dict(LEGEND)
 
 # (day index, start hour, end hour, calendar name, shade factor)
 # The shade factor is how Outlook darkens a box; 1.0 is the raw colour.
+# An optional sixth field is a horizontal inset, as a fraction of the column:
+# Outlook lays overlapping events side by side, so real boxes are regularly
+# drawn in the right-hand part of their column. Every event here used to start
+# at its column's left edge, which is why a day-assignment bug in the reader
+# went unnoticed by this fixture for so long.
 EVENTS = [
     (0, 9.0, 10.0, "Bell, Margaret", 0.3),
     (0, 13.5, 15.0, "Tous, Sofia", 0.3),
@@ -47,6 +52,9 @@ EVENTS = [
     (2, 10.0, 12.0, "Puttock, Lauren", 0.3),
     (3, 15.0, 17.0, "Soto, Morgan", 0.3),
     (4, 11.0, 11.5, "Lucas-Mariano, Ramiro", 0.3),
+    # Drawn in the right-hand half of Thursday's column, where a boundary set
+    # midway between the day headers would push it into Friday.
+    (3, 10.0, 10.5, "Oak, Sanjana", 0.3, 0.55),
     # Policy calendars.
     (0, 13.0, 16.0, "Offered Times ESD", 0.3),
     (1, 13.0, 16.0, "Offered Times ESD", 0.3),
@@ -127,13 +135,15 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
             color=None, fill=rgb(COLOUR[label], 0.3))
         page.insert_text((COL_X[day] + 2, top + 6.2), text, fontsize=6.2)
 
-    for day, start, end, label, factor in EVENTS:
+    for event in EVENTS:
+        day, start, end, label, factor = event[:5]
+        inset = event[5] if len(event) > 5 else 0.0
         if not with_policy and label in (
                 "Clinician Shifts", "PSYCHOLOGY, ESDI LAB", "Offered Times ESD"):
             continue
+        left = COL_X[day] - 4 + inset * COL_W
         page.draw_rect(
-            fitz.Rect(COL_X[day] - 4, y_for(start), COL_X[day] + COL_W - 12,
-                      y_for(end)),
+            fitz.Rect(left, y_for(start), COL_X[day] + COL_W - 12, y_for(end)),
             color=None, fill=rgb(COLOUR[label], factor))
 
     doc.save(path)
