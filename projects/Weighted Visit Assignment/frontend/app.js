@@ -697,6 +697,10 @@ const TIER_WORD = {
    coordinator actually opens this section for -- who is free, and who is out. */
 
 const SYNC_TABS = [
+  // First, and only present when something is actually waiting. An image
+  // import cannot take effect until these are settled, so burying it would
+  // leave the upload looking finished when it is not.
+  ["review", "To confirm", (c) => (c.pending_review || []).length],
   ["availability", "Who is free", (c) => (c.availability || []).some((a) => a.coordinator_id)],
   ["absences", "Who is out", (c) => (c.unavailable || []).length || (c.unresolved_names || []).length],
   ["filters", "Lab rules", (c) => (c.filters || []).length],
@@ -736,6 +740,7 @@ function drawSyncTabs() {
   if (S.syncTab === "absences") drawAbsences(panel);
   if (S.syncTab === "filters") drawFilters(panel);
   if (S.syncTab === "evidence") drawEvidence(panel);
+  if (S.syncTab === "review") drawReview(panel);
 }
 
 const AVAIL_WORD = {
@@ -844,6 +849,57 @@ function drawAvailability(panel) {
     ${anyUnknown ? `<p class="note" style="margin-top:.6rem">
       <b>Not visible</b> means that day's cell hit the month grid's row limit, so
       anything further down was cut off the page. It is not the same as free.</p>` : ""}`;
+}
+
+function drawReview(panel) {
+  const pending = (S.board.calendar || {}).pending_review || [];
+  if (!pending.length) { panel.innerHTML = ""; return; }
+
+  panel.innerHTML = `
+    <p class="note">Read from an image, so these are approximate. Check them
+      against the calendar you uploaded. Until they are confirmed they block
+      nobody.</p>
+    <div class="assign-row" style="margin:.9rem 0">
+      <input class="select" id="review-by" placeholder="Your name" style="min-width:15ch">
+      <button class="btn btn-primary" id="review-all-ok" type="button">
+        Confirm all ${pending.length}</button>
+      <button class="btn btn-ghost" id="review-all-no" type="button">Reject all</button>
+    </div>
+    <div class="reviewlist">${pending.slice(0, 60).map((b) => `
+      <div class="reviewrow" data-block="${esc(b.block_id)}">
+        <div>
+          <div class="cand-name">${esc(b.coordinator)}</div>
+          <div class="cand-sub">${esc(prettyBlock(b.start, b.end))}</div>
+        </div>
+        <div class="reviewacts">
+          <button class="btn btn-ghost" data-act="reject" type="button">Not real</button>
+          <button class="btn btn-primary" data-act="confirm" type="button">Confirm</button>
+        </div>
+      </div>`).join("")}</div>
+    ${pending.length > 60 ? `<p class="note">${pending.length - 60} more below the first 60.</p>` : ""}`;
+
+  panel.querySelectorAll(".reviewrow .btn").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      reviewBlock(btn.closest(".reviewrow").dataset.block,
+                  btn.dataset.act === "confirm")));
+  const who = () => ($("review-by").value || "coordinator").trim();
+  $("review-all-ok").addEventListener("click", () => reviewAll(true, who()));
+  $("review-all-no").addEventListener("click", () => reviewAll(false, who()));
+}
+
+async function reviewAll(confirmed, reviewer) {
+  try {
+    const out = await api("/api/calendar/review-all", {
+      method: "POST",
+      body: JSON.stringify({ confirmed, reviewer }),
+    });
+    await refresh();
+    setSection("sync");
+    toast(`${out.settled} block${out.settled === 1 ? "" : "s"} ${
+      confirmed ? "confirmed" : "rejected"}.`);
+  } catch (err) {
+    toast(err.message, true);
+  }
 }
 
 function drawEvidence(panel) {

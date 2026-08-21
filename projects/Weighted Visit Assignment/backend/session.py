@@ -549,6 +549,25 @@ class LabSession:
         except ValueError:
             return ""
 
+    def review_all_pending(self, confirmed: bool, reviewer: str) -> dict:
+        """Settle everything still waiting.
+
+        Offered because reviewing fifty blocks one at a time is not review, it
+        is clicking; someone checking a screenshot against the board wants to
+        accept the run and pick off the wrong ones. Which way round it went is
+        recorded against the reviewer either way.
+        """
+        with self._lock:
+            n = self.store.review_pending(confirmed, reviewer or "coordinator")
+            applied = self._apply_confirmed_blocks()
+            self._log(
+                f"{n} block(s) {'confirmed' if confirmed else 'rejected'} in one pass."
+            )
+        out = self.imports()
+        out["applied_blocks"] = applied
+        out["settled"] = n
+        return out
+
     def review_import_block(self, block_id: str, confirmed: bool, reviewer: str) -> dict:
         with self._lock:
             if not self.store.review_block(block_id, confirmed, reviewer or "coordinator"):

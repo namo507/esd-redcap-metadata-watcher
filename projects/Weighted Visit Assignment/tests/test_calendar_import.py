@@ -173,6 +173,31 @@ def test_a_legend_beats_a_stored_map_that_disagrees():
            f"stored map overrode the printed legend: {teal[0]['coordinator_id']}")
 
 
+def test_a_stale_colour_map_cannot_turn_a_policy_calendar_into_a_person():
+    """The legend outranks the stored map for any hue it already explains.
+
+    Colours move when an Outlook overlay changes. A map kept from an older one
+    resolved the hue this export uses for "Offered Times ESD" to a coordinator,
+    which would have booked time the lab set aside for visits as that person's
+    busy time.
+    """
+    from esd_scheduler.calendar_import import ColorMap
+    from esd_scheduler.calendar_roles import ROLE_OFFERED
+
+    stale = ColorMap(mapping={"blue": "C03", "orange": "C04", "green": "C05"},
+                     confirmed=True, confirmed_by="an older overlay")
+    result = import_pdf(WEEK, coordinators=ROSTER, color_map=stale, year_hint=2026)
+    expect(result.resources.get(ROLE_OFFERED),
+           "the offered-times calendar was consumed as somebody's busy time")
+    for run in result.runs:
+        for block in run.blocks:
+            expect(block.coordinator_id in ROSTER,
+                   f"a policy calendar became {block.coordinator_id}")
+    timed = [b for b in result.blocks if b.start.hour != 0]
+    expect(len(timed) == 6,
+           f"expected the 6 coordinator events, got {len(timed)}")
+
+
 def test_without_a_legend_no_colour_is_attributed_to_anyone():
     """Colour attribution needs the legend. Absence notices do not -- they are
     read from the banner text, so they survive an export with no colours."""

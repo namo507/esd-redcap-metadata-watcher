@@ -296,6 +296,7 @@ window.StaticBoard = (function () {
       // Reading a PDF needs the engine. On the published copy there is no
       // backend to read it, so refuse plainly instead of pretending to parse.
       case "/api/calendar/upload":
+      case "/api/calendar/review-all":
       case "/api/calendar/review":
       case "/api/calendar/colors":
         throw new Error(

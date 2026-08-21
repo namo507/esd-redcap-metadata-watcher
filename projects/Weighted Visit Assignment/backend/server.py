@@ -113,6 +113,14 @@ def r_calendar_upload(params, body):
         return 503, {"error": str(exc)}
 
 
+@post("/api/calendar/review-all")
+def r_calendar_review_all(params, body):
+    """Confirm or reject every block still waiting on a human."""
+    return 200, SESSION.review_all_pending(
+        bool(body.get("confirmed")),
+        str(body.get("reviewer") or "coordinator"))
+
+
 @post("/api/calendar/review")
 def r_calendar_review(params, body):
     """Confirm or reject one parsed block. Only confirmed blocks become evidence."""

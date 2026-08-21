@@ -591,6 +591,20 @@ class AuditStore:
         except (TypeError, ValueError):
             return None
 
+    def review_pending(self, confirmed: bool, reviewer: str) -> int:
+        """Settle every block still waiting, in one go."""
+        from datetime import datetime as _dt
+
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE calendar_import_block SET reviewed=1, confirmed=?, "
+                "reviewed_by=?, reviewed_at=? WHERE reviewed=0",
+                (1 if confirmed else 0, reviewer,
+                 _dt.now().isoformat(timespec="seconds")),
+            )
+            self.conn.commit()
+            return cur.rowcount
+
     def imports(self, limit: int = 25) -> List[sqlite3.Row]:
         return self.query(
             "SELECT * FROM calendar_import ORDER BY uploaded_at DESC, rowid DESC "

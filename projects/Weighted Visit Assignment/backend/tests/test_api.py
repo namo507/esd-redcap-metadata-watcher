@@ -367,6 +367,21 @@ def test_work_week_upload_applies_immediately():
            f"blocks should be in effect, applied={body['applied_blocks']}")
 
 
+def test_pending_blocks_can_be_settled_in_one_pass():
+    """An image import leaves dozens waiting; one at a time is not review."""
+    _confirm_colours()
+    _upload(WEEK_PDF)
+    # Force something into the pending state the image path produces.
+    store_before = call("GET", "/api/calendar/imports")[1]["confirmed_blocks"]
+
+    status, body = call("POST", "/api/calendar/review-all",
+                        {"confirmed": True, "reviewer": "Test Coordinator"})
+    expect(status == 200, f"bulk review returned {status}: {body}")
+    expect(body["pending_review"] == [], "blocks were left waiting after a bulk pass")
+    expect(body["confirmed_blocks"] >= store_before,
+           "a bulk confirm reduced the evidence in force")
+
+
 def test_a_block_in_effect_can_still_be_rejected():
     """Auto-applying is not irreversible: a wrong read can be taken back."""
     _upload(WEEK_PDF)

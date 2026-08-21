@@ -512,7 +512,20 @@ def import_pdf(
     _collect_resources(parsed, result)
     _resolve_unavailability(parsed, result, coordinators, role_map)
 
+    # The stored map only fills gaps the legend left. Letting it answer for a
+    # hue the legend already explained is how a policy calendar becomes a
+    # person: this file's own fixture has blue as "Offered Times ESD", and a map
+    # left over from an older overlay resolved blue to a coordinator, turning
+    # time the lab set aside for visits into that coordinator's busy time --
+    # precisely the inversion roles exist to stop.
+    explained = set(parsed.legend.values())
     for hue in result.hues_seen:
+        if hue in explained:
+            # Still record it, as belonging to nobody. Dropping the key would
+            # lose the row that reports an overlaid calendar the roster does
+            # not recognise.
+            attributed.setdefault(hue, None)
+            continue
         attributed.setdefault(hue, color_map.resolve(hue))
     if result.attribution_source == "none" and any(attributed.values()):
         result.attribution_source = "stored_map"
