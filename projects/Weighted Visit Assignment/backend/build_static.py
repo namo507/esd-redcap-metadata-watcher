@@ -104,6 +104,7 @@ def build() -> str:
         "roster": session.roster(),
         "reasonCodes": session.reason_codes(),
         "calendar": _demo_calendar(session),
+        "schedule": session.schedule_rows(),
         "visits": [],
     }
     for visit_id in session.order:

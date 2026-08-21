@@ -106,6 +106,59 @@ fresh, onboarding cap. No score rescues a failure.
 **Layer 3** — top 3, review band calibrated by Monte Carlo over the weight
 simplex, per-decision selection stability, tie-breaks logged with their seed.
 
+## Using it without a terminal
+
+Double-click **`Start ESD Visitboard.command`**. It imports anything waiting in
+`data/inbox`, starts the board and opens it. Closing the window that appears
+stops it again. Day to day the whole job is: drop a PDF in, click *Download
+report* on **Data & exports**.
+
+That report is one self-contained file rather than four downloads. A browser
+will not hand over a zip without a library and blocks a burst of separate
+downloads as a popup, so everything goes into a single HTML document that Excel
+imports directly &mdash; and it carries the caveats with it, which a bare CSV
+loses the moment it is emailed on.
+
+## The protocol clock
+
+Ranking answers *who should take this visit*. The clock answers the question
+before it: **which visit is next, and how late is it?**
+
+For each family, the next unfinished checkpoint's target is
+`anchor_date + offset_days`, and its acceptance window is that target plus or
+minus the protocol's tolerance. Status follows from where today sits relative to
+that window &mdash; `overdue`, `closing` (within 14 days of the end), `open`,
+`upcoming` &mdash; and pressure is the fraction of the window already spent,
+bounded to `[0, 1]` and pinned to 1.0 once it has passed. The relationship is
+linear on purpose: a steeper curve would encode a claim about how the cost of
+lateness grows that only the study team can make.
+
+Two refusals are built in:
+
+- **No anchor, no verdict.** A family without an anchor date reads `unknown`,
+  never `overdue`. Missing data is not evidence of lateness, and a guessed due
+  date sends someone chasing a family who is perfectly on time.
+- **The windows are provisional.** `config/protocol-schedule.json` ships offsets
+  read off the checkpoint names (`12mo` is 360 days) and a flat ±30-day window,
+  because nothing in this repo records the study's real acceptance windows.
+  Every date the board shows is labelled provisional until that file is
+  confirmed.
+
+## Every gate, enumerated
+
+`esd_scheduler/scenarios.py` builds a case for every point in the cross product
+of the factors that can veto a coordinator &mdash; 192 of them &mdash; and checks two
+properties the test suite would otherwise only sample:
+
+- **No gate is dead.** Each one must be able to veto on its own, or it is a rule
+  the lab believes in that the code no longer enforces.
+- **The order is the documented order.** When several gates would fail at once,
+  the reason shown is always the highest-priority one, so the board never gives
+  two different explanations for the same situation.
+
+A separate 32-row matrix covers the three policy calendars, where the failure
+that matters is a missing calendar being read as approval.
+
 ## Scheduled jobs
 
 `make install-automation` loads six launchd agents. Each is idempotent and safe

@@ -40,6 +40,7 @@ test:
 	$(PY) tests/test_constraints.py
 	$(PY) tests/test_calendar_import.py
 	$(PY) tests/test_automation.py
+	$(PY) tests/test_schedule.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 

@@ -126,6 +126,59 @@ function mondayOf(date) {
   return d;
 }
 
+const DUE_TONE = {
+  overdue: "attn", closing: "attn", open: "todo",
+  upcoming: "route", unknown: "route", complete: "done",
+};
+
+function drawDue() {
+  const sched = S.board.schedule;
+  const card = $("due-card");
+  if (!sched || !sched.rows || !sched.rows.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const counts = sched.counts || {};
+  $("due-key").innerHTML = ["overdue", "closing", "open", "upcoming", "unknown"]
+    .filter((k) => counts[k])
+    .map((k) => `<span><i class="dot dot-${DUE_TONE[k]}"></i>${counts[k]} ${esc(k)}</span>`)
+    .join("");
+
+  const rows = sched.rows.filter((r) => r.status !== "complete");
+  $("due-list").innerHTML = `
+    <div class="tablewrap"><table class="tbl">
+      <thead><tr>
+        <th>Family</th><th>Study</th><th>Next checkpoint</th><th>Status</th>
+        <th>Window closes</th><th>Days</th><th>Pressure</th>
+      </tr></thead>
+      <tbody>${rows.map((r) => `<tr>
+        <td>Family ${esc(String(r.family_id).replace(/^F/, ""))}</td>
+        <td>${esc(r.protocol)}</td>
+        <td>${esc(r.checkpoint || "\u2014")}</td>
+        <td><span class="statchip is-${
+          r.status === "overdue" || r.status === "closing" ? "fail"
+          : r.status === "open" ? "pass" : "skip"}">${esc(r.status_label)}</span></td>
+        <td>${r.window_end ? esc(r.window_end) : "\u2014"}</td>
+        <td class="${r.status === "overdue" ? "over" : ""}">${
+          r.days_remaining == null ? "\u2014"
+          : r.status === "overdue" ? `${Math.abs(r.days_remaining)} late`
+          : r.days_remaining}</td>
+        <td>${urgencyBar(r.urgency)}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>
+    ${sched.confirmed ? "" : `<div class="notice notice-warn" style="margin-top:.9rem">
+      <span>&#9432;</span><span>These dates are <b>provisional</b>. The offsets were
+      read off the checkpoint names and the windows are a placeholder, because the
+      study's real acceptance windows are not recorded anywhere in this repo.
+      Confirm them in <code>config/protocol-schedule.json</code> and every date here
+      becomes authoritative.</span></div>`}`;
+}
+
+function urgencyBar(u) {
+  const pct = Math.round(Math.max(0, Math.min(1, u || 0)) * 100);
+  return `<span class="ubar" title="${pct}% of the window used">
+    <i style="width:${pct}%"></i></span>`;
+}
+
 function drawCalendar() {
   const visits = visibleQueue();
   if (!visits.length) {
@@ -270,7 +323,7 @@ function setSection(name, opts) {
   $("hero-eyebrow").textContent = eyebrow;
   $("hero-title").textContent = title;
   $("hero-sub").textContent = sub;
-  if (name === "week") drawCalendar();
+  if (name === "week") { drawDue(); drawCalendar(); }
   if (name === "workload") { drawFairness(); drawEquity(); drawActivity(); }
   if (name === "sync") drawSync();
   if (name === "data") drawData();
@@ -1028,6 +1081,22 @@ const EXPORTS = [
      });
      return rows;
    }],
+  ["next-visits", "Next visits due",
+   "Every family's next checkpoint, its window, and how much of that window is left — the protocol clock as a file.",
+   () => {
+     const rows = [["family", "protocol", "next_checkpoint", "status",
+                    "target_date", "window_start", "window_end",
+                    "days_remaining", "pressure", "completed", "total",
+                    "schedule_confirmed"]];
+     ((S.board.schedule && S.board.schedule.rows) || []).forEach((r) => {
+       rows.push([r.family_id, r.protocol, r.checkpoint || "", r.status,
+                  r.target_date || "", r.window_start || "", r.window_end || "",
+                  r.days_remaining == null ? "" : r.days_remaining,
+                  r.urgency, r.completed, r.total,
+                  r.confirmed_schedule ? "yes" : "provisional"]);
+     });
+     return rows;
+   }],
   ["workload", "Workload and equity",
    "Visits, committed hours, out-of-hours tally and van training per coordinator — the periodic fairness review as a file.",
    () => {
@@ -1056,6 +1125,70 @@ const EXPORTS = [
    }],
 ];
 
+function everythingReport() {
+  /* One self-contained file rather than four downloads.
+
+     A browser will not let a page hand over a zip without a library, and it
+     blocks a burst of separate downloads as a popup. A single HTML document
+     sidesteps both: it opens in a browser, Excel imports it as a table, and it
+     carries the provenance -- which board, which clock, which caveats -- that a
+     bare CSV loses the moment it is emailed on. */
+  const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+  const sched = S.board.schedule || {};
+  const cal = S.board.calendar || {};
+
+  const table = (rows) => `<table><thead><tr>${
+    rows[0].map((h) => `<th>${esc(String(h).replace(/_/g, " "))}</th>`).join("")
+  }</tr></thead><tbody>${
+    rows.slice(1).map((r) => `<tr>${
+      r.map((c) => `<td>${esc(String(c == null ? "" : c))}</td>`).join("")
+    }</tr>`).join("")
+  }</tbody></table>`;
+
+  const sections = EXPORTS.map(([key, title, blurb, build]) => {
+    let rows;
+    try { rows = build(); } catch (e) { rows = [["error"], [e.message]]; }
+    return `<section><h2>${esc(title)}</h2><p>${esc(blurb)}</p>${
+      rows.length > 1 ? table(rows) : "<p><i>Nothing recorded.</i></p>"}</section>`;
+  }).join("");
+
+  const caveats = [];
+  if (sched.confirmed === false) {
+    caveats.push("Checkpoint due dates are <b>provisional</b>: the offsets were read "
+      + "off the checkpoint names and the windows are a placeholder.");
+  }
+  if ((cal.unresolved_names || []).length) {
+    caveats.push("Some absence notices could not be matched to a coordinator, so "
+      + "those days are <b>not blocked</b>: "
+      + cal.unresolved_names.map((u) => esc(u.name)).join(", ") + ".");
+  }
+  if (!STATIC) caveats.push("Exported from a live board; figures move as it is used.");
+  caveats.push("Coordinator names are the real roster; every schedule, credential "
+    + "and workload figure is synthetic demonstration data.");
+
+  return `<!doctype html><html><head><meta charset="utf-8">
+<title>ESD Visitboard export ${esc(stamp)}</title>
+<style>
+ body{font-family:'Libre Franklin',-apple-system,sans-serif;margin:2rem;color:#14141A;max-width:70rem}
+ h1{font-size:1.6rem;margin:0 0 .2rem} h2{font-size:1.1rem;margin:2rem 0 .3rem}
+ p{color:#55555F;font-size:.9rem;margin:.2rem 0 .8rem}
+ table{border-collapse:collapse;width:100%;font-size:.82rem;margin-bottom:1rem}
+ th{background:#3366FF;color:#fff;text-align:left;padding:.4rem .55rem;font-size:.7rem;
+    text-transform:uppercase;letter-spacing:.04em}
+ td{padding:.35rem .55rem;border-bottom:1px solid #DCE4F6}
+ tr:nth-child(even) td{background:#F4F4F6}
+ .caveats{background:#FFF8DC;color:#4A3B00;padding:.9rem 1.1rem;border-radius:12px;font-size:.85rem}
+ .caveats li{margin-bottom:.35rem}
+</style></head><body>
+<h1>ESD Visitboard export</h1>
+<p>${esc(stamp)} &middot; engine ${esc((S.board.health && S.board.health.engine_version) || "")}
+ &middot; weights ${esc((S.board.health && S.board.health.weight_vector_id) || "")}</p>
+<div class="caveats"><b>Read this first</b><ul>${
+  caveats.map((c) => `<li>${c}</li>`).join("")}</ul></div>
+${sections}
+</body></html>`;
+}
+
 function drawData() {
   const stamp = new Date().toISOString().slice(0, 10);
   $("exports").innerHTML = EXPORTS.map(([key, title, blurb]) =>
@@ -1063,6 +1196,19 @@ function drawData() {
        <h3>${esc(title)}</h3><p class="note">${esc(blurb)}</p>
        <button class="btn" type="button" data-export="${esc(key)}">Download CSV</button>
      </div>`).join("");
+  $("exports").insertAdjacentHTML("afterbegin", `
+    <div class="exportcard is-primary">
+      <h3>Everything, one file</h3>
+      <p class="note">Every table on this board in a single document, with the
+        caveats attached so they travel with the numbers. Opens in a browser;
+        Excel imports it directly.</p>
+      <button class="btn btn-primary" type="button" id="export-all">Download report</button>
+    </div>`);
+  $("export-all").addEventListener("click", () => {
+    download(`esd-visitboard-report-${stamp}.html`, everythingReport());
+    toast("Full report downloaded.");
+  });
+
   $("exports").querySelectorAll("[data-export]").forEach((b) =>
     b.addEventListener("click", () => {
       const spec = EXPORTS.find((e) => e[0] === b.dataset.export);

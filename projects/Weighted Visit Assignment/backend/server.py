@@ -121,6 +121,12 @@ def r_calendar_review(params, body):
         return 404, {"error": str(exc)}
 
 
+@get("/api/schedule")
+def r_schedule(params, body):
+    """Which families are owed a visit, most pressing first."""
+    return 200, SESSION.schedule_rows()
+
+
 @get("/api/health")
 def r_health(params, body):
     return 200, SESSION.health()
@@ -137,6 +143,7 @@ def r_board(params, body):
         "reason_codes": SESSION.reason_codes(),
         "activity": SESSION.activity[:12],
         "calendar": SESSION.imports(),
+        "schedule": SESSION.schedule_rows(),
     }
 
 

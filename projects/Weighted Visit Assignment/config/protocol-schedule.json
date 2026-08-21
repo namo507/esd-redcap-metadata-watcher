@@ -1,0 +1,60 @@
+{
+  "_comment": "When each protocol checkpoint is due, as days from the family's anchor date (enrolment or birth, whichever the study anchors on), plus how far either side of the target still counts as in-window. THESE ARE PROVISIONAL. The offsets were read off the checkpoint names -- '12mo' is 360 days -- and the windows are a flat +/- 30 days because nothing in the codebase records the study's real acceptance windows. Replace them with the protocol's own figures and set 'confirmed' to true; until then every due date the board shows is labelled provisional.",
+  "confirmed": false,
+  "confirmed_by": "",
+  "source": "derived from checkpoint names; windows are a placeholder",
+  "protocols": {
+    "NICO": [
+      {
+        "name": "6mo",
+        "offset_days": 180,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "12mo",
+        "offset_days": 360,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "18mo",
+        "offset_days": 540,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "24mo",
+        "offset_days": 720,
+        "window_before": 30,
+        "window_after": 30
+      }
+    ],
+    "NANO": [
+      {
+        "name": "baseline",
+        "offset_days": 0,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "3mo",
+        "offset_days": 90,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "9mo",
+        "offset_days": 270,
+        "window_before": 30,
+        "window_after": 30
+      },
+      {
+        "name": "18mo",
+        "offset_days": 540,
+        "window_before": 30,
+        "window_after": 30
+      }
+    ]
+  }
+}

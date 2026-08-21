@@ -234,6 +234,7 @@ window.StaticBoard = (function () {
           })),
           fairness: fairness(), reason_codes: DATA.reasonCodes,
           activity: activity.slice(0, 12),
+          schedule: DATA.schedule || {rows: [], counts: {}, confirmed: false},
           calendar: DATA.calendar || {
             imports: [], pending_review: [], confirmed_blocks: 0,
             last_import: null, color_map: { confirmed: false, map: {}, hues_seen: {},
@@ -255,6 +256,8 @@ window.StaticBoard = (function () {
       case "/api/reset":
         reset();
         return { ok: true };
+      case "/api/schedule":
+        return DATA.schedule || {rows: [], counts: {}, confirmed: false};
       case "/api/calendar/imports":
         return { imports: [], pending_review: [], confirmed_blocks: 0,
                  last_import: null, color_map: { confirmed: false, map: {} } };

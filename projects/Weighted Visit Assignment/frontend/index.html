@@ -52,7 +52,23 @@
 
   <!-- ============================================================ THE WEEK -->
   <section id="sec-week">
-    <div class="card">
+    <div class="card" id="due-card" hidden>
+      <div class="card-head">
+        <div>
+          <p class="eyebrow">Protocol clock</p>
+          <h2>Who is owed a visit next</h2>
+        </div>
+        <div id="due-key" class="cal-key"></div>
+      </div>
+      <p class="note" style="max-width:76ch">
+        Each family's next checkpoint, counted from their anchor date. This is a
+        different question from who should take a visit &mdash; it says which
+        visit is pressing, ordered by how much of its window is left.
+      </p>
+      <div id="due-list"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem">
       <div class="card-head">
         <div>
           <p class="eyebrow">The week</p>

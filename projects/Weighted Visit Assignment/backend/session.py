@@ -40,6 +40,7 @@ from esd_scheduler.constraints import (
     route_visit,
     visit_duration_hours,
 )
+from esd_scheduler.schedule import ProtocolSchedule, upcoming
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
     commit_assignment,
@@ -408,6 +409,29 @@ class LabSession:
                 }
                 for b in (dict(r) for r in self.store.confirmed_blocks())
             ][:60],
+        }
+
+    def schedule_rows(self) -> dict:
+        """Which family is owed a visit next, and how late it is.
+
+        Separate axis from the coordinator ranking: this says *which visit* is
+        pressing, that says *who should take it*. Keeping them apart means an
+        urgent visit never quietly promotes an ineligible coordinator.
+        """
+        sched = ProtocolSchedule.load()
+        rows = [r.to_dict() for r in upcoming(self.state.families,
+                                              self.state.history, self.now, sched)]
+        counts = {}
+        for row in rows:
+            counts[row["status"]] = counts.get(row["status"], 0) + 1
+        return {
+            "rows": rows,
+            "counts": counts,
+            "confirmed": sched.confirmed,
+            "confirmed_by": sched.confirmed_by,
+            "source": sched.source,
+            "actionable": sum(counts.get(k, 0)
+                              for k in ("overdue", "closing", "open")),
         }
 
     def filter_state(self) -> List[dict]:

@@ -82,6 +82,10 @@ class Family:
     # Attribute requirements, e.g. {"spanish"}; satisfied ones lift Omega.
     required_attributes: Set[str] = field(default_factory=set)
     pi_hold: bool = False
+    # Date the protocol clock starts for this family (enrolment or birth,
+    # whichever the study anchors on). Checkpoint due dates are offsets from
+    # it, so a family without one gets no due date rather than a guessed one.
+    anchor_date: Optional[date] = None
 
     # --- Master prompt §7 participant fields --------------------------------
     # NDD cross-collaboration visits may only be taken by staff certified on

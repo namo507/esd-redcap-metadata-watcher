@@ -99,6 +99,12 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             protocol=protocol,
             zone=rng.randint(1, 4),
             sigma=1,
+            # SYNTHETIC anchor. Spread across two and a half years so the demo
+            # shows every schedule state at once -- overdue, closing, open and
+            # not yet due -- rather than a queue that all falls due together.
+            # One family is left without an anchor on purpose, to exercise the
+            # path that refuses to guess a due date.
+            anchor_date=(None if i == 11 else (now - timedelta(days=90)).date()),
         )
     # The twins case: a family comfort issue became a hard exclusion.
     state.families["F5034"].hard_exclusions = {"C04"}   # Sofia Tous excluded
@@ -178,6 +184,8 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
                 )
             )
 
+    _spread_anchors(state, now)
+
     # --- calendars ----------------------------------------------------------
     blocks: Dict[str, List[BusyBlock]] = {}
     for cid in ids:
@@ -248,6 +256,34 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             ), fam)
         )
     return state, visits
+
+
+def _spread_anchors(state: LabState, now: datetime) -> None:
+    """Place each family's next checkpoint at a deliberate distance from today.
+
+    SYNTHETIC, and only for the demonstration board. A real lab's anchors come
+    from the study record. Picked so the queue shows every schedule state at
+    once -- overdue, closing, open and not yet due -- because a demo where
+    everything is equally late shows nothing about how the ordering behaves.
+    """
+    from .schedule import ProtocolSchedule
+
+    schedule = ProtocolSchedule.load()
+    # Days between today and the checkpoint's target date. The window is the
+    # target +/- 30, so these land one family in each state.
+    offsets = [-45, -20, -5, 10, 40, 120, -60, 5, -12, 25, 70]
+    for i, (fid, fam) in enumerate(sorted(state.families.items())):
+        if fam.anchor_date is None:
+            continue
+        checkpoints = schedule.for_protocol(fam.protocol)
+        done = {v.checkpoint for v in state.history if v.family_id == fid}
+        remaining = [c for c in checkpoints if c.name not in done]
+        if not remaining:
+            continue
+        delta = offsets[i % len(offsets)]
+        fam.anchor_date = (
+            now - timedelta(days=remaining[0].offset_days) + timedelta(days=delta)
+        ).date()
 
 
 def reference_case(now: datetime) -> Tuple[LabState, Visit]:

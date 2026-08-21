@@ -522,3 +522,13 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 
 /* Nav reflects the current route for assistive tech, not only visually. */
 .navbtn[aria-current="page"] { font-weight: 800; }
+
+/* ---------- protocol clock ---------- */
+.ubar { display: inline-block; width: 68px; height: 8px; border-radius: var(--r-pill);
+  background: var(--surface); overflow: hidden; vertical-align: middle; }
+.ubar i { display: block; height: 100%; border-radius: var(--r-pill);
+  background: var(--esd-confident-orange); }
+#due-list .tbl td { vertical-align: middle; }
+#due-key { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .74rem; color: var(--muted); }
+
+.exportcard.is-primary { border-color: var(--accent); background: var(--tint); }
