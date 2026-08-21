@@ -1,14 +1,7 @@
 {
-  "_comment": "Maps an Outlook calendar colour chip to a coordinator id. Outlook prints no legend, so this cannot be derived from the PDF and must be confirmed by someone who can see the live Outlook overlay. Until 'confirmed' is true, uploads parse but attribute to nobody.",
-  "confirmed": true,
-  "confirmed_by": "Namit",
-  "confirmed_at": "2026-08-21T11:44:46",
-  "map": {
-    "red": "C01",
-    "brown": "C02",
-    "cranberry": "C03",
-    "teal": "C04",
-    "yellow": "C05",
-    "grey": "C06"
-  }
+  "_comment": "Maps an Outlook calendar colour chip to a coordinator id. A PDF print does not need this: Outlook draws each calendar's name in that calendar's own colour, and the importer reads that legend directly. It is the fallback for exports whose header lost its colours, and the only route available for a screenshot, where there is no text colour to read. Colours are assigned per Outlook overlay and change when calendars are added or removed, so confirm this against the live overlay rather than copying it from an old export. While 'confirmed' is false, uploads are parsed and counted but attributed to nobody, because a guessed attribution moves the wrong person's workload.",
+  "confirmed": false,
+  "confirmed_by": "",
+  "confirmed_at": null,
+  "map": {}
 }
