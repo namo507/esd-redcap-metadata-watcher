@@ -228,6 +228,7 @@ def r_assign(params, body):
             coordinator_id,
             reason_code=body.get("reason_code") or None,
             reason_text=body.get("reason_text") or None,
+            tech_id=str(body.get("tech_id")) if body.get("tech_id") else None,
         )
     except ValueError as exc:
         return 400, {"error": str(exc)}

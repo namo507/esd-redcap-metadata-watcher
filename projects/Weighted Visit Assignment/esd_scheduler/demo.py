@@ -52,43 +52,50 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     # surname is not printed anywhere in the export, so only the first name is
     # used. Her completed-visit count is zero like every other figure here --
     # synthetic, and the value that keeps the cold-start path exercised.
-    specs = [
-        # name,                     credentials,                        cap,  done, zone, attrs
-        ("Margaret Bell",           {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 61, 1, {"spanish"}),
-        ("Lauren Puttock",          {"CONSENT", "DRIVING", "EEG"},                20.0, 48, 2, set()),
-        ("Sanjana Oak",             {"ADOS", "CONSENT", "DRIVING"},               20.0, 55, 1, set()),
-        ("Sofia Tous",              {"ADOS", "CONSENT", "DRIVING", "PHLEBOTOMY"}, 20.0, 72, 3, set()),
-        ("Morgan Soto",             {"CONSENT", "DRIVING"},                       10.0, 33, 2, {"spanish"}),
-        ("Ramiro Lucas-Mariano",    {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 40, 4, set()),
-        ("Makenzie",                {"CONSENT", "DRIVING", "EEG"},                20.0,  0, 2, set()),
-    ]
-    for i, (name, creds, cap, done, zone, attrs) in enumerate(specs):
-        cid = f"C{i + 1:02d}"
-        state.coordinators[cid] = Coordinator(
-            coordinator_id=cid,
-            name=name,
-            credentials=set(creds),
-            capacity_hours_week=cap,
-            n_completed_visits=done,
-            attributes=set(attrs),
-            hire_date=(now - timedelta(days=900 if done else 9)).date(),
-            working_blocks=[(d, 8.0, 17.0) for d in range(5)],
-            # Master §7 staff fields. Synthetic, like everything else here.
-            tech_trained=i in (0, 1, 5),
-            van_trained=i in (0, 2, 3),
-            in_lab_day=(i % 4) if done else None,
-            out_of_hours_count=[3, 0, 5, 1, 2, 0, 0][i],
+    # The roster is config, not code: config/roster.json. Adding somebody is a
+    # row, removing them is active:false, and neither is a code change. What is
+    # real in that file and what is synthetic is documented there.
+    from .roster import Roster
+
+    roster = Roster.load()
+    for entry in roster.active:
+        state.coordinators[entry.id] = Coordinator(
+            coordinator_id=entry.id,
+            name=entry.name,
+            credentials=set(entry.credentials),
+            capacity_hours_week=entry.capacity_hours_week,
+            n_completed_visits=entry.completed_visits,
+            attributes=set(entry.attributes),
+            hire_date=(now - timedelta(
+                days=900 if entry.completed_visits else 9)).date(),
+            working_blocks=[(d, 9.0, 17.0) for d in range(5)],
+            tech_trained=entry.tech_trained,
+            van_trained=entry.van_trained,
+            in_lab_day=entry.in_lab_day,
+            out_of_hours_count=entry.out_of_hours_count,
         )
+
     ids = sorted(state.coordinators)
 
     # Two people are already heavily booked this period, so the burden term bites.
-    state.committed_hours = {cid: round(rng.uniform(3.0, 9.0), 1) for cid in ids}
+    state.committed_hours = {
+        cid: (roster.by_id()[cid].committed_hours
+              if roster.by_id().get(cid) and roster.by_id()[cid].committed_hours
+              is not None else round(rng.uniform(3.0, 9.0), 1))
+        for cid in ids
+    }
     # Busy, not capped. Starting anyone above the utilisation ceiling turns the
     # whole run into a demonstration of the fairness veto and hides the ranking,
     # which is the part that needs looking at.
-    state.committed_hours["C01"] = 13.0   # busiest
-    state.committed_hours["C04"] = 12.0   # second busiest
-    state.committed_hours["C07"] = 0.0    # no history yet: the cold-start case
+    # Keyed by position rather than id so the demo still makes sense when the
+    # roster changes: somebody has to be busy for the burden term to bite.
+    if len(ids) >= 1:
+        state.committed_hours[ids[0]] = 13.0        # busiest
+    if len(ids) >= 4:
+        state.committed_hours[ids[3]] = 12.0        # second busiest
+    for cid in ids:
+        if state.coordinators[cid].n_completed_visits == 0:
+            state.committed_hours[cid] = 0.0        # the cold-start case
 
     # --- families -----------------------------------------------------------
     for i in range(12):
@@ -227,8 +234,11 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
         fid = family_ids[i % len(family_ids)]
         fam = state.families[fid]
         start_offset = 2 + (i % 10)
+        # 9am, because that is when the lab's working day starts. The manual
+        # defines out-of-hours as anything more than thirty minutes outside
+        # 9-5, so a window opening at 8 advertises time nobody works.
         window_start = (now + timedelta(days=start_offset)).replace(
-            hour=8, minute=0, second=0, microsecond=0
+            hour=9, minute=0, second=0, microsecond=0
         )
         # Home visits are weekday work. Layer 1 would filter a weekend window
         # down to the weekdays inside it anyway, but a queue that advertises a

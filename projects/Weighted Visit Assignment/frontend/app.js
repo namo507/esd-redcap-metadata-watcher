@@ -448,6 +448,46 @@ function whyLine(c) {
   return bits.join(" &middot; ");
 }
 
+function pairSection(d, assigned) {
+  /* The manual staffs a visit with two people -- one clinician, one tech -- so
+     the pair is the thing being chosen. The individual ranking is still there,
+     folded away, because it explains how a pair got its score. */
+  const pairs = d.pairs || [];
+  const problems = d.pair_problems || [];
+  if (!pairs.length) {
+    return `<div class="card" style="margin-top:1.3rem">
+      <div class="card-head"><div><p class="eyebrow">Staffing</p>
+        <h2>No pair can cover this visit</h2></div></div>
+      ${problems.map((x) => `<div class="notice notice-warn"><span>&#9888;</span>
+        <span>${esc(x)}</span></div>`).join("")
+        || `<p class="note">Nobody eligible is free alongside somebody else.</p>`}
+    </div>`;
+  }
+  const best = pairs[0];
+  return `<div class="card" style="margin-top:1.3rem">
+    <div class="card-head"><div>
+      <p class="eyebrow">Staffing &mdash; one clinician, one tech</p>
+      <h2>Who to send</h2>
+    </div><span class="note">${pairs.length} workable pairing${pairs.length === 1 ? "" : "s"}</span></div>
+    ${problems.map((x) => `<div class="notice notice-warn"><span>&#9888;</span>
+      <span>${esc(x)}</span></div>`).join("")}
+    <div class="pairlist">${pairs.slice(0, 6).map((p, i) => `
+      <div class="pairrow ${i === 0 ? "is-best" : ""}">
+        <div class="pairwho">
+          <span class="pairrole">Clinician</span><b>${esc(p.clinician)}</b>
+          <span class="pairrole">Tech</span><b>${esc(p.tech)}</b>
+        </div>
+        <div class="pairmeta">
+          <span data-tip="Earliest slot both are free">${esc(p.slot || "\u2014")}</span>
+          ${p.van_capable ? '<span class="statchip is-pass" data-tip="Someone on this pair can drive the van">van</span>' : ""}
+          <span class="statchip is-skip" data-tip="Combined score across the four criteria">${p.score.toFixed(3)}</span>
+        </div>
+        ${assigned ? "" : `<button class="btn ${i === 0 ? "btn-primary" : "btn-ghost"}"
+           type="button" data-pair="${esc(p.clinician_id)}|${esc(p.tech_id)}">Send</button>`}
+      </div>`).join("")}</div>
+  </div>`;
+}
+
 function candidateCard(c, canAssign, recommendedId) {
   // "Best match" belongs to the person the board would actually send. If a
   // fairness veto blocks rank 1, the next assignable candidate carries the
@@ -555,15 +595,16 @@ function drawDetail() {
       ${notices}
     </div>
 
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head"><div>
-        <p class="eyebrow">Who the board would send</p>
-        <h2>${d.close_call ? "Close call &mdash; two good options" : "Ranked by fit"}</h2>
-      </div></div>
-      <div class="cands">${d.candidates.map((c) => candidateCard(c, !assigned, d.recommended_id)).join("")
+    ${pairSection(d, assigned)}
+
+    <details class="card details-card" style="margin-top:1.3rem">
+      <summary><b>${d.close_call ? "Close call &mdash; two good options" : "Individual ranking"}</b>
+        <span class="note"> &mdash; how each person scored on their own</span></summary>
+      <div class="cands" style="margin-top:1rem">${d.candidates.map((c) => candidateCard(c, !assigned, d.recommended_id)).join("")
         || '<p class="note">Nobody passed the eligibility checks.</p>'}</div>
       ${excluded}
-      ${assignBlock}
+    </details>
+    ${assignBlock}
     </div>`;
 
   $("detail").querySelectorAll("[data-assign]").forEach((b) =>

@@ -315,8 +315,13 @@ def commit_assignment(
     override_reason_text: Optional[str] = None,
     overridden_by: Optional[str] = None,
     now: Optional[datetime] = None,
+    tech_id: Optional[str] = None,
 ) -> Tuple[str, Optional[CandidateScore], List[str]]:
     """Write the decision down, re-checking the calendar at the last moment.
+
+    ``tech_id`` is the second person on the visit. The manual staffs every visit
+    with a clinician and a tech, so recording only one of them would leave the
+    audit log unable to answer who actually went.
 
     Returns (run_id, chosen candidate or None, notes).
     """
@@ -369,6 +374,7 @@ def commit_assignment(
             overridden_by=overridden_by,
             is_provisional=cand.feasibility.provisional,
             write_time_conflict=write_conflict,
+            assigned_tech_id=tech_id,
             decided_at=now,
         )
         state.pending.setdefault(cand.coordinator_id, []).append(pool.visit)

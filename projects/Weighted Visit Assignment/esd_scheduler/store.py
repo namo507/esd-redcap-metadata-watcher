@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS candidate_score (
 CREATE TABLE IF NOT EXISTS assignment_outcome (
     run_id                 TEXT PRIMARY KEY,
     assigned_coordinator_id TEXT,
+    -- The manual staffs a visit with two people: a clinician and a tech. The
+    -- column above is the clinician; this is who went with them.
+    assigned_tech_id       TEXT,
     assigned_rank          INTEGER,
     was_override           INTEGER NOT NULL DEFAULT 0,
     override_reason_code   TEXT,
@@ -259,6 +262,7 @@ class AuditStore:
         with self._lock:
             self.conn.executescript(SCHEMA)
             self._commit()
+        self._migrate()
 
     # -- serialised access ---------------------------------------------------
 
@@ -271,6 +275,30 @@ class AuditStore:
             self.conn.commit()
 
     # -- config --------------------------------------------------------------
+
+    def _migrate(self) -> None:
+        """Add columns a newer schema introduced, in place.
+
+        The store is append-only and long-lived, so a database created before a
+        column existed has to gain it rather than be rebuilt. CREATE TABLE IF
+        NOT EXISTS silently leaves an older table alone, which is how a new
+        column ends up missing on exactly the machines that have the most
+        history.
+        """
+        wanted = {
+            "assignment_outcome": [("assigned_tech_id", "TEXT")],
+        }
+        with self._lock:
+            for table, columns in wanted.items():
+                have = {
+                    row[1] for row in
+                    self.conn.execute(f"PRAGMA table_info({table})").fetchall()
+                }
+                for name, kind in columns:
+                    if name not in have:
+                        self.conn.execute(
+                            f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+            self.conn.commit()
 
     def record_config(self, cfg: EngineConfig) -> None:
         w = cfg.weights
@@ -408,6 +436,7 @@ class AuditStore:
         assigned_coordinator_id: Optional[str],
         assigned_rank: Optional[int],
         *,
+        assigned_tech_id: Optional[str] = None,
         human_override: bool = False,
         override_reason_code: Optional[str] = None,
         override_reason_text: Optional[str] = None,
@@ -436,15 +465,17 @@ class AuditStore:
             reason_class = "system"
         self._exec(
             """INSERT OR REPLACE INTO assignment_outcome
-               (run_id, assigned_coordinator_id, assigned_rank, was_override,
+               (run_id, assigned_coordinator_id, assigned_tech_id, assigned_rank,
+                was_override,
                 override_reason_code, override_reason_class, override_reason_text,
                 overridden_by, is_provisional, confirmed_at, write_time_conflict,
                 decided_at, visit_completed, no_show, protocol_deviation,
                 family_satisfaction)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,NULL)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,NULL)""",
             (
                 run_id,
                 assigned_coordinator_id,
+                assigned_tech_id,
                 assigned_rank,
                 int(was_override),
                 override_reason_code,

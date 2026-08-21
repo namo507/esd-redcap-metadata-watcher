@@ -30,9 +30,13 @@ class Protocol:
     @staticmethod
     def default_table() -> Dict[str, "Protocol"]:
         return {
+            # NICO is not covered by the ESD Lab Scheduling Manual, so its
+            # clinical requirements are not recorded anywhere here. It carries
+            # the practical credentials only; the reliability matrix is what
+            # gates clinical capability, and it has no NICO rows to gate on.
             "NICO": Protocol(
                 name="NICO",
-                required_credentials=frozenset({"ADOS", "CONSENT", "DRIVING"}),
+                required_credentials=frozenset({"CONSENT", "DRIVING"}),
                 checkpoint_sequence=("6mo", "12mo", "18mo", "24mo"),
             ),
             # NANO is transcribed from the ESD Lab Scheduling Manual: these are

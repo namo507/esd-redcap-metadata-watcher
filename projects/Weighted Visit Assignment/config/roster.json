@@ -1,0 +1,173 @@
+{
+  "_comment": [
+    "The people the board schedules. Data, not code: add a row to add someone,",
+    "set active to false to take them off the board without deleting the",
+    "history that references them.",
+    "",
+    "WHAT IS REAL HERE. Names are the lab roster from the shared Outlook",
+    "calendar. 'van_trained' is the manual's Van-Trained Staff list (Makenzie,",
+    "Lauren, Ramiro, Emma, Maggie -- Emma is not a coordinator). 'manual_name'",
+    "is how the manual refers to them, which is what the reliability chart and",
+    "the all-day absence banners are keyed on.",
+    "",
+    "WHAT IS SYNTHETIC. capacity_hours_week, completed_visits, zone, attributes,",
+    "in_lab_day, out_of_hours_count and committed_hours are invented to exercise",
+    "the engine and describe nobody's actual workload. Replace them from the",
+    "lab's own records before the pilot.",
+    "",
+    "Clinical reliability is NOT here. It lives in reliability-matrix.json,",
+    "transcribed from the manual's chart, and that file alone decides who may",
+    "run a visit. Two places to say the same thing is how they end up",
+    "disagreeing.",
+    "",
+    "'can_tech' says someone can run the tech side of a visit. The manual does",
+    "not publish a tech certification list, so everyone active carries it until",
+    "'credentials' are practical requirements for getting a visit done -- consent-taking, driving, kit handling. They are NOT clinical reliability, which lives in reliability-matrix.json. Everyone active holds CONSENT and DRIVING; the rest are synthetic until the lab records them.",
+    "the lab says otherwise; set it false to exclude somebody."
+  ],
+  "confirmed": false,
+  "coordinators": [
+    {
+      "id": "C01",
+      "name": "Margaret Bell",
+      "manual_name": "Maggie",
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 61,
+      "zone": 1,
+      "attributes": [
+        "spanish"
+      ],
+      "van_trained": true,
+      "tech_trained": true,
+      "can_tech": true,
+      "in_lab_day": 0,
+      "out_of_hours_count": 3,
+      "credentials": [
+        "CONSENT",
+        "DRIVING",
+        "EEG"
+      ]
+    },
+    {
+      "id": "C02",
+      "name": "Lauren Puttock",
+      "manual_name": "Lauren",
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 48,
+      "zone": 2,
+      "attributes": [],
+      "van_trained": true,
+      "tech_trained": true,
+      "can_tech": true,
+      "in_lab_day": 1,
+      "out_of_hours_count": 0,
+      "credentials": [
+        "CONSENT",
+        "DRIVING",
+        "EEG"
+      ]
+    },
+    {
+      "id": "C03",
+      "name": "Sanjana Oak",
+      "manual_name": "Sanjana",
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 55,
+      "zone": 1,
+      "attributes": [],
+      "van_trained": false,
+      "tech_trained": false,
+      "can_tech": true,
+      "in_lab_day": 2,
+      "out_of_hours_count": 5,
+      "credentials": [
+        "CONSENT",
+        "DRIVING"
+      ]
+    },
+    {
+      "id": "C04",
+      "name": "Sofia Tous",
+      "manual_name": null,
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 72,
+      "zone": 3,
+      "attributes": [],
+      "van_trained": false,
+      "tech_trained": false,
+      "can_tech": true,
+      "in_lab_day": 3,
+      "out_of_hours_count": 1,
+      "credentials": [
+        "CONSENT",
+        "DRIVING",
+        "PHLEBOTOMY"
+      ]
+    },
+    {
+      "id": "C05",
+      "name": "Morgan Soto",
+      "manual_name": null,
+      "active": true,
+      "capacity_hours_week": 10.0,
+      "completed_visits": 33,
+      "zone": 2,
+      "attributes": [
+        "spanish"
+      ],
+      "van_trained": false,
+      "tech_trained": false,
+      "can_tech": true,
+      "in_lab_day": 0,
+      "out_of_hours_count": 2,
+      "credentials": [
+        "CONSENT",
+        "DRIVING"
+      ]
+    },
+    {
+      "id": "C06",
+      "name": "Ramiro Lucas-Mariano",
+      "manual_name": "Ramiro",
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 40,
+      "zone": 4,
+      "attributes": [],
+      "van_trained": true,
+      "tech_trained": true,
+      "can_tech": true,
+      "in_lab_day": 1,
+      "out_of_hours_count": 0,
+      "credentials": [
+        "CONSENT",
+        "DRIVING",
+        "EEG"
+      ]
+    },
+    {
+      "id": "C07",
+      "name": "Makenzie",
+      "manual_name": "Makenzie",
+      "active": true,
+      "capacity_hours_week": 20.0,
+      "completed_visits": 0,
+      "zone": 2,
+      "attributes": [],
+      "van_trained": true,
+      "tech_trained": true,
+      "can_tech": true,
+      "in_lab_day": null,
+      "out_of_hours_count": 0,
+      "credentials": [
+        "CONSENT",
+        "DRIVING",
+        "EEG"
+      ]
+    }
+  ]
+}

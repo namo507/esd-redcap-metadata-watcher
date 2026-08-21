@@ -670,3 +670,21 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .slot.is-some { background: var(--esd-optimal-yellow); } .slot.is-some i { color: #3A3000; }
 .slot.is-few  { background: var(--esd-confident-orange); } .slot.is-few i { color: #fff; }
 .slot.is-none { background: #E4E4EA; } .slot.is-none i { color: var(--muted); }
+
+/* ---------- staffing pairs ---------- */
+.pairlist { display: grid; gap: .55rem; margin-top: 1rem; }
+.pairrow { display: grid; grid-template-columns: 1fr auto auto; gap: .9rem;
+  align-items: center; border: 1px solid var(--line); border-radius: var(--r-card);
+  padding: .75rem .9rem; }
+.pairrow.is-best { border-color: var(--accent); background: var(--tint); }
+.pairwho { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: .3rem .55rem;
+  align-items: baseline; }
+.pairrole { font-size: .64rem; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); }
+.pairwho b { font-size: .92rem; }
+.pairmeta { display: flex; gap: .4rem; align-items: center; font-size: .8rem;
+  color: var(--muted); white-space: nowrap; }
+@media (max-width: 640px) {
+  .pairrow { grid-template-columns: 1fr; }
+  .pairwho { grid-template-columns: auto 1fr; }
+}

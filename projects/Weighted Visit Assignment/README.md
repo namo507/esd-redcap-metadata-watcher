@@ -170,6 +170,45 @@ five-minute cadence as the real sync job; without that the demo's evidence would
 age past the staleness threshold within the hour and veto the whole roster for a
 reason that is an artefact of nobody running the job.
 
+## Two people per visit
+
+The manual staffs every visit with **one clinician and one tech**, and the
+clinician must be signed off on every assessment that visit age needs. So the
+unit being scheduled is a pair, and ranking individuals answers a question the
+lab never asks. `esd_scheduler/pairing.py` ranks pairings; the individual
+ranking is still there, folded away, because it explains how a pair scored.
+
+Two choices worth stating rather than burying:
+
+**How the criteria combine.** They split by who experiences them. Continuity,
+family preference and protocol continuity are about the family, so the pair
+takes the *better* of the two &mdash; the family recognises whoever comes. Burden
+relief is about the lab, so it takes the *mean* &mdash; a visit consumes both
+people's week. Nothing is re-weighted.
+
+**Who counts as the clinician.** Exactly the people the reliability chart signs
+off on every assessment that visit needs. Where the chart lists nothing for a
+visit, that is reported rather than filled in: the pair is offered flagged as
+unverified, because the chart not covering a visit is not the same as anyone
+being allowed to run it. Mirrored pairings collapse in that case &mdash; offering
+both orderings of two people when nothing can tell the roles apart is false
+precision.
+
+The slot has to work for **both**, on the same three-state evidence rule as
+everything else. Pairing two unknowns does not add up to a known.
+
+## The roster is data
+
+`config/roster.json` holds the people. Adding somebody is a row; removing them
+is `active: false`, which takes them off the board while leaving the history
+that references them intact &mdash; which is what makes "remove somebody" safe on a
+system whose whole point is the audit trail. Capacity, credentials, van
+training and the in-lab day all live there.
+
+Clinical reliability deliberately does **not**: it lives in the reliability
+matrix, transcribed from the manual, and that file alone decides who may run a
+visit. Saying it in two places is how the two end up disagreeing.
+
 ## What the manual decides
 
 Four things now come from the ESD Lab Scheduling Manual rather than from a

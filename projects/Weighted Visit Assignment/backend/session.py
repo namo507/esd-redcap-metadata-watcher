@@ -41,6 +41,8 @@ from esd_scheduler.constraints import (
     visit_duration_hours,
 )
 from esd_scheduler.availability import coverage_report, week_grid
+from esd_scheduler.pairing import rank_pairs
+from esd_scheduler.roster import Roster
 from esd_scheduler.schedule import STATUS_LABEL, ProtocolSchedule, upcoming
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
@@ -154,6 +156,7 @@ class LabSession:
         self.db_path = db_path
         self.cfg: EngineConfig = load_config()
         self.matrix = ReliabilityMatrix.load()
+        self.roster_config = Roster.load()
         self.reset()
 
     # -- lifecycle -----------------------------------------------------------
@@ -1007,8 +1010,16 @@ class LabSession:
                 for c in pool.rejected
             ]
 
+            pairs, pair_problems = rank_pairs(
+                visit, self.state, self.cfg.weights, self.matrix, survivors,
+                self.now, duration_hours=visit_duration_hours(visit, family),
+                roster=self.roster_config,
+            )
+
             return {
                 "visit": self.visit_summary(visit_id),
+                "pairs": [p.to_dict() for p in pairs],
+                "pair_problems": pair_problems,
                 "family_preference": (
                     "Wants a familiar face" if family.sigma >= 0 else "Wants a fresh face"
                 ),
@@ -1088,6 +1099,7 @@ class LabSession:
         coordinator_id: str,
         reason_code: Optional[str] = None,
         reason_text: Optional[str] = None,
+        tech_id: Optional[str] = None,
     ) -> dict:
         with self._lock:
             if visit_id in self.assignments:
@@ -1138,12 +1150,16 @@ class LabSession:
                 override_reason_text=reason_text if is_override else None,
                 overridden_by="visitboard" if is_override else None,
                 now=self.now,
+                tech_id=tech_id,
             )
             if committed is None:
                 raise ValueError("; ".join(notes) or "The assignment was refused.")
 
+            tech = self.state.coordinators.get(tech_id) if tech_id else None
             record = {
                 "run_id": run_id,
+                "tech_id": tech_id,
+                "tech_name": getattr(tech, "name", None),
                 "coordinator_id": committed.coordinator_id,
                 "coordinator_name": committed.coordinator_name,
                 "rank": committed.rank_position,

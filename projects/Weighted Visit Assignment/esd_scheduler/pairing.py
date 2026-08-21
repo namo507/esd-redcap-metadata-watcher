@@ -1,0 +1,219 @@
+"""Staffing a visit with two people: one clinician and one tech.
+
+The manual is unambiguous -- "2 staff members are needed per visit: 1 clinician
+AND 1 tech" -- and the clinician "must be able to reliably/independently admin
+all the assessments needed for that visit age". So the unit being scheduled is a
+*pair*, and ranking individuals answers a question the lab never asks.
+
+Two decisions worth stating rather than burying, because both are choices:
+
+**Which criteria combine, and how.** The four criteria split cleanly by who
+experiences them. Continuity, family preference and protocol continuity are
+about the family: the pair delivers them if *either* member does, so they take
+the better of the two. Burden relief is about the lab: a visit consumes both
+people's week, so it takes the mean. Nothing is re-weighted -- the same vector
+applies to the combined components.
+
+**Who can be the clinician.** Exactly the people the reliability chart says are
+signed off on every assessment that visit needs. Where the chart lists nothing
+for a visit, that is reported rather than filled in: the pair is still offered,
+flagged as unverified, because the chart not covering a visit is not the same
+as anybody being allowed to run it.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Sequence, Tuple
+
+from .constraints import EVIDENCE_CLEAR, evidence_state
+
+SLOT_STEP_MINUTES = 30
+
+
+@dataclass
+class Pair:
+    """One clinician and one tech, and how good a pairing they are."""
+
+    clinician_id: str
+    clinician_name: str
+    tech_id: str
+    tech_name: str
+    score: float
+    components: Dict[str, float] = field(default_factory=dict)
+    contributions: Dict[str, float] = field(default_factory=dict)
+    slot_start: Optional[datetime] = None
+    slot_end: Optional[datetime] = None
+    van_capable: bool = False
+    clinician_verified: bool = True
+    notes: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "clinician_id": self.clinician_id,
+            "clinician": self.clinician_name,
+            "tech_id": self.tech_id,
+            "tech": self.tech_name,
+            "score": round(self.score, 3),
+            "components": {k: round(v, 3) for k, v in self.components.items()},
+            "contributions": {k: round(v, 4) for k, v in self.contributions.items()},
+            "slot": (self.slot_start.strftime("%a %-I:%M %p")
+                     if self.slot_start else None),
+            "slot_start": self.slot_start.isoformat() if self.slot_start else None,
+            "van_capable": self.van_capable,
+            "clinician_verified": self.clinician_verified,
+            "notes": list(self.notes),
+        }
+
+
+def clinicians_for(visit, matrix, ids: Sequence[str]) -> Tuple[List[str], bool]:
+    """Who may run this visit's assessments, and whether the chart covered it.
+
+    Returns ``(ids, verified)``. ``verified`` is False when the chart lists no
+    requirements for the visit, which means the answer is "the chart does not
+    say" rather than "anyone will do".
+    """
+    required = matrix.required_for(visit.protocol, visit.checkpoint)
+    if not required:
+        return list(ids), False
+    return [c for c in ids if all(matrix.is_reliable(c, a) for a in required)], True
+
+
+def _combine(clin_components, tech_components, weights) -> Tuple[dict, dict, float]:
+    """Merge two candidates' criteria into the pair's, then score once."""
+    combined = {}
+    for key in ("phi", "omega", "p"):
+        combined[key] = max(getattr(clin_components, key),
+                            getattr(tech_components, key))
+    combined["psi"] = (getattr(clin_components, "psi")
+                       + getattr(tech_components, "psi")) / 2.0
+    contributions = {k: combined[k] * getattr(weights, k) for k in combined}
+    return combined, contributions, sum(contributions.values())
+
+
+def _common_slot(state, visit, a: str, b: str, now: datetime,
+                 duration_hours: float,
+                 day_start: float = 9.0, day_end: float = 17.0,
+                 allow_friday: bool = False):
+    """Earliest slot in the visit window where BOTH are demonstrably free.
+
+    Uses the same three-state evidence rule as everything else, so a slot only
+    counts when both calendars actually say clear. "No evidence" fails here
+    exactly as it fails a single-coordinator check -- pairing two unknowns does
+    not add up to a known.
+    """
+    step = timedelta(minutes=SLOT_STEP_MINUTES)
+    length = timedelta(hours=duration_hours)
+    cursor = visit.window_start
+    limit = visit.window_end
+    while cursor + length <= limit:
+        # Fridays are lab meeting days and carry no visits without a logged
+        # override. The gate that enforces that runs against each candidate's
+        # own slot; this function picks its own, so it has to honour the rule
+        # itself or it will happily offer a Friday morning.
+        workday = cursor.weekday() < 5 and (allow_friday or cursor.weekday() != 4)
+        if workday:
+            hour = cursor.hour + cursor.minute / 60.0
+            finish = hour + duration_hours
+            if hour >= day_start and finish <= day_end:
+                end = cursor + length
+                if (evidence_state(a, state, cursor, end, now) == EVIDENCE_CLEAR
+                        and evidence_state(b, state, cursor, end, now)
+                        == EVIDENCE_CLEAR):
+                    return cursor, end
+        cursor += step
+    return None, None
+
+
+def rank_pairs(
+    visit,
+    state,
+    weights,
+    matrix,
+    survivors,
+    now: datetime,
+    duration_hours: Optional[float] = None,
+    roster=None,
+    limit: int = 12,
+    allow_friday: bool = False,
+) -> Tuple[List[Pair], List[str]]:
+    """Every workable clinician/tech pairing, best first.
+
+    ``survivors`` are the candidates that already passed the Layer 1 gates, so
+    this never has to re-litigate eligibility -- it only has to decide roles,
+    find a slot both can make, and combine the scores.
+    """
+    by_id = {c.coordinator_id: c for c in survivors}
+    ids = list(by_id)
+    problems: List[str] = []
+
+    clinician_ids, verified = clinicians_for(visit, matrix, ids)
+    if not clinician_ids:
+        problems.append(
+            "Nobody eligible is signed off on every assessment this visit needs, "
+            "so it cannot be staffed as the manual requires.")
+        return [], problems
+    if not verified:
+        problems.append(
+            "The reliability chart lists no assessments for this visit, so which "
+            "of these people counts as its clinician is unverified.")
+
+    tech_ok = set(ids)
+    if roster is not None:
+        entries = roster.by_id()
+        tech_ok = {c for c in ids
+                   if c not in entries or entries[c].can_tech}
+    if not tech_ok:
+        problems.append("Nobody eligible is marked as able to run the tech side.")
+        return [], problems
+
+    duration = duration_hours or getattr(visit, "duration_hours", 2.0)
+    pairs: List[Pair] = []
+    for clinician in clinician_ids:
+        for tech in tech_ok:
+            if tech == clinician:
+                continue
+            start, end = _common_slot(state, visit, clinician, tech, now, duration,
+                                      allow_friday=allow_friday)
+            if start is None:
+                continue
+            combined, contributions, score = _combine(
+                by_id[clinician].components, by_id[tech].components, weights)
+            coord_c = state.coordinators.get(clinician)
+            coord_t = state.coordinators.get(tech)
+            pairs.append(Pair(
+                clinician_id=clinician,
+                clinician_name=by_id[clinician].coordinator_name,
+                tech_id=tech,
+                tech_name=by_id[tech].coordinator_name,
+                score=score,
+                components=combined,
+                contributions=contributions,
+                slot_start=start,
+                slot_end=end,
+                van_capable=bool(getattr(coord_c, "van_trained", False)
+                                 or getattr(coord_t, "van_trained", False)),
+                clinician_verified=verified,
+            ))
+
+    if not verified:
+        # With no chart entry there is nothing to tell the two roles apart, so
+        # offering both orderings of the same two people is false precision.
+        seen = set()
+        deduped = []
+        for pair in pairs:
+            key = frozenset((pair.clinician_id, pair.tech_id))
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(pair)
+        pairs = deduped
+
+    pairs.sort(key=lambda p: (-p.score, p.slot_start or datetime.max,
+                              p.clinician_id, p.tech_id))
+    if not pairs:
+        problems.append(
+            "No clinician and tech are free at the same time inside this "
+            "visit's window.")
+    return pairs[:limit], problems
