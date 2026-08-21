@@ -127,6 +127,33 @@ window.StaticBoard = (function () {
     });
   }
 
+  function buildQueue() {
+    /* Same order and the same priority fields the live board produced, so the
+       published copy and a local one rank identically. */
+    const extra = {};
+    (DATA.queueOrder || []).forEach((row) => { extra[row.id] = row; });
+    const rows = DATA.visits.map((v) => Object.assign(
+      visitSummary(v.visit.id),
+      { needs_attention: needsAttention(v.visit.id) },
+      extra[v.visit.id] || {}));
+    // An assignment made in this session changes the tier, so recompute that
+    // one field rather than serving a stale "still to assign" position.
+    rows.forEach((r) => {
+      if (Array.isArray(r.priority)) {
+        r.priority = [r.status === "assigned" ? 1 : 0].concat(r.priority.slice(1));
+      }
+    });
+    rows.sort((a, b) => {
+      const x = a.priority || [], y = b.priority || [];
+      for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+        if (x[i] === y[i]) continue;
+        return x[i] < y[i] ? -1 : 1;
+      }
+      return 0;
+    });
+    return rows;
+  }
+
   function visitSummary(visitId) {
     const base = DATA.visits.find((v) => v.visit.id === visitId).visit;
     const a = assignments[visitId];
@@ -228,10 +255,12 @@ window.StaticBoard = (function () {
     switch (base) {
       case "/api/board":
         return {
-          health: DATA.meta.health, roster: DATA.roster,
-          queue: DATA.visits.map((v) => Object.assign(visitSummary(v.visit.id), {
-            needs_attention: needsAttention(v.visit.id),
-          })),
+          // A snapshot does not age: reporting a growing "synced N hours ago"
+          // on a frozen copy describes the build, not the evidence.
+          health: Object.assign({}, DATA.meta.health, {
+            server_time: DATA.meta.bakedAt || DATA.meta.health.server_time,
+          }), roster: DATA.roster,
+          queue: buildQueue(),
           fairness: fairness(), reason_codes: DATA.reasonCodes,
           activity: activity.slice(0, 12),
           schedule: DATA.schedule || {rows: [], counts: {}, confirmed: false},

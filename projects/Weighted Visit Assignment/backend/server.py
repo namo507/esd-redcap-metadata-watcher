@@ -135,6 +135,11 @@ def r_health(params, body):
 @get("/api/board")
 def r_board(params, body):
     """One call for the whole screen. Fewer round trips, no partial states."""
+    # Both happen before anything is read, so one payload is internally
+    # consistent: pick up imports filed by the inbox job, then re-pull the mock
+    # calendars if they have aged past the sync interval.
+    SESSION.refresh_calendar()
+    SESSION.keep_calendars_fresh()
     return 200, {
         "health": SESSION.health(),
         "roster": SESSION.roster(),

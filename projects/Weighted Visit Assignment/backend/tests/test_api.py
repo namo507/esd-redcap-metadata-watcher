@@ -416,6 +416,63 @@ def test_review_of_an_unknown_block_is_404():
     expect(status == 404, f"unknown block returned {status}")
 
 
+def test_the_board_clock_is_the_real_clock():
+    """A clock frozen at startup turns every freshness figure into a fiction."""
+    import datetime as _dt
+
+    _, board = call("GET", "/api/board")
+    stamp = board["health"].get("server_time")
+    expect(stamp, "the board does not report its own time")
+    drift = abs((_dt.datetime.fromisoformat(stamp) - _dt.datetime.now())
+                .total_seconds())
+    expect(drift < 120, f"board clock is {drift:.0f}s from the real one")
+
+
+def test_evidence_stays_inside_the_sync_interval():
+    """The mock provider stands in for the five-minute job; without it the whole
+    roster ages out and gets vetoed for a reason that is nobody's fault."""
+    _, board = call("GET", "/api/board")
+    ages = [r["evidence_age_minutes"] for r in board["roster"]
+            if r["evidence_age_minutes"] is not None]
+    expect(ages, "no coordinator reported an evidence age")
+    expect(max(ages) <= 10,
+           f"evidence aged past the sync interval: {max(ages)} min")
+    expect(min(ages) >= 0, f"negative evidence age: {min(ages)}")
+
+
+def test_the_queue_is_ordered_by_how_pressing_the_visit_is():
+    _, board = call("GET", "/api/board")
+    queue = board["queue"]
+    expect(queue, "empty queue")
+    for row in queue:
+        expect("priority" in row, "a queue row carries no priority")
+        expect("due_status" in row, "a queue row carries no due status")
+    keys = [tuple(r["priority"]) for r in queue]
+    expect(keys == sorted(keys), "the queue is not in priority order")
+
+
+def test_assigned_visits_sink_below_open_ones():
+    _, board = call("GET", "/api/board")
+    open_visit = next((v for v in board["queue"] if v["status"] != "assigned"), None)
+    expect(open_visit, "nothing left to assign")
+    status, body = call("POST", "/api/assign", {
+        "visit_id": open_visit["id"],
+        "coordinator_id": (call("GET", "/api/visit?id=" + open_visit["id"])[1]
+                           ["candidates"][0]["id"]),
+    })
+    if status != 200:
+        return                      # nobody eligible; ordering is untestable here
+    _, after = call("GET", "/api/board")
+    positions = {v["id"]: i for i, v in enumerate(after["queue"])}
+    assigned = [v for v in after["queue"] if v["status"] == "assigned"]
+    unassigned = [v for v in after["queue"] if v["status"] != "assigned"]
+    if assigned and unassigned:
+        expect(min(positions[v["id"]] for v in assigned)
+               > max(positions[v["id"]] for v in unassigned),
+               "an assigned visit outranked one still needing a decision")
+    call("POST", "/api/unassign", {"visit_id": open_visit["id"]})
+
+
 def test_board_carries_calendar_state_in_one_round_trip():
     _, board = call("GET", "/api/board")
     expect("calendar" in board, "board must expose calendar state")

@@ -94,17 +94,32 @@ def build() -> str:
         shutil.rmtree(OUT)
     shutil.copytree(SRC, OUT, ignore=shutil.ignore_patterns("README.md"))
 
+    # Freshen before snapshotting. The live board does this on every read, so a
+    # build that skips it bakes evidence that was already hours stale and the
+    # published copy opens claiming the whole roster is out of date.
+    session.keep_calendars_fresh()
+
     payload = {
         "meta": {
             "health": session.health(),
             "weights": session.cfg.weights.as_dict(),
             "gammaTravel": session.cfg.gamma_travel,
             "reviewBand": round(session.cfg.epsilon_review_band, 3),
+            "bakedAt": datetime.now().isoformat(timespec="seconds"),
         },
         "roster": session.roster(),
         "reasonCodes": session.reason_codes(),
         "calendar": _demo_calendar(session),
         "schedule": session.schedule_rows(),
+        # The live board orders the queue by how pressing each visit is. Bake
+        # that order rather than letting the static copy rebuild it from visit
+        # ids, which is how the published page ended up in a different order
+        # from the one people were shown locally.
+        "queueOrder": [
+            {k: row[k] for k in ("id", "due_status", "due_label",
+                                 "urgency", "days_remaining", "priority")}
+            for row in session.queue()
+        ],
         "visits": [],
     }
     for visit_id in session.order:

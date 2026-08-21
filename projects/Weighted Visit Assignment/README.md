@@ -119,6 +119,22 @@ downloads as a popup, so everything goes into a single HTML document that Excel
 imports directly &mdash; and it carries the caveats with it, which a bare CSV
 loses the moment it is emailed on.
 
+## Two clocks
+
+The board keeps them apart, because conflating them is what made it claim
+"synced 40 minutes ago" hours after it last synced.
+
+- **epoch** &mdash; the start of the current week. The synthetic lab is built
+  against it so the demo's visits always land in this week.
+- **now** &mdash; the real wall clock, read fresh on every access, never cached.
+  Evidence ages, protocol windows and the header all read from it.
+
+The board refreshes itself every minute, keeping the section you are on and the
+visit you had selected. It also re-pulls the mock calendars on the same
+five-minute cadence as the real sync job; without that the demo's evidence would
+age past the staleness threshold within the hour and veto the whole roster for a
+reason that is an artefact of nobody running the job.
+
 ## The protocol clock
 
 Ranking answers *who should take this visit*. The clock answers the question
@@ -143,6 +159,23 @@ Two refusals are built in:
   because nothing in this repo records the study's real acceptance windows.
   Every date the board shows is labelled provisional until that file is
   confirmed.
+
+## How the queue is ordered
+
+Visits are ranked by how pressing they are, not by id:
+
+1. still to assign, **overdue** &mdash; most days late first
+2. still to assign, **window closing** &mdash; fewest days left first
+3. still to assign, **in window**
+4. not yet due, then no anchor date
+5. already assigned
+
+Deliberately lexicographic rather than a weighted blend. A blend needs
+coefficients trading "two weeks late" against "needs a closer look", and nobody
+has justified those numbers; tiers say only what the lab already believes. The
+tiebreak inside a tier is the raw day count, because pressure saturates at 1.0
+the moment a window closes and would otherwise rank a fortnight late and three
+months late the same.
 
 ## Every gate, enumerated
 

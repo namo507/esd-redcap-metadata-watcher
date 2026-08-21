@@ -153,100 +153,36 @@
         <h2>Upload a calendar</h2>
       </div></div>
       <p class="note" style="max-width:74ch">
-        Print the Outlook calendar to PDF and drop it here. Nothing to set up: the
-        file names its own calendars and the board syncs on upload. <b>Work Week</b>
-        or <b>Day</b> view gives real start and end times it can schedule against.
-        A <b>Month</b> view shows who has room on which days, but prints no end
-        times, so it never claims anyone is free at a particular hour.
+        Print the Outlook calendar to PDF and drop it here. Nothing to set up.
+        <b>Work Week</b> or <b>Day</b> view gives times the board can schedule
+        against; a <b>Month</b> view shows who has room, but never claims anyone
+        is free at a particular hour.
       </p>
       <div id="sync-upload"></div>
       <div id="sync-result"></div>
     </div>
 
-    <div class="card" style="margin-top:1.3rem" id="sync-absence-card" hidden>
+    <div class="card" style="margin-top:1.3rem" id="sync-detail-card" hidden>
       <div class="card-head"><div>
-        <p class="eyebrow">From the all-day banners</p>
-        <h2>Who cannot take visits</h2>
-      </div></div>
-      <p class="note" style="max-width:74ch">
-        The lab posts whole-day notices like &ldquo;Ramiro unavailable for
-        visits&rdquo;. Those days are blocked outright. This is the only event
-        text the board reads: a notice has to match that exact shape, and
-        anything else on the page &mdash; ordinary meeting subjects included
-        &mdash; is discarded rather than stored.
-      </p>
-      <div id="sync-absence"></div>
+        <p class="eyebrow">What the calendars say</p>
+        <h2 id="sync-detail-title">Availability</h2>
+      </div>
+        <div class="segmented" id="sync-tabs" role="tablist"></div>
+      </div>
+      <div id="sync-panel"></div>
     </div>
 
-    <div class="card" style="margin-top:1.3rem" id="sync-filters-card" hidden>
-      <div class="card-head"><div>
-        <p class="eyebrow">Lab policy</p>
-        <h2>Scheduling filters</h2>
-      </div></div>
-      <p class="note" style="max-width:74ch">
-        These come from the lab's own calendars, not from anyone's diary. Two of
-        them say when a visit <b>may</b> happen; one says when the lab room is
-        <b>already taken</b>. A filter with no entries in the uploaded range is
-        shown as off rather than hidden &mdash; an empty calendar and a missing
-        one mean different things.
-      </p>
-      <div id="sync-filters"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem" id="sync-availability-card" hidden>
-      <div class="card-head"><div>
-        <p class="eyebrow">From the upload</p>
-        <h2 id="avail-title">Who is free this month</h2>
-      </div></div>
-      <p class="note" style="max-width:74ch">
-        Read straight off the calendar you uploaded. A month print shows how many
-        commitments each person has on each day, not the gaps between them &mdash; so
-        this says who has room, not what time to book.
-      </p>
-      <div id="sync-availability"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem" id="sync-colors-card" hidden>
-      <div class="card-head"><div>
-        <p class="eyebrow">Fallback</p>
-        <h2>Match colours to people</h2>
-      </div></div>
-      <p class="note" style="max-width:74ch">
-        This export's header lost its calendar colours, so the board could not
-        work out who is who on its own. Open the shared calendar in Outlook, read
-        off who owns each colour, and record it once here. Until that is done,
-        entries are counted but belong to nobody.
-      </p>
-      <div id="sync-colors"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem" id="sync-review-card" hidden>
-      <div class="card-head"><div>
-        <p class="eyebrow">Correction</p>
-        <h2>What was read from the PDF</h2>
-      </div></div>
-      <p class="note" style="max-width:74ch">
-        These times were read exactly off the PDF and are already in effect. If one
-        is wrong, reject it and the board updates immediately.
-      </p>
-      <div id="sync-review"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head"><div>
-        <p class="eyebrow">Where each person stands</p>
-        <h2>Evidence by coordinator</h2>
-      </div></div>
-      <div class="syncgrid" id="syncgrid"></div>
-      <div id="sync-capture"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem" id="sync-history-card" hidden>
-      <div class="card-head"><div>
-        <p class="eyebrow">Audit</p><h2>Upload history</h2>
-      </div></div>
+    <details class="card details-card" style="margin-top:1.3rem" id="sync-more">
+      <summary><b>Upload history and colour matching</b></summary>
+      <div id="sync-colors-card" hidden>
+        <p class="note" style="max-width:74ch;margin-top:1rem">
+          This export's header lost its calendar colours, so the board could not
+          tell who is who. Read the colours off Outlook and record them once.
+        </p>
+        <div id="sync-colors"></div>
+      </div>
       <div id="sync-history"></div>
-    </div>
+    </details>
   </section>
 
   <!-- =========================================================== DATA -->

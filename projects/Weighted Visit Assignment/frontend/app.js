@@ -7,7 +7,8 @@
 "use strict";
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
-            section: "week", assignments: {}, lastImport: null };
+            section: "week", assignments: {}, lastImport: null,
+            syncTab: "availability" };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -84,11 +85,20 @@ function drawQueue() {
       ? (v.provisional ? '<span class="tag tag-prov">Needs confirming</span>'
                        : '<span class="tag tag-done">Assigned</span>')
       : '<span class="tag tag-todo">To assign</span>';
+    // One word about the protocol window, only when it is actually pressing.
+    // A badge on every row would be noise; a badge on the late ones is why the
+    // row is at the top.
+    const due = !done && (v.due_status === "overdue" || v.due_status === "closing")
+      ? `<span class="qitem-due is-${esc(v.due_status)}">${
+          v.due_status === "overdue"
+            ? `${Math.abs(v.days_remaining || 0)}d late`
+            : `${v.days_remaining}d left`}</span>`
+      : "";
     return `<li><button class="qitem ${v.id === S.selected ? "is-on" : ""} ${done ? "is-done" : ""}"
         type="button" data-visit="${esc(v.id)}">
       <span class="qitem-top"><span class="qitem-day">${esc(v.day_label)}</span>${tag}</span>
       <span class="qitem-fam">${esc(v.family_label)}</span>
-      <span class="qitem-meta">${esc(v.title)}</span>
+      <span class="qitem-meta">${esc(v.title)}${due}</span>
       ${done ? `<span class="qitem-who">${esc(v.assigned_to)}</span>` : ""}
     </button></li>`;
   }).join("") : `<li class="note" style="padding:1rem">No visits match that filter.
@@ -635,16 +645,50 @@ const TIER_WORD = {
   3: "Month grid",
 };
 
+/* One card, four views, instead of eight cards stacked down the page. The
+   information is the same; showing all of it at once buried the two things a
+   coordinator actually opens this section for -- who is free, and who is out. */
+
+const SYNC_TABS = [
+  ["availability", "Who is free", (c) => (c.availability || []).some((a) => a.coordinator_id)],
+  ["absences", "Who is out", (c) => (c.unavailable || []).length || (c.unresolved_names || []).length],
+  ["filters", "Lab rules", (c) => (c.filters || []).length],
+  ["evidence", "Evidence", () => true],
+];
+
 function drawSync() {
-  drawSyncRoster();
   drawUpload();
   drawImportResult();
-  drawAbsences();
-  drawFilters();
-  drawAvailability();
+  drawSyncTabs();
   drawColorMatch();
-  drawReviewQueue();
   drawImportHistory();
+}
+
+function drawSyncTabs() {
+  const cal = S.board.calendar || {};
+  const available = SYNC_TABS.filter(([, , has]) => has(cal));
+  const card = $("sync-detail-card");
+  if (!available.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  if (!available.some(([key]) => key === S.syncTab)) S.syncTab = available[0][0];
+
+  $("sync-tabs").innerHTML = available.map(([key, label]) =>
+    `<button class="seg ${key === S.syncTab ? "is-on" : ""}" role="tab"
+       aria-selected="${key === S.syncTab}" data-tab="${esc(key)}"
+       type="button">${esc(label)}</button>`).join("");
+  $("sync-tabs").querySelectorAll("[data-tab]").forEach((b) =>
+    b.addEventListener("click", () => { S.syncTab = b.dataset.tab; drawSyncTabs(); }));
+
+  const title = (available.find(([k]) => k === S.syncTab) || [])[1] || "";
+  $("sync-detail-title").textContent = title;
+
+  const panel = $("sync-panel");
+  panel.innerHTML = "";
+  if (S.syncTab === "availability") drawAvailability(panel);
+  if (S.syncTab === "absences") drawAbsences(panel);
+  if (S.syncTab === "filters") drawFilters(panel);
+  if (S.syncTab === "evidence") drawEvidence(panel);
 }
 
 const AVAIL_WORD = {
@@ -654,18 +698,16 @@ const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
 
 const FILTER_ICON = { offered_window: "\u25F7", clinician_shift: "\u271A", lab_space: "\u25A3" };
 
-function drawAbsences() {
+function drawAbsences(panel) {
   const cal = S.board.calendar || {};
   const rows = cal.unavailable || [];
   const unresolved = cal.unresolved_names || [];
-  const card = $("sync-absence-card");
-  if (!rows.length && !unresolved.length) { card.hidden = true; return; }
-  card.hidden = false;
 
   const byDay = {};
   rows.forEach((r) => { (byDay[r.day] = byDay[r.day] || []).push(r); });
 
-  $("sync-absence").innerHTML = `
+  panel.innerHTML = `
+    <p class="note">Whole-day notices read off the all-day banners. These days are blocked outright.</p>
     ${Object.keys(byDay).sort().length ? `<div class="absencelist">${
       Object.keys(byDay).sort().map((day) => {
         const dt = new Date(day + "T00:00:00");
@@ -687,15 +729,14 @@ function drawAbsences() {
       </span></div>` : ""}`;
 }
 
-function drawFilters() {
+function drawFilters(panel) {
   const cal = S.board.calendar || {};
   const filters = cal.filters || [];
-  const card = $("sync-filters-card");
-  if (!filters.length) { card.hidden = true; return; }
-  card.hidden = false;
+  if (!filters.length) { panel.innerHTML = ""; return; }
 
   const roles = (cal.roles || []).filter((r) => r.role !== "coordinator");
-  $("sync-filters").innerHTML = `
+  panel.innerHTML = `
+    <p class="note">From the lab's own calendars. Two say when a visit <b>may</b> happen; one says when the room is <b>taken</b>.</p>
     <div class="filtergrid">${filters.map((f) => `
       <div class="filtercard is-${f.active ? "on" : "off"}">
         <div class="filterhead">
@@ -716,14 +757,10 @@ function drawFilters() {
         `<b>${esc(r.label)}</b> &rarr; ${esc(r.role_label)}`).join(" &middot; ")}</p>` : ""}`;
 }
 
-function drawAvailability() {
+function drawAvailability(panel) {
   const cal = S.board.calendar || {};
   const rows = (cal.availability || []).filter((a) => a.coordinator_id);
-  const card = $("sync-availability-card");
-  if (!rows.length) { card.hidden = true; return; }
-  card.hidden = false;
-  $("avail-title").textContent = cal.availability_month
-    ? `Who is free in ${cal.availability_month}` : "Who is free this month";
+  if (!rows.length) { panel.innerHTML = ""; return; }
 
   const days = rows[0].days || [];
   const anyUnknown = rows.some((r) => r.unknown_days > 0);
@@ -743,7 +780,10 @@ function drawAvailability() {
       <td class="availcount"><b>${r.open_working_days}</b></td>
     </tr>`).join("");
 
-  $("sync-availability").innerHTML = `
+  panel.innerHTML = `
+    <p class="note">${esc(cal.availability_month
+      ? "Day-level load for " + cal.availability_month + ". A month print shows how many commitments each person has, not the gaps between them."
+      : "Day-level load from the uploaded month print.")}</p>
     <div class="tablewrap"><table class="availtable">
       <thead><tr><th class="availname"></th>${head}<th class="availcount">Clear<br>weekdays</th></tr></thead>
       <tbody>${body}</tbody>
@@ -759,8 +799,8 @@ function drawAvailability() {
       anything further down was cut off the page. It is not the same as free.</p>` : ""}`;
 }
 
-function drawSyncRoster() {
-  $("syncgrid").innerHTML = S.board.roster.map((r) => {
+function drawEvidence(panel) {
+  panel.innerHTML = `<div class="syncgrid">${S.board.roster.map((r) => {
     const mins = r.evidence_age_minutes;
     const state = mins == null ? "none" : mins <= 15 ? "fresh" : mins <= 60 ? "stale" : "old";
     const label = mins == null ? "No evidence yet"
@@ -776,8 +816,7 @@ function drawSyncRoster() {
         : "Current."}</div>
       <div class="syncmeta">${r.blocks_reviewed || 0} of ${r.blocks_total || 0} detected blocks confirmed</div>
     </div>`;
-  }).join("");
-  $("sync-capture").innerHTML = "";
+  }).join("")}</div>`;
 }
 
 function drawUpload() {
@@ -907,7 +946,6 @@ function drawColorMatch() {
     card.hidden = true;
     return;
   }
-  card.hidden = false;
 
   const roster = cmap.roster || [];
   const rows = hues.map((hue) => {
@@ -924,6 +962,7 @@ function drawColorMatch() {
     </div>`;
   }).join("");
 
+  $("sync-colors-card").hidden = false;
   $("sync-colors").innerHTML = `
     ${cmap.confirmed ? `<div class="notice"><span>&#10003;</span><span>
       Confirmed by ${esc(cmap.confirmed_by || "someone")}${
@@ -961,40 +1000,6 @@ async function saveColors() {
   }
 }
 
-function drawReviewQueue() {
-  const cal = S.board.calendar || {};
-  const pending = cal.pending_review || [];
-  const applied = cal.applied || [];
-  const card = $("sync-review-card");
-  if (STATIC || (!pending.length && !applied.length)) { card.hidden = true; return; }
-  card.hidden = false;
-
-  const row = (b, inEffect) => `
-      <div class="reviewrow" data-block="${esc(b.block_id)}">
-        <div>
-          <div class="cand-name">${esc(b.coordinator)}</div>
-          <div class="cand-sub">${esc(prettyBlock(b.start, b.end))}</div>
-        </div>
-        <div class="reviewacts">
-          ${inEffect ? `<span class="inforce">In effect</span>` : ""}
-          <button class="btn btn-ghost" data-act="reject" type="button">Not real</button>
-          ${inEffect ? "" : `<button class="btn btn-primary" data-act="confirm" type="button">Confirm</button>`}
-        </div>
-      </div>`;
-
-  $("sync-review").innerHTML = `
-    <div class="reviewlist">
-      ${pending.slice(0, 30).map((b) => row(b, false)).join("")}
-      ${applied.slice(0, 30).map((b) => row(b, true)).join("")}
-    </div>`;
-
-  document.querySelectorAll(".reviewrow .btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const row = btn.closest(".reviewrow");
-      reviewBlock(row.dataset.block, btn.dataset.act === "confirm");
-    });
-  });
-}
 
 function prettyBlock(startIso, endIso) {
   try {
@@ -1030,10 +1035,9 @@ async function reviewBlock(blockId, confirmed) {
 function drawImportHistory() {
   const cal = S.board.calendar || {};
   const rows = cal.imports || [];
-  const card = $("sync-history-card");
-  if (!rows.length) { card.hidden = true; return; }
-  card.hidden = false;
+  if (!rows.length) { $("sync-history").innerHTML = ""; return; }
   $("sync-history").innerHTML = `
+    <h3 style="margin-top:1.1rem">Uploads</h3>
     <div class="tablewrap"><table class="tbl">
       <thead><tr><th>Uploaded</th><th>File</th><th>View</th>
       <th>Entries</th><th>Blocks</th><th>Can schedule</th></tr></thead>
@@ -1251,7 +1255,56 @@ function drawSyncBadge() {
     : `${Math.round(mins / 60)} h ago`;
   const el = $("sync-badge");
   el.className = `sync-badge is-${fresh}`;
-  el.innerHTML = `<i></i>Calendars synced ${esc(label)}`;
+  // The board's own clock, not the browser's. If the two disagree the figure
+  // beside it is measured against the server's, and showing the browser's would
+  // quietly explain a stale number with the wrong time.
+  const clock = S.board.health.server_time
+    ? new Date(S.board.health.server_time).toLocaleString(undefined,
+        { weekday: "short", day: "numeric", month: "short",
+          hour: "numeric", minute: "2-digit" })
+    : "";
+  el.innerHTML = `<i></i><b>${esc(clock)}</b><span class="long"> &middot; calendars ${esc(label)}</span>`;
+  el.title = `Board clock: ${esc(clock)}. Availability evidence last refreshed ${esc(label)}.`;
+}
+
+/* ---------------------------------------------------------------- live sync
+   The board is a live operational view, so it refreshes itself. Redraw keeps
+   the current section and the selected visit: a page that jumps back to the
+   top every minute is worse than a stale one. */
+
+const REFRESH_MS = 60000;
+let refreshTimer = null;
+
+async function tick() {
+  if (document.hidden) return;               // no point polling a hidden tab
+  try {
+    const y = window.scrollY;
+    await refresh();
+    redrawCurrent();
+    window.scrollTo(0, y);
+  } catch (err) {
+    /* A refresh that fails is not worth interrupting anyone over; the next
+       one will either succeed or the board will already look wrong. */
+  }
+}
+
+function redrawCurrent() {
+  drawKpis();
+  drawSyncBadge();
+  drawQueue();
+  if (S.section === "week") { drawDue(); drawCalendar(); }
+  if (S.section === "workload") { drawFairness(); drawEquity(); drawActivity(); }
+  if (S.section === "sync") drawSync();
+  if (S.section === "data") drawData();
+}
+
+function startAutoRefresh() {
+  if (STATIC) return;         // a frozen snapshot has nothing new to fetch
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(tick, REFRESH_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) tick();
+  });
 }
 
 function drawFooter() {
@@ -1305,6 +1358,7 @@ async function boot() {
     toast("Board reset.");
   });
 
+  startAutoRefresh();
   window.addEventListener("popstate", () => { applyRoute(); });
   // Safari fires hashchange without popstate for a programmatic hash write.
   window.addEventListener("hashchange", () => { applyRoute(); });

@@ -532,3 +532,26 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 #due-key { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .74rem; color: var(--muted); }
 
 .exportcard.is-primary { border-color: var(--accent); background: var(--tint); }
+
+/* ---------- segmented control ---------- */
+.segmented { display: inline-flex; background: var(--surface); border-radius: var(--r-pill);
+  padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg { border: 0; background: transparent; border-radius: var(--r-pill);
+  padding: .35rem .8rem; font: inherit; font-size: .82rem; font-weight: 700;
+  color: var(--muted); cursor: pointer; }
+.seg:hover { color: var(--ink); }
+.seg.is-on { background: #fff; color: var(--accent); box-shadow: var(--shadow); }
+
+/* ---------- collapsed detail card ---------- */
+.details-card > summary { cursor: pointer; font-size: .95rem; list-style: none; }
+.details-card > summary::-webkit-details-marker { display: none; }
+.details-card > summary::before { content: "\25B8"; display: inline-block;
+  margin-right: .5rem; color: var(--muted); transition: transform .15s; }
+.details-card[open] > summary::before { transform: rotate(90deg); }
+
+.sync-badge b { font-weight: 800; }
+
+.qitem-due { float: right; font-size: .7rem; font-weight: 800; border-radius: var(--r-pill);
+  padding: .1rem .45rem; }
+.qitem-due.is-overdue { background: #FDE7E1; color: #8C2F16; }
+.qitem-due.is-closing { background: #FFF3C4; color: #4A3B00; }

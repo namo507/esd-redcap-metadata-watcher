@@ -40,7 +40,7 @@ from esd_scheduler.constraints import (
     route_visit,
     visit_duration_hours,
 )
-from esd_scheduler.schedule import ProtocolSchedule, upcoming
+from esd_scheduler.schedule import STATUS_LABEL, ProtocolSchedule, upcoming
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
     commit_assignment,
@@ -159,9 +159,17 @@ class LabSession:
 
     def reset(self) -> None:
         with self._lock:
-            self.now = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
-            self.now -= timedelta(days=self.now.weekday())  # anchor on Monday
-            self.state, visits = build_lab(self.now)
+            # Two different clocks, and conflating them is what made the board
+            # claim "synced 40 minutes ago" hours after it had actually synced.
+            #
+            #   epoch : start of this week. The synthetic lab is built against
+            #           it so the demo's visits always land in the current week.
+            #   now   : the real wall clock, read fresh every time. Evidence
+            #           ages, protocol windows and the header all read from it.
+            self.epoch = datetime.now().replace(
+                hour=9, minute=0, second=0, microsecond=0)
+            self.epoch -= timedelta(days=self.epoch.weekday())   # anchor on Monday
+            self.state, visits = build_lab(self.epoch)
             self.visits: Dict[str, object] = {v.visit_id: v for v in visits}
             self.order: List[str] = [v.visit_id for v in visits]
             self.provider = MockProvider(
@@ -506,6 +514,36 @@ class LabSession:
         out["applied_blocks"] = applied
         return out
 
+    @property
+    def now(self) -> datetime:
+        """The real time, read fresh on every access.
+
+        Never cached. A board left open overnight has to know that, and a value
+        frozen at startup silently turns every freshness figure into a fiction.
+        """
+        return datetime.now()
+
+    def keep_calendars_fresh(self) -> bool:
+        """Re-pull the mock calendars on the same cadence as the real job.
+
+        In production a launchd agent syncs every five minutes; without an
+        equivalent here the demo's evidence would age past the staleness
+        threshold within the hour and veto the entire roster for a reason that
+        is an artefact of nobody running the job.
+        """
+        if not isinstance(self.provider, MockProvider):
+            return False
+        now = self.now
+        oldest = min(
+            (c.fetched_at for c in self.state.calendars.values()), default=None)
+        if oldest is not None and (now - oldest).total_seconds() < 300:
+            return False
+        with self._lock:
+            for snapshot in self.state.calendars.values():
+                snapshot.fetched_at = now
+                snapshot.sync_ok = True
+        return True
+
     def _log(self, message: str) -> None:
         self.activity.insert(
             0, {"at": datetime.now().strftime("%H:%M"), "message": message}
@@ -526,7 +564,8 @@ class LabSession:
             "calendar_source": "demo",
             "reads_titles": False,
             "weights": self.cfg.weights.as_dict(),
-            "week_of": self.now.strftime("%Y-%m-%d"),
+            "week_of": self.epoch.strftime("%Y-%m-%d"),
+            "server_time": self.now.isoformat(timespec="seconds"),
             # Master §4: a scheduler making an assignment needs to know how
             # current the evidence is without navigating away.
             "last_synced_iso": min(
@@ -653,9 +692,50 @@ class LabSession:
         self._attention_cache[visit_id] = flag
         return flag
 
+    # Priority tiers, most pressing first. Deliberately lexicographic rather
+    # than a weighted blend: a blend needs coefficients trading "two weeks late"
+    # against "needs a closer look", and nobody has justified those numbers.
+    # Tiers say what the lab already believes -- deal with the late ones first,
+    # and never let an unassigned visit sink below an assigned one.
+    PRIORITY_TIERS = ("overdue", "closing", "open", "upcoming", "unknown")
+
     def queue(self) -> List[dict]:
         with self._lock:
-            return [self.visit_summary(vid) for vid in self.order]
+            sched = {r.family_id: r for r in upcoming(
+                self.state.families, self.state.history, self.now)}
+            rows = []
+            for vid in self.order:
+                row = self.visit_summary(vid)
+                due = sched.get(row["family_id"])
+                status = due.status if due else "unknown"
+                row["due_status"] = status
+                row["due_label"] = STATUS_LABEL.get(status, status)
+                row["urgency"] = round(due.urgency, 3) if due else 0.0
+                row["days_remaining"] = due.days_remaining if due else None
+                try:
+                    tier = self.PRIORITY_TIERS.index(status)
+                except ValueError:
+                    tier = len(self.PRIORITY_TIERS)
+                # Assigned work drops below everything still open, whatever its
+                # window: it is done being decided.
+                # Days remaining, ascending, is the tiebreak inside a tier.
+                # Urgency saturates at 1.0 the moment a window closes, so
+                # ranking on it alone puts a fortnight late and three months
+                # late on the same footing; the raw day count keeps ordering
+                # them. A family with no anchor sorts last rather than first,
+                # which is what a missing value would otherwise do.
+                row["priority"] = (
+                    (1 if row["status"] == "assigned" else 0),
+                    tier,
+                    row["days_remaining"] if row["days_remaining"] is not None
+                    else 10 ** 6,
+                    row["date"],
+                )
+                rows.append(row)
+            rows.sort(key=lambda r: r["priority"])
+            for row in rows:
+                row["priority"] = list(row["priority"])
+            return rows
 
     def candidates(self, visit_id: str) -> dict:
         """The full ranked pool for one visit, in the words the screen needs."""
