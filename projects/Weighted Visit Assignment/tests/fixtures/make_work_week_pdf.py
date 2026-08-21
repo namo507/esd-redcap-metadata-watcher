@@ -12,6 +12,8 @@ the policy calendars overlaid alongside the people.
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import fitz
 
 GUTTER_X = 11.0
@@ -85,7 +87,16 @@ def rgb(hexc: str, factor: float = 1.0):
 
 
 def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
-          coloured_legend: bool = True, with_policy: bool = True) -> str:
+          coloured_legend: bool = True, with_policy: bool = True,
+          only: Optional[str] = None) -> str:
+    """Draw a work-week print.
+
+    ``only`` emits a single-coordinator print: the mailbox owner plus one
+    person, which is what "print each coordinator's calendar in turn" actually
+    produces and the shape the batch sync is built around. Attribution is
+    unambiguous there -- one colour, one person -- so it needs no colour map at
+    all.
+    """
     doc = fitz.open()
     page = doc.new_page(width=612, height=792)
 
@@ -94,8 +105,10 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
         f"{month}/{first_day}/{year} to {month}/{first_day + 4}/{year}",
         fontsize=11, color=(0.25, 0.25, 0.25))
 
+    shown = [("Calendar", COLOUR.get("Calendar", "469DF5")), (only, COLOUR[only])] \
+        if only else LEGEND
     x, y = 30.3, 38.4
-    for label, hexc in LEGEND:
+    for label, hexc in shown:
         if not with_policy and label in (
                 "Clinician Shifts", "PSYCHOLOGY, ESDI LAB", "Offered Times ESD"):
             continue
@@ -126,6 +139,8 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
         page.insert_text((COL_X[i], 96.6), str(first_day + i), fontsize=7.1)
 
     for row, (day, span, label, text) in enumerate(BANNERS):
+        if only:
+            continue
         if not with_policy and label == "PSYCHOLOGY, ESDI LAB":
             continue
         top = BANNER_TOP + row * (BANNER_H + 1.3)
@@ -138,6 +153,8 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
     for event in EVENTS:
         day, start, end, label, factor = event[:5]
         inset = event[5] if len(event) > 5 else 0.0
+        if only and label != only:
+            continue
         if not with_policy and label in (
                 "Clinician Shifts", "PSYCHOLOGY, ESDI LAB", "Offered Times ESD"):
             continue

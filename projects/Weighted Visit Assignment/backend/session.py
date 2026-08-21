@@ -40,6 +40,7 @@ from esd_scheduler.constraints import (
     route_visit,
     visit_duration_hours,
 )
+from esd_scheduler.availability import coverage_report, week_grid
 from esd_scheduler.schedule import STATUS_LABEL, ProtocolSchedule, upcoming
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
@@ -436,6 +437,24 @@ class LabSession:
                 for b in (dict(r) for r in self.store.confirmed_blocks())
             ][:60],
         }
+
+    def availability_grid(self, slot_minutes: int = 30) -> dict:
+        """Who is free in each slot this week, plus whose calendar is missing.
+
+        Coverage is reported beside the grid rather than under it. A grid built
+        from four of seven calendars looks complete and is not: the three the
+        board has not seen show as unavailable everywhere, which reads as a busy
+        team rather than a partial sync.
+        """
+        self.keep_calendars_fresh()
+        with self._lock:
+            now = self.now
+            return {
+                "week": week_grid(self.state, self.epoch.date(), now,
+                                  slot_minutes=slot_minutes),
+                "coverage": coverage_report(self.state, now),
+                "slot_minutes": slot_minutes,
+            }
 
     def logic(self) -> dict:
         """The decision procedure, described from the live configuration.

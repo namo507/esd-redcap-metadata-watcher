@@ -137,6 +137,16 @@ def r_calendar_review(params, body):
         return 404, {"error": str(exc)}
 
 
+@get("/api/availability")
+def r_availability(params, body):
+    """Who is free in each slot, and whose calendar is still missing."""
+    try:
+        minutes = max(15, min(120, int(params.get("slot", 30))))
+    except (TypeError, ValueError):
+        minutes = 30
+    return 200, SESSION.availability_grid(slot_minutes=minutes)
+
+
 @get("/api/logic")
 def r_logic(params, body):
     """How the board decides, described from its own configuration."""
@@ -172,6 +182,7 @@ def r_board(params, body):
         "calendar": SESSION.imports(),
         "schedule": SESSION.schedule_rows(),
         "logic": SESSION.logic(),
+        "availability": SESSION.availability_grid(),
     }
 
 

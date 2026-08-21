@@ -481,6 +481,35 @@ def test_a_matched_absence_blocks_the_whole_day():
                "a whole-day block should not spill into the next day")
 
 
+# --- one print per coordinator ----------------------------------------------
+
+
+def test_a_single_coordinator_print_needs_no_colour_map():
+    """The shape "print each coordinator's calendar in turn" produces.
+
+    One person plus the mailbox owner, so the legend names exactly one calendar
+    the roster recognises and attribution is unambiguous. Nothing to configure.
+    """
+    for who, cid in (("Oak, Sanjana", "C03"),
+                     ("Puttock, Lauren", "C02"),
+                     ("Bell, Margaret", "C01")):
+        path = build_week(os.path.join(TMP, f"solo-{cid}.pdf"), only=who)
+        result = import_pdf(path, coordinators=ROSTER, year_hint=2026)
+        expect(result.attribution_source == "legend",
+               f"{who}: attribution was {result.attribution_source}")
+        touched = {r.coordinator_id for r in result.runs}
+        expect(touched == {cid},
+               f"{who}: expected only {cid}, got {touched or 'nobody'}")
+
+
+def test_the_print_decides_whose_calendar_it_is_not_the_filename():
+    """A file called Maggie.pdf whose legend says Bell, Margaret is Margaret's."""
+    path = build_week(os.path.join(TMP, "Maggie.pdf"), only="Bell, Margaret")
+    result = import_pdf(path, coordinators=ROSTER, year_hint=2026)
+    expect({r.coordinator_id for r in result.runs} == {"C01"},
+           "the print's own legend did not decide the owner")
+
+
 # --- reading a screenshot ---------------------------------------------------
 
 

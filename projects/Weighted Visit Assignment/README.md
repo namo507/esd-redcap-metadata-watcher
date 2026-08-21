@@ -261,6 +261,26 @@ it is still being copied.
 | `python -m esd_scheduler sensitivity` | OAT, criticality, redundancy, revealed preference |
 | `python -m esd_scheduler ahp judgments.json` | derive weights from pairwise comparisons |
 
+## One print per coordinator
+
+The straightforward way to sync is to print each coordinator's calendar in turn
+and drop the lot on the board at once. That shape is the easiest to read
+correctly: a single-coordinator print names one person in its legend, so
+attribution is unambiguous and **nothing has to be configured** &mdash; no colour
+map, no matching step.
+
+The print decides whose calendar it is, not the filename. A file called
+`Maggie.pdf` whose legend reads "Bell, Margaret" is filed against Margaret Bell.
+
+Once the batch is in, **Free slots** answers the question the individual
+calendars cannot: for each half-hour, who could actually take a visit. Beside it
+**Whose calendar** names anyone still outstanding &mdash; a grid built from four of
+seven calendars looks complete and is not, because the three the board has not
+seen show as unavailable everywhere, which reads as a busy team rather than a
+partial sync.
+
+Throughout, a coordinator the board has not synced is **unknown**, never free.
+
 ## Uploading an Outlook calendar
 
 Print the shared Outlook calendar to PDF and drop it on **Sync calendars** in the
@@ -373,5 +393,18 @@ question) and set real per-coordinator capacity.
 
 ## Dependencies
 
-Engine and tests: Python 3.9+, standard library only.
-Deck build: `matplotlib`, `python-pptx`, `Pillow`, `fontTools`.
+The engine, the backend and the test suite run on the standard library alone.
+Everything else is for reading calendars or building the deck:
+
+    make deps        install everything in requirements.txt
+    make doctor      report what is installed, and what each gap costs
+
+| Package | For |
+|---|---|
+| `PyMuPDF` | reading calendar PDFs &mdash; vector text and rectangles, which is what makes a PDF import exact |
+| `opencv-python`, `numpy`, `Pillow` | reading screenshots: contours for blocks, morphology for grid rules |
+| `pytesseract` + `tesseract` | reading a screenshot's hour column, so nobody has to state it |
+| `python-pptx`, `matplotlib`, `fontTools` | `make deck` only |
+
+`tesseract` is a separate install: `brew install tesseract`. Without it
+screenshots still import, and the caller supplies the visible hours instead.

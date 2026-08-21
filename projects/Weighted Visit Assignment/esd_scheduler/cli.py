@@ -621,6 +621,91 @@ def cmd_audit(args) -> int:
 
 
 
+def cmd_doctor(args) -> int:
+    """Report what is installed and what each missing piece would cost you.
+
+    Written to be useful rather than merely pass or fail: everything here is
+    optional to *something*, so a missing package is reported with the feature
+    it disables and the one command that fixes it.
+    """
+    import importlib
+    import shutil
+
+    checks = [
+        ("fitz", "PyMuPDF", "reading calendar PDFs",
+         "pip3 install --user PyMuPDF", True),
+        ("cv2", "opencv-python", "reading calendar screenshots",
+         "pip3 install --user opencv-python", False),
+        ("numpy", "numpy", "fitting the time axis on a screenshot",
+         "pip3 install --user numpy", False),
+        ("PIL", "Pillow", "opening screenshots",
+         "pip3 install --user Pillow", False),
+        ("pytesseract", "pytesseract", "reading a screenshot's hour column",
+         "pip3 install --user pytesseract", False),
+        ("pptx", "python-pptx", "rebuilding the slide deck",
+         "pip3 install --user python-pptx", False),
+    ]
+
+    missing_required = 0
+    print("PYTHON PACKAGES")
+    for module, package, purpose, fix, required in checks:
+        try:
+            importlib.import_module(module)
+            version = ""
+            try:
+                import importlib.metadata as md
+                version = md.version(package)
+            except Exception:  # noqa: BLE001
+                pass
+            print(f"  ok       {package:16s} {version:10s} {purpose}")
+        except ImportError:
+            tag = "MISSING " if required else "optional"
+            print(f"  {tag} {package:16s} {'':10s} {purpose}")
+            print(f"           -> {fix}")
+            if required:
+                missing_required += 1
+
+    print()
+    print("COMMAND-LINE TOOLS")
+    if shutil.which("tesseract"):
+        import subprocess
+        out = subprocess.run(["tesseract", "--version"], capture_output=True,
+                             text=True).stdout.splitlines()
+        print(f"  ok       tesseract        {out[0].split()[-1] if out else '':10s} "
+              "reads a screenshot's hour column automatically")
+    else:
+        print("  optional tesseract                  reads a screenshot's hour column")
+        print("           -> brew install tesseract")
+        print("           without it, screenshots still import; you state the hours")
+
+    print()
+    print("CONFIGURATION")
+    for path, what in (
+        (os.path.join("config", "protocol-schedule.json"), "checkpoint due dates"),
+        (os.path.join("config", "reliability-matrix.json"), "who is signed off on what"),
+        (os.path.join("config", "calendar-roles.json"), "what each calendar means"),
+        (os.path.join("config", "calendar-colors.json"), "colour to person fallback"),
+    ):
+        if not os.path.exists(path):
+            print(f"  missing  {os.path.basename(path):26s} {what}")
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            state = "confirmed" if raw.get("confirmed") else "PROVISIONAL"
+        except (OSError, ValueError):
+            state = "unreadable"
+        print(f"  {state:9s} {os.path.basename(path):26s} {what}")
+
+    print()
+    if missing_required:
+        print(f"{missing_required} required package missing. Calendar uploads will fail.")
+        return 1
+    print("Everything needed for calendar uploads is installed.")
+    return 0
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="esd_scheduler", description=__doc__)
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
@@ -683,6 +768,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--processed", default=os.path.join("data", "uploads"))
     s.add_argument("--db", default=os.path.join("data", "visitboard.db"))
     s.set_defaults(func=cmd_import_inbox)
+
+    sub.add_parser("doctor",
+                   help="check dependencies and configuration"
+                   ).set_defaults(func=cmd_doctor)
 
     s = sub.add_parser("audit", help="what was imported, decided and overridden")
     s.add_argument("--limit", type=int, default=15)

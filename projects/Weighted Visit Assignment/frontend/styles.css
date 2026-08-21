@@ -656,3 +656,17 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .tile-detail .fact { background: #fff; }
 .tile-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
 .tierbadge.is-t4 { background: var(--esd-baby-pink); color: #6B1F1E; }
+
+/* ---------- free-slot heat strip ---------- */
+.slotwrap { display: grid; gap: .55rem; margin-top: 1rem; }
+.slotday-head { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: .8rem; font-weight: 700; margin-bottom: .25rem; }
+.slotday-head span { font-weight: 500; font-size: .72rem; color: var(--muted); }
+.slotrow { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; }
+.slot { position: relative; height: 26px; border-radius: 5px; display: grid;
+  place-items: center; background: var(--surface); }
+.slot i { font-style: normal; font-size: .66rem; font-weight: 800; color: var(--muted); }
+.slot.is-many { background: #CDEBD9; } .slot.is-many i { color: #14532B; }
+.slot.is-some { background: var(--esd-optimal-yellow); } .slot.is-some i { color: #3A3000; }
+.slot.is-few  { background: var(--esd-confident-orange); } .slot.is-few i { color: #fff; }
+.slot.is-none { background: #E4E4EA; } .slot.is-none i { color: var(--muted); }

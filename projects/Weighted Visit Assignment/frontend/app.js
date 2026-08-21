@@ -8,7 +8,7 @@
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
             section: "week", assignments: {}, lastImport: null,
-            syncTab: "availability", logicNode: null, dueOpen: null };
+            syncTab: "availability", logicNode: null, dueOpen: null, batch: null };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -701,7 +701,9 @@ const SYNC_TABS = [
   // import cannot take effect until these are settled, so burying it would
   // leave the upload looking finished when it is not.
   ["review", "To confirm", (c) => (c.pending_review || []).length],
-  ["availability", "Who is free", (c) => (c.availability || []).some((a) => a.coordinator_id)],
+  ["slots", "Free slots", () => (S.board.availability || {}).week],
+  ["coverage", "Whose calendar", () => (S.board.availability || {}).coverage],
+  ["availability", "Monthly load", (c) => (c.availability || []).some((a) => a.coordinator_id)],
   ["absences", "Who is out", (c) => (c.unavailable || []).length || (c.unresolved_names || []).length],
   ["filters", "Lab rules", (c) => (c.filters || []).length],
   ["evidence", "Evidence", () => true],
@@ -741,6 +743,8 @@ function drawSyncTabs() {
   if (S.syncTab === "filters") drawFilters(panel);
   if (S.syncTab === "evidence") drawEvidence(panel);
   if (S.syncTab === "review") drawReview(panel);
+  if (S.syncTab === "slots") drawSlots(panel);
+  if (S.syncTab === "coverage") drawCoverage(panel);
 }
 
 const AVAIL_WORD = {
@@ -851,6 +855,65 @@ function drawAvailability(panel) {
       anything further down was cut off the page. It is not the same as free.</p>` : ""}`;
 }
 
+function drawSlots(panel) {
+  /* The join every per-coordinator upload exists to produce: for each slot,
+     how many people could actually go. Shown as a heat strip per day rather
+     than a table of names -- the number is what a scheduler scans for, and the
+     names are one hover away. */
+  const av = S.board.availability || {};
+  const week = av.week || [];
+  if (!week.length) { panel.innerHTML = ""; return; }
+  const team = (S.board.roster || []).length || 1;
+
+  panel.innerHTML = `
+    <p class="note">Who could take a visit in each ${av.slot_minutes || 30}-minute
+      slot, once every calendar is in. A coordinator the board has not synced counts
+      as <b>unknown</b>, never free.</p>
+    <div class="slotwrap">${week.map((d) => `
+      <div class="slotday">
+        <div class="slotday-head">${esc(d.label)}<span>${d.best} free at best</span></div>
+        <div class="slotrow">${d.slots.map((s) => {
+          const share = s.n_free / team;
+          const tone = s.n_free === 0 ? "none" : share >= 0.6 ? "many"
+            : share >= 0.3 ? "some" : "few";
+          const who = s.free.length ? s.free.join(", ") : "nobody free";
+          return `<span class="slot is-${tone}"
+             data-tip="${esc(s.label)} — ${esc(who)}"><i>${s.n_free}</i></span>`;
+        }).join("")}</div>
+      </div>`).join("")}</div>
+    <div class="availlegend">
+      <span><i class="availkey is-open"></i>most of the team</span>
+      <span><i class="availkey is-light"></i>some</span>
+      <span><i class="availkey is-busy"></i>one or two</span>
+      <span><i class="availkey is-unknown"></i>nobody</span>
+    </div>`;
+}
+
+function drawCoverage(panel) {
+  const cov = (S.board.availability || {}).coverage;
+  if (!cov) { panel.innerHTML = ""; return; }
+  panel.innerHTML = `
+    <p class="note">Whose calendar the board actually holds. Anyone missing shows
+      as unavailable in every slot, so a partial sync reads as a busy team unless
+      it is named.</p>
+    ${cov.complete
+      ? `<div class="notice"><span>&#10003;</span><span>Every coordinator's calendar is current.</span></div>`
+      : `<div class="notice notice-warn"><span>&#9888;</span><span>Still waiting on
+         <b>${cov.outstanding.map(esc).join(", ")}</b>. Until their calendars are
+         uploaded they count as unavailable everywhere.</span></div>`}
+    <div class="tiles" style="margin-top:1rem">${cov.rows.map((r) => `
+      <div class="tile is-${r.state === "current" ? "open"
+        : r.state === "stale" ? "closing" : "overdue"}"
+        data-tip="${esc(r.name)} — ${r.state === "missing" ? "no calendar uploaded"
+          : r.age_minutes + " min old, " + r.blocks + " blocks"}">
+        <span class="tile-top"><span class="tile-dot"></span>
+          <span class="tile-study">${esc(r.state)}</span></span>
+        <span class="tile-num">${r.state === "missing" ? "\u2014" : r.blocks}</span>
+        <span class="tile-unit">${r.state === "missing" ? "no calendar" : "blocks"}</span>
+        <span class="tile-fam">${esc(r.name)}</span>
+      </div>`).join("")}</div>`;
+}
+
 function drawReview(panel) {
   const pending = (S.board.calendar || {}).pending_review || [];
   if (!pending.length) { panel.innerHTML = ""; return; }
@@ -933,20 +996,21 @@ function drawUpload() {
   }
   box.innerHTML = `
     <div class="uploadzone" id="dropzone">
-      <input id="pdf-file" type="file" accept="application/pdf,.pdf,image/png,image/jpeg" hidden>
+      <input id="pdf-file" type="file" multiple accept="application/pdf,.pdf,image/png,image/jpeg" hidden>
       <div class="uploadzone-inner">
-        <div class="uploadzone-title">Drop the Outlook calendar here</div>
+        <div class="uploadzone-title">Drop the Outlook calendars here</div>
         <div class="uploadzone-sub">or</div>
         <label class="btn btn-primary" for="pdf-file">Choose a file&hellip;</label>
         <div class="uploadzone-hint" data-tip="A PDF is read exactly; a screenshot is measured in pixels and every block has to be confirmed">
-          PDF or screenshot. A <b>Work Week</b> PDF is read exactly &mdash; a screenshot is approximate.</div>
+          One file per coordinator, or several at once. A <b>Work Week</b> PDF is read
+          exactly &mdash; a screenshot is approximate.</div>
       </div>
     </div>`;
 
   const input = $("pdf-file");
   const zone = $("dropzone");
   input.addEventListener("change", () => {
-    if (input.files && input.files[0]) uploadPdf(input.files[0]);
+    if (input.files && input.files.length) uploadBatch([...input.files]);
   });
   ["dragenter", "dragover"].forEach((evt) =>
     zone.addEventListener(evt, (e) => {
@@ -959,8 +1023,8 @@ function drawUpload() {
       zone.classList.remove("is-over");
     }));
   zone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) uploadPdf(file);
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) uploadBatch([...files]);
   });
 }
 
@@ -976,7 +1040,38 @@ function readAsBase64(file) {
   });
 }
 
+async function uploadBatch(files) {
+  /* One print per coordinator is the shape the lab actually produces, so the
+     zone takes a batch. Sequential rather than parallel: each import writes to
+     the same audit store, and a progress line that names the file being read
+     is more use than a spinner over the whole set. */
+  if (files.length === 1) { await uploadPdf(files[0]); return; }
+
+  const done = [];
+  for (let i = 0; i < files.length; i++) {
+    $("sync-result").innerHTML = `<div class="notice"><span>&#8987;</span><span>
+      Reading ${esc(files[i].name)} &mdash; ${i + 1} of ${files.length}&hellip;</span></div>`;
+    try {
+      const data = await readAsBase64(files[i]);
+      const out = await api("/api/calendar/upload", {
+        method: "POST",
+        body: JSON.stringify({ filename: files[i].name, data }),
+      });
+      done.push({ name: files[i].name, out });
+    } catch (err) {
+      done.push({ name: files[i].name, error: err.message });
+    }
+  }
+  S.batch = done;
+  S.lastImport = null;
+  await refresh();
+  setSection("sync");
+  const ok = done.filter((d) => !d.error).length;
+  toast(`${ok} of ${done.length} calendars read.`, ok < done.length);
+}
+
 async function uploadPdf(file) {
+  S.batch = null;
   const zone = $("dropzone");
   if (zone) zone.classList.add("is-busy");
   $("sync-result").innerHTML =
@@ -1006,6 +1101,7 @@ async function uploadPdf(file) {
 function drawImportResult() {
   const box = $("sync-result");
   if (!box) return;
+  if (S.batch) { drawBatchResult(box); return; }
   const imp = S.lastImport || (S.board.calendar && S.board.calendar.last_import);
   if (!imp) { box.innerHTML = ""; return; }
 
@@ -1441,6 +1537,44 @@ function drawLogicDetail(L) {
       <h3>${esc(n.title)}</h3></div>
     ${body ? body() : ""}
   </div>`;
+}
+
+function drawBatchResult(box) {
+  /* One row per file. Which coordinator each print turned out to be for is the
+     thing worth showing: that is what says the batch covered the team, and it
+     is read from the print rather than the filename. */
+  const rows = S.batch.map((d) => {
+    if (d.error) {
+      return `<tr><td>${esc(d.name)}</td><td colspan="3" class="over">${esc(d.error)}</td></tr>`;
+    }
+    const who = (d.out.coordinators_touched || []).length
+      ? d.out.coordinators_touched
+          .map((id) => esc(nameFor(id))).join(", ")
+      : "<i>nobody the roster recognises</i>";
+    return `<tr>
+      <td>${esc(d.name)}</td>
+      <td>${who}</td>
+      <td class="num">${d.out.block_count}</td>
+      <td>${d.out.pending_review ? `${d.out.pending_review} to confirm` : "in effect"}</td>
+    </tr>`;
+  }).join("");
+
+  box.innerHTML = `
+    <div class="importcard is-ok">
+      <div class="importhead"><div>
+        <div class="import-file">${S.batch.length} calendars read</div>
+        <div class="cand-sub">One print per coordinator</div>
+      </div></div>
+      <div class="tablewrap" style="margin-top:.9rem"><table class="tbl">
+        <thead><tr><th>File</th><th>Whose calendar</th><th class="num">Blocks</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+function nameFor(id) {
+  const r = (S.board.roster || []).find((x) => x.id === id);
+  return r ? r.name : id;
 }
 
 function weightTiles(L) {

@@ -1,7 +1,7 @@
 PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
-        import-calendar inbox audit \
+        import-calendar inbox audit doctor deps \
         serve serve-quiet static publish \
         install-automation uninstall-automation deck clean
 
@@ -18,6 +18,8 @@ help:
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
 	@echo "  make inbox                sweep data/inbox and file every PDF"
+	@echo "  make doctor               check dependencies and configuration"
+	@echo "  make deps                 install everything in requirements.txt"
 	@echo "  make audit                what was imported, decided and overridden"
 	@echo "  make drift                weekly drift metrics to stdout"
 	@echo "  make debrief              write reports/debrief-<week>.md and .html"
@@ -41,6 +43,7 @@ test:
 	$(PY) tests/test_calendar_import.py
 	$(PY) tests/test_automation.py
 	$(PY) tests/test_schedule.py
+	$(PY) tests/test_availability.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
@@ -62,6 +65,15 @@ week:
 
 sync:
 	$(PY) -m esd_scheduler sync
+
+doctor:
+	$(PY) -m esd_scheduler doctor
+
+deps:
+	$(PY) -m pip install --user -r requirements.txt
+	@echo
+	@echo "tesseract is a separate install:  brew install tesseract"
+	@$(PY) -m esd_scheduler doctor
 
 inbox:
 	$(PY) -m esd_scheduler import-inbox

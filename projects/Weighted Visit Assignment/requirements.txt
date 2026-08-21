@@ -1,0 +1,29 @@
+# ESD weighted visit assignment
+#
+# The engine, the backend and the test suite run on the standard library alone.
+# Everything below is for reading calendars and building the deck, and each one
+# is here because it is the right tool rather than a familiar one.
+
+# --- reading calendar PDFs (required for any upload) -----------------------
+# Vector text and vector rectangles, which is what makes a PDF import exact
+# rather than inferred. No other Python PDF library exposes drawing geometry
+# this directly.
+PyMuPDF>=1.22
+
+# --- reading calendar screenshots (optional) -------------------------------
+# Geometry only: contours for event blocks, morphology for the grid rules.
+# Deliberately not a deep-learning detector -- a calendar is coloured
+# rectangles on ruled lines, and that is a solved problem in classical CV.
+opencv-python>=4.8
+numpy>=1.24
+Pillow>=10.0
+
+# Reads the hour column so a screenshot needs no one to state its time range.
+# Needs the tesseract binary as well:  brew install tesseract
+# Without it, screenshots still import; the caller supplies the visible hours.
+pytesseract>=0.3.10
+
+# --- rebuilding the slide deck (optional, `make deck`) ---------------------
+python-pptx>=0.6.21
+matplotlib>=3.7
+fonttools>=4.40
