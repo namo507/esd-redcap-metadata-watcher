@@ -36,11 +36,13 @@ def expect(cond, msg):
 
 
 def test_bundle_is_complete_and_self_contained():
-    for name in ("index.html", "app.js", "static-board.js", "styles.css", "board.json"):
+    for name in ("index.html", "static-board.js", "styles.css", "board.json",
+                 "js/core.js", "js/team.js", "js/assign.js", "js/calendars.js",
+                 "js/logic.js", "js/boot.js"):
         expect(os.path.isfile(os.path.join(DIST, name)), f"missing {name}")
     html = open(os.path.join(DIST, "index.html"), encoding="utf-8").read()
     # Absolute paths would 404 on a host that serves from a subpath.
-    expect('src="/app.js"' not in html and 'href="/styles.css"' not in html,
+    expect('src="/js/core.js"' not in html and 'href="/styles.css"' not in html,
            "bundle still references absolute asset paths")
     expect("static-board.js" in html, "static adapter not loaded")
 

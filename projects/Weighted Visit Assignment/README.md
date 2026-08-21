@@ -21,6 +21,41 @@ make test      # 66 anchors across engine, privacy, API and the static build
 make debrief   # reports/debrief-<week>.md and .html
 ```
 
+## What is on screen
+
+Four sections, because a scheduler asks four questions:
+
+| Section | The question it answers |
+|---|---|
+| The team | Who is free this week, and what are they signed off to run |
+| Assign a visit | Who should take this one, as a clinician and a tech |
+| Calendars | Upload the Outlook prints, and take the records away |
+| How it decides | Why it picked them |
+
+The team view is a table on purpose. Rows are people, columns are days, and the
+hour strips line up down each column, because the job is comparing people
+against each other rather than reading one card at a time.
+
+What it shows is what the manual and the meetings say matters: who is signed off
+for that visit, who is free at that hour, drive time, van training, the in-lab
+day, visits already booked this week, and how much of the family's window is
+left. Scores, stability figures and how full someone's week is are not on the
+comparison view. They belong with the visit being decided, and are one tap away
+under How it decides.
+
+## Where the code lives
+
+    frontend/js/core.js        state, fetch, routing, page chrome
+    frontend/js/team.js        the team table and the protocol clock
+    frontend/js/assign.js      the queue, the pair, the assignment
+    frontend/js/calendars.js   uploads, what came back, exports
+    frontend/js/logic.js       the decision map
+    frontend/js/boot.js        start-up and the once-a-minute refresh
+
+Loaded in that order: core first because the rest use its helpers, boot last
+because it starts everything. One file per section, so a change to the team
+view means opening `team.js`.
+
 ## The board
 
 `make serve` starts the whole stack on one port. There is nothing to install:

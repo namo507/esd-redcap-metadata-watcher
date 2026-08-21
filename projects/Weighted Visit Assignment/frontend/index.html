@@ -27,12 +27,10 @@
     </div>
   </div>
   <nav class="nav" id="nav" aria-label="Sections">
-    <button class="navbtn is-on" data-section="week" type="button">The week</button>
+    <button class="navbtn is-on" data-section="team" type="button">The team</button>
     <button class="navbtn" data-section="assign" type="button">Assign a visit</button>
-    <button class="navbtn" data-section="workload" type="button">Workload</button>
-    <button class="navbtn" data-section="sync" type="button">Sync calendars</button>
+    <button class="navbtn" data-section="sync" type="button">Calendars</button>
     <button class="navbtn" data-section="logic" type="button">How it decides</button>
-    <button class="navbtn" data-section="data" type="button">Data &amp; exports</button>
   </nav>
 </header>
 
@@ -52,38 +50,25 @@
 <main class="wrap">
 
   <!-- ============================================================ THE WEEK -->
-  <section id="sec-week">
-    <div class="card" id="due-card" hidden>
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">Protocol clock</p>
-          <h2>Who is owed a visit next</h2>
-        </div>
-        <div id="due-key" class="cal-key"></div>
+  <section id="sec-team">
+    <div class="card">
+      <div class="card-head"><div>
+        <p class="eyebrow">This week</p>
+        <h2 id="team-title">Who is free, and what they can run</h2>
       </div>
-      <p class="note" style="max-width:76ch">
-        Each family's next checkpoint, counted from their anchor date. This is a
-        different question from who should take a visit &mdash; it says which
-        visit is pressing, ordered by how much of its window is left.
-      </p>
-      <div id="due-list"></div>
+        <div id="team-key" class="cal-key"></div>
+      </div>
+      <div id="team-table"></div>
     </div>
 
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">The week</p>
-          <h2 id="calendar-title">&nbsp;</h2>
-        </div>
-        <div class="cal-key">
-          <span><i class="dot dot-todo"></i>Needs someone</span>
-          <span><i class="dot dot-done"></i>Assigned</span>
-          <span><i class="dot dot-attn"></i>Needs a closer look</span>
-          <span><i class="dot dot-route"></i>Handled elsewhere</span>
-        </div>
+    <div class="card" id="due-card" style="margin-top:1.3rem" hidden>
+      <div class="card-head"><div>
+        <p class="eyebrow">Protocol clock</p>
+        <h2>Who is owed a visit next</h2>
       </div>
-      <div class="calendar" id="calendar"></div>
-      <p class="note" id="calendar-note"></p>
+        <div id="due-key" class="cal-key"></div>
+      </div>
+      <div id="due-list"></div>
     </div>
   </section>
 
@@ -116,36 +101,6 @@
   </section>
 
   <!-- ======================================================= WORKLOAD -->
-  <section id="sec-workload" hidden>
-    <div class="card">
-      <div class="card-head">
-        <div>
-          <p class="eyebrow">This week</p>
-          <h2>How the work is spread</h2>
-        </div>
-        <span class="pill" id="fairness-status">&nbsp;</span>
-      </div>
-      <div class="fairness" id="fairness"></div>
-      <p class="note" id="fairness-note"></p>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head"><div>
-        <p class="eyebrow">Fair shares</p><h2>Out-of-hours and van duty</h2>
-      </div></div>
-      <div class="tablewrap"><table class="tbl" id="equity"></table></div>
-      <p class="note">Out-of-hours counts evening and weekend visits. The manual
-        tracks this on a Slack canvas today; this is the same tally as a column.</p>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head"><div>
-        <p class="eyebrow">Record</p><h2>What happened on this board</h2>
-      </div></div>
-      <ul class="activity" id="activity"></ul>
-    </div>
-  </section>
-
   <!-- =========================================================== SYNC -->
   <section id="sec-sync" hidden>
     <div class="card">
@@ -171,6 +126,14 @@
         <div class="segmented" id="sync-tabs" role="tablist"></div>
       </div>
       <div id="sync-panel"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem">
+      <div class="card-head"><div>
+        <p class="eyebrow">Take it with you</p><h2>Exports</h2>
+      </div></div>
+      <div class="exports" id="exports"></div>
+      <div class="uploads" id="uploads" style="margin-top:1rem"></div>
     </div>
 
     <details class="card details-card" style="margin-top:1.3rem" id="sync-more">
@@ -209,21 +172,6 @@
   </section>
 
   <!-- =========================================================== DATA -->
-  <section id="sec-data" hidden>
-    <div class="card">
-      <div class="card-head"><div>
-        <p class="eyebrow">Take it with you</p><h2>Exports</h2>
-      </div></div>
-      <div class="exports" id="exports"></div>
-    </div>
-
-    <div class="card" style="margin-top:1.3rem">
-      <div class="card-head"><div>
-        <p class="eyebrow">Bring it in</p><h2>Uploads</h2>
-      </div></div>
-      <div class="uploads" id="uploads"></div>
-    </div>
-  </section>
 </main>
 
 <footer class="foot">
@@ -236,7 +184,14 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- One file per section, loaded in order. core first because the rest
+     assume its helpers exist; boot last because it starts everything. -->
 <script src="static-board.js"></script>
-<script src="app.js"></script>
+<script src="js/core.js"></script>
+<script src="js/team.js"></script>
+<script src="js/assign.js"></script>
+<script src="js/calendars.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/boot.js"></script>
 </body>
 </html>

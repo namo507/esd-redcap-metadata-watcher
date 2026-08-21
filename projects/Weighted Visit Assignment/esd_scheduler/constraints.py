@@ -368,7 +368,7 @@ def check_candidate(
         if ev == EVIDENCE_INSUFFICIENT:
             return GateResult(
                 False, "insufficient_evidence",
-                "Sync calendars first — no current availability data for this "
+                "Upload their calendar first. There is no current availability data for this "
                 "date.", ev,
             )
 

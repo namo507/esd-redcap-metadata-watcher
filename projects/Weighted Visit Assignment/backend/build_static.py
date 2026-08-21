@@ -133,7 +133,7 @@ def build() -> str:
         json.dump(payload, fh, separators=(",", ":"), default=str)
 
     # Netlify: everything is static, and the board is a single page.
-    # Scripts and data must revalidate. A redeploy changes app.js, board.json
+    # Scripts and data must revalidate. A redeploy changes the js/ files, board.json
     # and static-board.js together, and a browser holding a cached script
     # against fresh data shows numbers that do not match the board's own logic.
     # Caught locally: a stale static-board.js kept reporting a visit as needing
@@ -147,6 +147,11 @@ def build() -> str:
             "  X-Frame-Options: SAMEORIGIN\n"
             "\n/index.html\n  Cache-Control: no-cache\n"
             "\n/*.js\n  Cache-Control: no-cache\n"
+            # The section files live in js/, and /*.js does not match a
+            # subdirectory. Without this line a browser keeps an old copy of
+            # them against fresh data, which is exactly how the board ends up
+            # showing numbers its own code did not produce.
+            "\n/js/*\n  Cache-Control: no-cache\n"
             "\n/*.css\n  Cache-Control: no-cache\n"
             "\n/board.json\n  Cache-Control: no-cache\n"
         )

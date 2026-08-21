@@ -54,6 +54,21 @@ case "$JOB" in
       exit 1
     fi
     log "inbox processed"
+
+    # A calendar that has been imported should reach the published copy without
+    # anybody running a command. Building always; deploying only when the
+    # operator has opted in, because the destination is a public URL.
+    if [ -x "$PROJECT_DIR/automation/publish.sh" ]; then
+      "$PROJECT_DIR/automation/publish.sh" >>"$LOG" 2>&1 \
+        && log "public copy rebuilt" \
+        || log "public copy rebuild failed; the board itself is unaffected"
+    fi
+    ;;
+
+  publish)
+    log "rebuilding the public copy"
+    "$PROJECT_DIR/automation/publish.sh" >>"$LOG" 2>&1
+    log "done"
     ;;
 
   audit)

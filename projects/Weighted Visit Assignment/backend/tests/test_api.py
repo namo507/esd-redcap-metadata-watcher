@@ -72,7 +72,8 @@ def test_static_frontend_is_served():
     for path, needle in (
         ("/", "ESD Visitboard"),
         ("/styles.css", "--esd-discovery-blue"),
-        ("/app.js", "api/board"),
+        ("/js/core.js", "function api"),
+        ("/js/boot.js", "/api/board"),
     ):
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=10) as resp:

@@ -441,6 +441,60 @@ class LabSession:
             ][:60],
         }
 
+    def coordinator_table(self) -> dict:
+        """One row per coordinator: their week, and what they can take on.
+
+        Everything here answers a question a scheduler asks out loud. What a
+        person scored on four weighted criteria is not one of those questions,
+        so it is not here; it belongs with the visit being decided.
+        """
+        now = self.now
+        monday = self.epoch.date()
+        grid = week_grid(self.state, monday, now, slot_minutes=60)
+        certs = {r["coordinator_id"]: r for r in self.certifications()["rows"]}
+
+        rows = []
+        for coord in sorted(self.state.active_coordinators(), key=lambda c: c.name):
+            cid = coord.coordinator_id
+            days = []
+            free_hours = 0
+            for day in grid:
+                # free_ids is the only list carrying ids. Anything not in it is
+                # busy or unverified, and both mean the same thing here: do not
+                # offer this hour.
+                slots = [
+                    {"label": s["label"],
+                     "state": "free" if cid in s["free_ids"] else "busy"}
+                    for s in day["slots"]
+                ]
+                free = sum(1 for s in slots if s["state"] == "free")
+                free_hours += free
+                days.append({"label": day["label"].split()[0],
+                             "date": day["day"], "slots": slots, "free": free})
+
+            snapshot = self.state.calendars.get(cid)
+            cert = certs.get(cid, {})
+            rows.append({
+                "id": cid,
+                "name": coord.name,
+                "initials": "".join(p[0] for p in coord.name.split()[:2]).upper(),
+                "days": days,
+                "free_hours": free_hours,
+                "visits_this_week": self.state.visits_this_week(cid, now),
+                "van_trained": bool(coord.van_trained),
+                "in_lab_day": coord.in_lab_day,
+                "can_run": cert.get("reliable", []),
+                "learning": cert.get("training", []),
+                "is_clinician": bool(cert.get("reliable")),
+                "calendar_ok": bool(snapshot and snapshot.sync_ok),
+            })
+        return {
+            "rows": rows,
+            "days": [d["label"].split()[0] for d in grid],
+            "dates": [d["day"] for d in grid],
+            "week_of": monday.isoformat(),
+        }
+
     def certifications(self) -> dict:
         """The reliability chart, as the board reads it.
 

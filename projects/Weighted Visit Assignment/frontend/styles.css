@@ -688,3 +688,39 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   .pairrow { grid-template-columns: 1fr; }
   .pairwho { grid-template-columns: auto 1fr; }
 }
+
+/* ---------- team comparison ----------
+   Rows are people, columns are days, and everything lines up so the eye can
+   run down a column looking for a gap. */
+.teamtable { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 52rem; }
+.teamtable thead th { background: var(--surface); color: var(--muted);
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+  padding: .55rem .6rem; text-align: left; font-weight: 800; }
+.teamtable tbody td, .teamtable tbody th { padding: .6rem; border-bottom: 1px solid var(--line);
+  vertical-align: middle; }
+.teamtable tbody tr:hover { background: var(--tint); }
+.teamwho { text-align: left; min-width: 13rem; }
+.teamwho > span:last-child { display: inline-block; vertical-align: middle; }
+.teamwho b { display: block; font-weight: 700; }
+.teamtags { display: flex; gap: .25rem; margin-top: .15rem; flex-wrap: wrap; }
+.teamnum, .teamtable th.teamnum { text-align: center; }
+.teamnum b { font-size: 1.05rem; }
+.teamcan { min-width: 15rem; }
+.teamlearn { font-size: .72rem; color: var(--muted); margin-top: .2rem; }
+.teamcell { text-align: center; min-width: 4.6rem; }
+.teamfree { display: block; font-size: .68rem; color: var(--muted); margin-top: .25rem; }
+
+/* The strip is the day, hour by hour. It grows in on load so the eye is drawn
+   along the week rather than landing on a static block of colour. */
+.strip { display: flex; gap: 1px; justify-content: center; }
+.seg { display: block; width: 5px; height: 20px; border-radius: 2px;
+  background: var(--surface);
+  transform: scaleY(.25); transform-origin: bottom;
+  animation: segIn .32s cubic-bezier(.2,.8,.3,1) forwards;
+  animation-delay: var(--delay, 0ms); }
+.seg.is-free { background: #CDEBD9; }
+.seg.is-busy { background: var(--esd-science-blue); opacity: .55; }
+@keyframes segIn { to { transform: scaleY(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .seg { animation: none; transform: none; }
+}

@@ -137,6 +137,12 @@ def r_calendar_review(params, body):
         return 404, {"error": str(exc)}
 
 
+@get("/api/coordinators")
+def r_coordinators(params, body):
+    """One row per coordinator: their week and what they can take on."""
+    return 200, SESSION.coordinator_table()
+
+
 @get("/api/availability")
 def r_availability(params, body):
     """Who is free in each slot, and whose calendar is still missing."""
@@ -183,6 +189,7 @@ def r_board(params, body):
         "schedule": SESSION.schedule_rows(),
         "logic": SESSION.logic(),
         "availability": SESSION.availability_grid(),
+        "coordinators": SESSION.coordinator_table(),
     }
 
 

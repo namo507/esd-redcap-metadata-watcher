@@ -57,7 +57,7 @@ static:
 	$(PY) tests/test_static_board.py
 
 publish: static
-	netlify deploy --prod --dir dist-static
+	./automation/publish.sh --force
 
 serve-quiet:
 	$(PY) -m backend.server --no-browser
