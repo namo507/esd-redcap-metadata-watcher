@@ -476,12 +476,15 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .filterstate b { font-size: 1.2rem; }
 .filterwhy { font-size: .78rem; color: var(--muted); }
 
+/* Status pills. Deliberately NOT .chip -- that class is the queue's
+   interactive filter control, and reusing it made those look like labels. */
 .chiprow { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .9rem; }
-.chip { font-size: .74rem; font-weight: 700; border-radius: var(--r-pill);
-  padding: .22rem .6rem; background: var(--surface); color: var(--muted); }
-.chip.is-pass { background: #CDEBD9; color: #14532B; }
-.chip.is-fail { background: #FDE7E1; color: #8C2F16; }
-.chip.is-skip { background: var(--surface); color: var(--muted); }
+.statchip { font-size: .74rem; font-weight: 700; border-radius: var(--r-pill);
+  padding: .22rem .6rem; background: var(--surface); color: var(--muted);
+  white-space: nowrap; }
+.statchip.is-pass { background: #CDEBD9; color: #14532B; }
+.statchip.is-fail { background: #FDE7E1; color: #8C2F16; }
+.statchip.is-skip { background: var(--surface); color: var(--muted); }
 
 /* ---------- whole-day absences ---------- */
 .absencelist { display: grid; gap: .5rem; margin-top: 1rem; }
@@ -491,3 +494,31 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .absenceday { font-weight: 700; font-size: .85rem; }
 .absencewho { display: flex; flex-wrap: wrap; gap: .35rem; }
 @media (max-width: 520px) { .absencerow { grid-template-columns: 1fr; } }
+
+/* ---------- shared card-grid rhythm ----------
+   Every responsive card grid on the board used its own gap and its own minimum
+   column, so two grids stacked in one section wrapped at different widths and
+   the columns stopped lining up. One track size and one gap keeps them in step,
+   and pinning content to the top of each card keeps rows level when one card
+   carries an extra line. */
+.syncgrid, .filtergrid, .exports, .uploads {
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: .8rem;
+  /* Uniform rows. Without this each row sizes to its own tallest card, so a
+     grid that wraps shows two different card heights and reads as ragged. */
+  grid-auto-rows: 1fr;
+}
+.synccard, .filtercard, .importcard { align-content: start; }
+.synccard > *, .filtercard > * { min-width: 0; }
+
+/* Card headers keep a common baseline whether or not they carry an eyebrow. */
+.card-head { display: flex; justify-content: space-between; align-items: flex-start;
+  gap: .8rem; flex-wrap: wrap; }
+
+/* Stat blocks: the number is the thing to align, so give the label a fixed
+   line box rather than letting a two-line label shove one tile out of step. */
+.importstats div, .fact { display: flex; flex-direction: column; justify-content: flex-start; }
+.importstats span, .fact-k { min-height: 1.9em; display: flex; align-items: flex-end; }
+
+/* Nav reflects the current route for assistive tech, not only visually. */
+.navbtn[aria-current="page"] { font-weight: 800; }

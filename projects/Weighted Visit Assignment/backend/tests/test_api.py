@@ -438,6 +438,32 @@ def test_an_absence_notice_blocks_that_person_for_the_whole_day():
         expect(row["coordinator_id"], "an absence row lost its coordinator")
 
 
+def test_the_board_picks_up_an_import_made_outside_it():
+    """The inbox job writes to the same store; a running board must notice."""
+    import sys as _sys
+
+    from esd_scheduler.calendar_import import import_pdf
+    from esd_scheduler.store import AuditStore
+
+    _, before = call("GET", "/api/calendar/imports")
+
+    # Same thing the scheduled inbox job does: import and record, no HTTP.
+    store = AuditStore(DB_PATH)
+    try:
+        result = import_pdf(MONTH_PDF, coordinators=srv.SESSION.state.coordinators,
+                            year_hint=2026)
+        store.record_import(result)
+    finally:
+        store.close()
+
+    _, after = call("GET", "/api/board")
+    ids = {row["import_id"] for row in after["calendar"]["imports"]}
+    expect(result.import_id in ids,
+           "an import recorded outside the board never reached it")
+    expect(len(after["calendar"]["imports"]) > len(before["imports"]),
+           "the board's import history did not grow")
+
+
 def test_unmatched_absence_names_are_surfaced_not_applied():
     _upload(WEEK_PDF)
     _, board = call("GET", "/api/board")
@@ -456,6 +482,9 @@ if __name__ == "__main__":
     tmp = tempfile.mkdtemp(prefix="visitboard-test-")
     # Never let a test rewrite the real confirmed legend in config/.
     os.environ["ESD_COLOR_MAP_PATH"] = os.path.join(tmp, "calendar-colors.json")
+    # Isolate the role/alias config too: with the lab's real aliases in place
+    # every name resolves, and the "unmatched name" path would go untested.
+    os.environ["ESD_CALENDAR_ROLES_PATH"] = os.path.join(tmp, "calendar-roles.json")
 
     ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.path.insert(0, os.path.join(ROOT_DIR, "tests", "fixtures"))
@@ -468,7 +497,8 @@ if __name__ == "__main__":
     PLAIN_WEEK_PDF = build_week_pdf(
         os.path.join(tmp, "work-week-plain.pdf"), coloured_legend=False)
     MONTH_PDF = build_month_pdf(os.path.join(tmp, "month.pdf"))
-    httpd = srv.build_server(port=0, db_path=os.path.join(tmp, "test.db"))
+    DB_PATH = os.path.join(tmp, "test.db")
+    httpd = srv.build_server(port=0, db_path=DB_PATH)
     BASE = f"http://127.0.0.1:{httpd.server_address[1]}"
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()

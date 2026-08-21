@@ -1,6 +1,12 @@
 __pycache__/
 *.py[cod]
-data/
+# Everything generated lives under data/. The inbox is the one exception: the
+# folder has to exist on a fresh clone, and its README explains what to drop
+# there. Its contents stay ignored -- they are real calendars.
+data/*
+!data/inbox/
+data/inbox/*
+!data/inbox/README.md
 logs/
 reports/
 deck/math/
@@ -21,3 +27,6 @@ dist-static/
 # Uploaded Outlook calendar prints. These are real calendars: a month export
 # carries event titles for every overlaid person. Never commit them.
 data/uploads/
+
+# Calendar prints awaiting import. Same reason as data/uploads: real calendars.
+data/inbox/*.pdf

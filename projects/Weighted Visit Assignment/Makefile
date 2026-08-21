@@ -1,7 +1,7 @@
 PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
-        import-calendar \
+        import-calendar inbox audit \
         serve serve-quiet static publish \
         install-automation uninstall-automation deck clean
 
@@ -17,6 +17,8 @@ help:
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
+	@echo "  make inbox                sweep data/inbox and file every PDF"
+	@echo "  make audit                what was imported, decided and overridden"
 	@echo "  make drift                weekly drift metrics to stdout"
 	@echo "  make debrief              write reports/debrief-<week>.md and .html"
 	@echo "  make calibrate            recalibrate the review band from the audit log"
@@ -37,6 +39,7 @@ test:
 	$(PY) tests/test_graph_privacy.py
 	$(PY) tests/test_constraints.py
 	$(PY) tests/test_calendar_import.py
+	$(PY) tests/test_automation.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
@@ -58,6 +61,12 @@ week:
 
 sync:
 	$(PY) -m esd_scheduler sync
+
+inbox:
+	$(PY) -m esd_scheduler import-inbox
+
+audit:
+	$(PY) -m esd_scheduler audit
 
 import-calendar:
 	@test -n "$(FILE)" || (echo "usage: make import-calendar FILE=path/to/calendar.pdf" && exit 1)

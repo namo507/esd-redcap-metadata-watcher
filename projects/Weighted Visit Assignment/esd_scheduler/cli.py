@@ -505,6 +505,122 @@ def cmd_import_calendar(args) -> int:
 
 
 
+def cmd_import_inbox(args) -> int:
+    """Import every calendar PDF dropped in the inbox, then file it away.
+
+    This is the unattended half of the upload feature: a coordinator drops a
+    print into ``data/inbox`` and the scheduled job picks it up, records it in
+    the audit store and moves the original into ``data/uploads`` so the same
+    file is never imported twice. Nothing is deleted -- an import that went
+    wrong has to remain inspectable.
+    """
+    import shutil
+    from datetime import datetime as _dt
+
+    from .calendar_import import import_pdf
+    from .demo import build_lab
+    from .store import AuditStore
+
+    inbox = args.inbox
+    processed = args.processed
+    os.makedirs(inbox, exist_ok=True)
+    os.makedirs(processed, exist_ok=True)
+
+    pdfs = sorted(
+        os.path.join(inbox, n) for n in os.listdir(inbox)
+        if n.lower().endswith(".pdf") and not n.startswith(".")
+    )
+    if not pdfs:
+        print("inbox empty")
+        return 0
+
+    now = _dt.now()
+    state, _ = build_lab(now.replace(hour=9, minute=0, second=0, microsecond=0))
+    store = AuditStore(args.db)
+    failures = 0
+    try:
+        for path in pdfs:
+            name = os.path.basename(path)
+            try:
+                result = import_pdf(path, coordinators=state.coordinators,
+                                    now=_dt.now(), year_hint=now.year)
+            except Exception as exc:  # noqa: BLE001
+                failures += 1
+                print(f"FAILED {name}: {type(exc).__name__}: {exc}")
+                continue
+
+            store.record_import(result)
+            print(
+                f"{name}: {result.view_type} view, tier {result.tier}, "
+                f"{result.entry_count} entries, {len(result.blocks)} blocks, "
+                f"{len(result.unavailable)} absence notice(s)"
+            )
+            for note in result.unresolved_names:
+                print(f"  UNRESOLVED NAME {note['name']}: {note['reason']}")
+            for blocker in result.blockers:
+                print(f"  BLOCKER {blocker}")
+
+            stamp = _dt.now().strftime("%Y%m%d-%H%M%S")
+            shutil.move(path, os.path.join(processed, f"{stamp}-{name}"))
+    finally:
+        store.close()
+    return 1 if failures else 0
+
+
+def cmd_audit(args) -> int:
+    """Summarise what the board has been told and what it decided.
+
+    Auditing is not a report someone writes at the end; it is the log answering
+    for itself. Everything here is read straight from the append-only store.
+    """
+    from .store import AuditStore
+
+    store = AuditStore(args.db)
+    try:
+        imports = [dict(r) for r in store.imports(limit=args.limit)]
+        blocks = [dict(r) for r in store.import_blocks()]
+        runs = store.query(
+            "SELECT COUNT(*) AS n FROM scoring_run")
+        outcomes = store.query(
+            "SELECT COUNT(*) AS n, SUM(CASE WHEN override_reason_code IS NOT NULL "
+            "THEN 1 ELSE 0 END) AS overrides FROM assignment_outcome")
+
+        print("CALENDAR IMPORTS")
+        if not imports:
+            print("  none recorded")
+        for row in imports:
+            print(f"  {row['uploaded_at'][:16]}  {row['view_type']:<10} "
+                  f"tier {row['tier']}  {row['entry_count']:>4} entries  "
+                  f"{row['block_count']:>3} blocks  "
+                  f"{'schedulable' if row['schedulable'] else 'workload only'}")
+            print(f"      {row['source_file']}")
+
+        reviewed = sum(1 for b in blocks if b["reviewed"])
+        rejected = sum(1 for b in blocks if b["reviewed"] and not b["confirmed"])
+        print()
+        print("EVIDENCE")
+        print(f"  blocks recorded : {len(blocks)}")
+        print(f"  in force        : {reviewed - rejected}")
+        print(f"  rejected on review: {rejected}")
+        if reviewed:
+            print(f"  correction rate : {rejected / reviewed:.1%}")
+
+        print()
+        print("DECISIONS")
+        print(f"  scoring runs    : {runs[0]['n'] if runs else 0}")
+        if outcomes and outcomes[0]["n"]:
+            n = outcomes[0]["n"]
+            ov = outcomes[0]["overrides"] or 0
+            print(f"  assignments     : {n}")
+            print(f"  overridden      : {ov} ({ov / n:.1%})")
+        else:
+            print("  assignments     : 0")
+    finally:
+        store.close()
+    return 0
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="esd_scheduler", description=__doc__)
     p.add_argument("--config", default=DEFAULT_CONFIG_PATH)
@@ -560,6 +676,18 @@ def build_parser() -> argparse.ArgumentParser:
                    help="also write the import and its blocks to the audit store")
     s.add_argument("--db", default=os.path.join("data", "visitboard.db"))
     s.set_defaults(func=cmd_import_calendar)
+
+    s = sub.add_parser("import-inbox",
+                       help="import every PDF dropped in data/inbox")
+    s.add_argument("--inbox", default=os.path.join("data", "inbox"))
+    s.add_argument("--processed", default=os.path.join("data", "uploads"))
+    s.add_argument("--db", default=os.path.join("data", "visitboard.db"))
+    s.set_defaults(func=cmd_import_inbox)
+
+    s = sub.add_parser("audit", help="what was imported, decided and overridden")
+    s.add_argument("--limit", type=int, default=15)
+    s.add_argument("--db", default=os.path.join("data", "visitboard.db"))
+    s.set_defaults(func=cmd_audit)
 
     s = sub.add_parser("verify-graph")
     s.add_argument("--mailbox", action="append",

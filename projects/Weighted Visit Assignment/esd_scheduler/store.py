@@ -555,9 +555,46 @@ class AuditStore:
             self.conn.commit()
             return cur.rowcount > 0
 
+    def import_fingerprint(self) -> tuple:
+        """Cheap "has anything been imported since I last looked" probe.
+
+        The dashboard is not the only thing that writes imports -- the inbox job
+        does too -- so a long-running board has to notice work done behind its
+        back rather than serving a snapshot from startup.
+        """
+        row = self.query(
+            "SELECT COUNT(*) AS n, COALESCE(MAX(uploaded_at), '') AS last "
+            "FROM calendar_import"
+        )
+        blocks = self.query(
+            "SELECT COUNT(*) AS n FROM calendar_import_block "
+            "WHERE reviewed=1 AND confirmed=1"
+        )
+        if not row:
+            return (0, "", 0)
+        return (row[0]["n"], row[0]["last"], blocks[0]["n"] if blocks else 0)
+
+    def latest_import(self) -> Optional[dict]:
+        """The most recent import's full payload, as it was recorded."""
+        import json as _json
+
+        # rowid breaks the tie. uploaded_at is second-resolution, so two
+        # imports in the same second order arbitrarily and the board can end up
+        # showing the earlier one as "latest".
+        rows = self.query(
+            "SELECT payload FROM calendar_import "
+            "ORDER BY uploaded_at DESC, rowid DESC LIMIT 1")
+        if not rows:
+            return None
+        try:
+            return _json.loads(rows[0]["payload"])
+        except (TypeError, ValueError):
+            return None
+
     def imports(self, limit: int = 25) -> List[sqlite3.Row]:
         return self.query(
-            "SELECT * FROM calendar_import ORDER BY uploaded_at DESC LIMIT ?", (limit,)
+            "SELECT * FROM calendar_import ORDER BY uploaded_at DESC, rowid DESC "
+            "LIMIT ?", (limit,)
         )
 
     def import_blocks(self, import_id: Optional[str] = None) -> List[sqlite3.Row]:

@@ -46,9 +46,12 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     # and describe nobody's actual qualifications or workload. Replace them from
     # the real roster before the pilot.
     #
-    # The seventh row is a deliberate placeholder rather than a real person: the
-    # cold-start path needs someone with no history, and labelling a named
-    # colleague "brand new hire" would be a fabricated claim about them.
+    # The seventh row carries a real first name for the same reason as the rest:
+    # the lab's own export names her in an all-day notice, and a row labelled
+    # "New Coordinator (example)" cannot receive that notice legibly. Her
+    # surname is not printed anywhere in the export, so only the first name is
+    # used. Her completed-visit count is zero like every other figure here --
+    # synthetic, and the value that keeps the cold-start path exercised.
     specs = [
         # name,                     credentials,                        cap,  done, zone, attrs
         ("Margaret Bell",           {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 61, 1, {"spanish"}),
@@ -57,7 +60,7 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
         ("Sofia Tous",              {"ADOS", "CONSENT", "DRIVING", "PHLEBOTOMY"}, 20.0, 72, 3, set()),
         ("Morgan Soto",             {"CONSENT", "DRIVING"},                       10.0, 33, 2, {"spanish"}),
         ("Ramiro Lucas-Mariano",    {"ADOS", "CONSENT", "DRIVING", "EEG"},        20.0, 40, 4, set()),
-        ("New Coordinator (example)", {"CONSENT", "DRIVING", "EEG"},              20.0,  0, 2, set()),
+        ("Makenzie",                {"CONSENT", "DRIVING", "EEG"},                20.0,  0, 2, set()),
     ]
     for i, (name, creds, cap, done, zone, attrs) in enumerate(specs):
         cid = f"C{i + 1:02d}"
@@ -85,7 +88,7 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     # which is the part that needs looking at.
     state.committed_hours["C01"] = 13.0   # busiest
     state.committed_hours["C04"] = 12.0   # second busiest
-    state.committed_hours["C07"] = 0.0    # the example new coordinator
+    state.committed_hours["C07"] = 0.0    # no history yet: the cold-start case
 
     # --- families -----------------------------------------------------------
     for i in range(12):

@@ -16,7 +16,7 @@ cd "$PROJECT_DIR"
 
 PYTHON="${ESD_PYTHON:-python3}"
 LOG_DIR="$PROJECT_DIR/logs"
-mkdir -p "$LOG_DIR" data reports
+mkdir -p "$LOG_DIR" data data/inbox data/uploads reports
 
 JOB="${1:-}"
 STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -41,6 +41,26 @@ case "$JOB" in
       exit 1
     fi
     log "calendar delta sync ok"
+    ;;
+
+  calendars)
+    # Unattended half of the calendar upload feature. A coordinator drops an
+    # Outlook print into data/inbox and this files it: parsed, recorded in the
+    # audit store, original moved to data/uploads so it cannot be imported
+    # twice. A running board notices the new rows on its next read.
+    if ! "$PYTHON" -m esd_scheduler import-inbox >>"$LOG" 2>&1; then
+      log "INBOX IMPORT FAILED: a file in data/inbox could not be read. It has"
+      log "  been left in place for inspection rather than filed away."
+      exit 1
+    fi
+    log "inbox processed"
+    ;;
+
+  audit)
+    log "writing audit summary"
+    mkdir -p reports
+    "$PYTHON" -m esd_scheduler audit >"reports/audit-$(date -u +%Y-%m-%d).txt" 2>>"$LOG"
+    log "audit written to reports/audit-$(date -u +%Y-%m-%d).txt"
     ;;
 
   reconcile)

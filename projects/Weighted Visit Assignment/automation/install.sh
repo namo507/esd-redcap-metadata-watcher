@@ -59,8 +59,19 @@ SCHED_SHADOW="    <key>StartCalendarInterval</key>
 SCHED_DEBRIEF="    <key>StartCalendarInterval</key>
     <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>"
 
+# Inbox sweep every 10 minutes. Slower than the calendar delta sync on purpose:
+# a dropped file is a human action, and a ten minute wait costs nothing while
+# halving the chance of grabbing a PDF mid-copy.
+SCHED_CALENDARS="    <key>StartInterval</key><integer>600</integer>"
+
+# Audit summary Monday 07:15, just after the debrief renders.
+SCHED_AUDIT="    <key>StartCalendarInterval</key>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>15</integer></dict>"
+
 JOBS=(
   "org.esdlab.scheduler.calsync|calsync|SCHED_CALSYNC"
+  "org.esdlab.scheduler.calendars|calendars|SCHED_CALENDARS"
+  "org.esdlab.scheduler.audit|audit|SCHED_AUDIT"
   "org.esdlab.scheduler.reconcile|reconcile|SCHED_RECONCILE"
   "org.esdlab.scheduler.shadow|shadow|SCHED_SHADOW"
   "org.esdlab.scheduler.debrief|debrief|SCHED_DEBRIEF"

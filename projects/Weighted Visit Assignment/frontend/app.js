@@ -184,7 +184,10 @@ function drawCalendar() {
 
   $("calendar").innerHTML = head + body;
   $("calendar").querySelectorAll("[data-visit]").forEach((b) =>
-    b.addEventListener("click", () => selectVisit(b.dataset.visit)));
+    b.addEventListener("click", async () => {
+      await selectVisit(b.dataset.visit, { silent: true });
+      setSection("assign");
+    }));
 
   const unassigned = visits.filter((v) => v.status !== "assigned").length;
   $("calendar-title").textContent =
@@ -202,10 +205,64 @@ const SECTIONS = {
   data:     ["Records", "Data and exports.", "Take the audit trail with you, or bring the roster in."],
 };
 
-function setSection(name) {
+const SECTION_NAMES = ["week", "assign", "workload", "sync", "data"];
+
+/* ------------------------------------------------------------------ routing
+   The board is one page, but its five views are places. Reflecting them in the
+   URL is what makes the back button, a bookmark and a pasted link behave the
+   way anyone expects -- including a link straight to one visit, which is how
+   coordinators actually pass work to each other. */
+
+function routeFor(section, visitId) {
+  return section === "assign" && visitId
+    ? `#/assign/${encodeURIComponent(visitId)}`
+    : `#/${section}`;
+}
+
+function parseRoute() {
+  const raw = (location.hash || "").replace(/^#\/?/, "");
+  const [section, visitId] = raw.split("/");
+  return {
+    section: SECTION_NAMES.includes(section) ? section : "week",
+    visitId: visitId ? decodeURIComponent(visitId) : null,
+  };
+}
+
+function syncRoute(replace) {
+  const want = routeFor(S.section, S.selected);
+  if (location.hash === want) return;
+  if (replace) history.replaceState(null, "", want);
+  else history.pushState(null, "", want);
+}
+
+async function applyRoute() {
+  const { section, visitId } = parseRoute();
+  if (visitId && visitId !== S.selected) {
+    // A link can outlive the board it was made from. Say so and land on
+    // something usable rather than leaving an empty pane and no explanation.
+    const known = (S.board && S.board.queue || []).some((v) => v.id === visitId);
+    if (known) {
+      await selectVisit(visitId, { silent: true });
+    } else {
+      toast(`Visit ${visitId} is not on this board.`, true);
+      const fallback = (S.board && S.board.queue || [])[0];
+      if (fallback) await selectVisit(fallback.id, { silent: true });
+      history.replaceState(null, "", routeFor(section, S.selected));
+    }
+  }
+  if (section !== S.section) setSection(section, { fromRoute: true });
+  else document.querySelectorAll(".navbtn").forEach((b) =>
+    b.setAttribute("aria-current", b.dataset.section === section ? "page" : "false"));
+}
+
+function setSection(name, opts) {
+  const fromRoute = opts && opts.fromRoute;
   S.section = name;
-  document.querySelectorAll(".navbtn").forEach((b) =>
-    b.classList.toggle("is-on", b.dataset.section === name));
+  document.querySelectorAll(".navbtn").forEach((b) => {
+    const on = b.dataset.section === name;
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-current", on ? "page" : "false");
+  });
   ["week", "assign", "workload", "sync", "data"].forEach((k) => {
     $("sec-" + k).hidden = k !== name;
   });
@@ -217,6 +274,7 @@ function setSection(name) {
   if (name === "workload") { drawFairness(); drawEquity(); drawActivity(); }
   if (name === "sync") drawSync();
   if (name === "data") drawData();
+  if (!fromRoute) syncRoute(false);
 }
 
 /* ---------------------------------------------------------------- detail */
@@ -261,9 +319,9 @@ function filterChips(v) {
   const skipped = (v.filters || []).filter((f) => f.state === "not_applicable");
   if (!rows.length && !skipped.length) return "";
   return `<div class="chiprow">
-    ${rows.map((f) => `<span class="chip is-${esc(f.state)}" title="${esc(f.why)}">
+    ${rows.map((f) => `<span class="statchip is-${esc(f.state)}" title="${esc(f.why)}">
       ${esc(f.label)}: ${f.state === "pass" ? "ok" : "no"}</span>`).join("")}
-    ${skipped.map((f) => `<span class="chip is-skip" title="${esc(f.why)}">
+    ${skipped.map((f) => `<span class="statchip is-skip" title="${esc(f.why)}">
       ${esc(f.label)}: n/a</span>`).join("")}
   </div>`;
 }
@@ -459,13 +517,18 @@ async function unassign(visitId) {
   } catch (err) { toast(err.message, true); }
 }
 
-async function selectVisit(visitId) {
+async function selectVisit(visitId, opts) {
+  const silent = opts && opts.silent;
   S.selected = visitId;
   drawQueue();
   try {
     S.detail = await api("/api/visit?id=" + encodeURIComponent(visitId));
-  } catch (err) { toast(err.message, true); S.detail = null; }
+  } catch (err) {
+    if (!silent) toast(err.message, true);
+    S.detail = null;
+  }
   drawDetail();
+  if (!silent && S.section === "assign") syncRoute(false);
 }
 
 /* -------------------------------------------------------------- fairness */
@@ -557,7 +620,7 @@ function drawAbsences() {
           <div class="absenceday">${dt.toLocaleDateString(undefined,
             { weekday: "short", month: "short", day: "numeric" })}</div>
           <div class="absencewho">${byDay[day].map((r) =>
-            `<span class="chip is-fail">${esc(r.name)}</span>`).join("")}</div>
+            `<span class="statchip is-fail">${esc(r.name)}</span>`).join("")}</div>
         </div>`;
       }).join("")}</div>` : ""}
     ${unresolved.length ? `<div class="notice notice-alert" style="margin-top:1rem">
@@ -1096,10 +1159,25 @@ async function boot() {
     toast("Board reset.");
   });
 
+  window.addEventListener("popstate", () => { applyRoute(); });
+  // Safari fires hashchange without popstate for a programmatic hash write.
+  window.addEventListener("hashchange", () => { applyRoute(); });
+
   try {
     await refresh();
-    const firstOpen = S.board.queue.find((v) => v.status !== "assigned") || S.board.queue[0];
-    if (firstOpen) await selectVisit(firstOpen.id);
+    const route = parseRoute();
+    const known = S.board.queue.some((v) => v.id === route.visitId);
+    const firstOpen = S.board.queue.find((v) => v.status !== "assigned")
+      || S.board.queue[0];
+    // A link to a visit that no longer exists should land somewhere sensible
+    // rather than on an error, so fall back to the first open one.
+    const target = known ? route.visitId : (firstOpen && firstOpen.id);
+    if (target) await selectVisit(target, { silent: true });
+    setSection(route.section, { fromRoute: true });
+    syncRoute(true);
+    if (route.visitId && !known) {
+      toast(`Visit ${route.visitId} is not on this board.`, true);
+    }
   } catch (err) {
     $("detail").innerHTML = `<div class="card empty">Could not reach the board.<br>
       <span class="note">${esc(err.message)}</span></div>`;

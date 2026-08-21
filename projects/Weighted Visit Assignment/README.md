@@ -106,6 +106,24 @@ fresh, onboarding cap. No score rescues a failure.
 **Layer 3** — top 3, review band calibrated by Monte Carlo over the weight
 simplex, per-decision selection stability, tie-breaks logged with their seed.
 
+## Scheduled jobs
+
+`make install-automation` loads six launchd agents. Each is idempotent and safe
+to re-run, and each logs to `logs/<job>.log`.
+
+| Job | When | What |
+|---|---|---|
+| `calsync` | every 5 min | delta pull of Outlook / Google free-busy |
+| `calendars` | every 10 min | sweep `data/inbox` and file every PDF |
+| `reconcile` | nightly 02:00 | full reconcile plus append-only integrity check |
+| `shadow` | Mon 06:45 | shadow optimiser, records regret |
+| `debrief` | Mon 07:00 | weekly drift and debrief report |
+| `audit` | Mon 07:15 | writes `reports/audit-<date>.txt` |
+
+The inbox sweep runs slower than the calendar sync on purpose: a dropped file is
+a human action, and a ten-minute wait halves the chance of reading a PDF while
+it is still being copied.
+
 ## Commands
 
 | | |
@@ -208,8 +226,18 @@ text — the times are read exactly, not guessed at by OCR, so there is nothing 
 proofread. Anything wrong can still be rejected under *What was read from the
 PDF*, and the board updates at once.
 
-Uploaded PDFs are written to `data/uploads/`, which is gitignored: a month export
-carries event titles for everyone on the page.
+**Unattended imports.** Drop a print into `data/inbox/` and the scheduled sweep
+files it: parsed, recorded in the audit store, original moved to
+`data/uploads/`, so the same file is never imported twice. A file that fails to
+parse is left in the inbox rather than filed away, so it stays inspectable. A
+running board notices the new rows on its next read &mdash; nobody has to open
+the dashboard for an import to take effect.
+
+    make inbox      sweep data/inbox now
+    make audit      what was imported, decided and overridden
+
+Both `data/inbox/` and `data/uploads/` are gitignored: a calendar print carries
+event titles for everyone overlaid on the page.
 
 ## Status
 

@@ -173,6 +173,7 @@ class LabSession:
             self.calendar_roles: List[dict] = []
             self.unavailable: List[dict] = []
             self.unresolved_names: List[dict] = []
+            self._import_fingerprint = None
             self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
@@ -330,8 +331,37 @@ class LabSession:
             applied += len(blocks)
         return applied
 
+    def refresh_calendar(self) -> bool:
+        """Pick up imports made outside this process, e.g. by the inbox job.
+
+        The board is long-running and is not the only writer: a scheduled job
+        drops calendar imports into the same audit store. Without this, a PDF
+        filed by automation would sit in the database and never reach the
+        screen until someone restarted the server.
+        """
+        with self._lock:
+            fingerprint = self.store.import_fingerprint()
+            if fingerprint == self._import_fingerprint:
+                return False
+            self._import_fingerprint = fingerprint
+
+            payload = self.store.latest_import()
+            if payload:
+                self.last_import = payload
+                if payload.get("availability"):
+                    self.availability = payload["availability"]
+                if payload.get("resources"):
+                    self.resources = payload["resources"]
+                if payload.get("role_summary"):
+                    self.calendar_roles = payload["role_summary"]
+                self.unavailable = payload.get("unavailable", []) or []
+                self.unresolved_names = payload.get("unresolved_names", []) or []
+            self._apply_confirmed_blocks()
+            return True
+
     def imports(self) -> dict:
         """Upload history, plus the blocks still waiting on a human."""
+        self.refresh_calendar()
         rows = [dict(r) for r in self.store.imports(limit=15)]
         for row in rows:
             row["blockers"] = _loads(row.get("blockers"))
