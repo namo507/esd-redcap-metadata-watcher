@@ -57,6 +57,8 @@ class Checkpoint:
     offset_days: int
     window_before: int = 30
     window_after: int = 30
+    # How long the visit itself runs, from the manual's visit-length table.
+    duration_hours: Optional[float] = None
 
     def target(self, anchor: date) -> date:
         return anchor + timedelta(days=self.offset_days)
@@ -97,6 +99,8 @@ class ProtocolSchedule:
                         offset_days=int(row["offset_days"]),
                         window_before=int(row.get("window_before", 30)),
                         window_after=int(row.get("window_after", 30)),
+                        duration_hours=(float(row["duration_hours"])
+                                        if row.get("duration_hours") else None),
                     ))
                 except (KeyError, TypeError, ValueError):
                     continue
@@ -111,6 +115,13 @@ class ProtocolSchedule:
 
     def for_protocol(self, protocol: str) -> List[Checkpoint]:
         return self.checkpoints.get(protocol, [])
+
+    def duration_for(self, protocol: str, checkpoint: str) -> Optional[float]:
+        """The manual's length for this visit, or None if it does not state one."""
+        for row in self.for_protocol(protocol):
+            if row.name == checkpoint:
+                return row.duration_hours
+        return None
 
 
 def default_checkpoints() -> Dict[str, List[Checkpoint]]:

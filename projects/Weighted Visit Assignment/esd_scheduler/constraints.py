@@ -44,15 +44,37 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MATRIX_PATH = os.path.join(ROOT, "config", "reliability-matrix.json")
 
 # Master §2 rule 8. Days either side of the ideal date, by checkpoint.
+# Fallback only. The live figures come from config/protocol-schedule.json,
+# which is transcribed from the manual's Visit Windows table; these are kept so
+# the gate still works if that file is missing, and they agree with it.
 VISIT_WINDOWS: Dict[str, Tuple[int, int]] = {
     "baseline": (-5, 7),
-    "1mo": (-5, 7),
-    "3mo": (-5, 7),
-    "6mo": (-14, 28),
-    "9mo": (-14, 28),
-    "12mo": (-14, 42),
-    "24mo": (-14, 42),
+    "1mo": (-5, 7), "1m": (-5, 7),
+    "2mo": (-5, 7), "2m": (-5, 7),
+    "3mo": (-5, 7), "3m": (-5, 7),
+    "6mo": (-14, 28), "6m": (-14, 28),
+    "9mo": (-14, 28), "9m": (-14, 28),
+    "12mo": (-14, 42), "12m": (-14, 42),
+    "24mo": (-14, 42), "24m": (-14, 42),
 }
+
+
+def visit_window(protocol: str, checkpoint: str) -> Optional[Tuple[int, int]]:
+    """The acceptance window for one visit, preferring the configured table.
+
+    One source of truth. The constant above and the config file both hold the
+    manual's numbers, and two copies of the same figures is how they end up
+    disagreeing after somebody updates one.
+    """
+    try:
+        from .schedule import ProtocolSchedule
+
+        for row in ProtocolSchedule.load().for_protocol(protocol):
+            if row.name == checkpoint:
+                return (-row.window_before, row.window_after)
+    except Exception:  # noqa: BLE001 - a missing or broken file falls back
+        pass
+    return VISIT_WINDOWS.get(checkpoint)
 
 NDD_ASSESSMENT = "NDD_cross_collab"
 NDD_EXTRA_MINUTES = 60          # Master §6
@@ -154,7 +176,7 @@ def route_visit(
 
     # Rule 9: 36-month visits are grad-student-availability dependent in a way
     # the fixed coordinator model cannot represent. Never automate them.
-    if visit.checkpoint in ("36mo", "36 month", "36"):
+    if visit.checkpoint in ("36mo", "36m", "36 month", "36"):
         return RoutingResult(
             False, ROUTE_MANUAL,
             "36-month visits are assigned by hand: who can take them depends on "
@@ -162,7 +184,7 @@ def route_visit(
         )
 
     # Rule 10: 24-month is a remote questionnaire, not a staffed visit.
-    if visit.checkpoint in ("24mo", "24 month", "24"):
+    if visit.checkpoint in ("24mo", "24m", "24 month", "24"):
         return RoutingResult(
             False, ROUTE_REMOTE,
             "24-month is completed remotely through REDCap. No coordinator or "
@@ -170,7 +192,7 @@ def route_visit(
         )
 
     # Rule 8: the requested date must sit inside the manual's age window.
-    window = VISIT_WINDOWS.get(visit.checkpoint)
+    window = visit_window(visit.protocol, visit.checkpoint)
     if window and ideal_date:
         earliest = ideal_date + timedelta(days=window[0])
         latest = ideal_date + timedelta(days=window[1])

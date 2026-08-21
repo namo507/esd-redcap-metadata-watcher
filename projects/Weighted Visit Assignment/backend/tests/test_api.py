@@ -199,9 +199,76 @@ def test_assigning_the_recommendation_never_needs_a_reason():
         expect(body["assignment"]["override"] is False,
                f"{v['id']}: recommendation recorded as an override")
         assigned += 1
-    expect(assigned >= len(board["queue"]) - 1,
-           f"only {assigned} of {len(board['queue'])} visits could be filled")
+    # Not every visit is fillable, and that is the correct answer rather than a
+    # shortfall: with the manual's reliability chart in force, a 3m visit needs
+    # Orientation and Bayley (3m), which almost nobody holds. What must hold is
+    # that a recommendation, wherever one exists, is never refused for a missing
+    # reason.
+    expect(assigned > 0, "no visit could be filled at all")
     call("POST", "/api/reset")
+
+
+def test_the_certification_gate_is_actually_reachable_from_the_board():
+    """The gates were written, tested in isolation, and never called.
+
+    check_candidate was imported by the session and invoked nowhere, so the
+    board's exclusions came only from the engine's feasibility stage and the
+    manual's certification rule -- stated there as non-negotiable -- was not
+    enforced on screen or on assignment. This asserts a Layer 1 reason actually
+    reaches the API, which is the thing that silently was not true.
+    """
+    _, board = call("GET", "/api/board")
+    layer1 = {"signed off", "in-lab day", "Fridays", "NDD", "training",
+              "tech kit"}
+    for v in board["queue"]:
+        _, detail = call("GET", f"/api/visit?id={v['id']}")
+        for entry in detail.get("excluded", []):
+            if any(token.lower() in entry["reason"].lower() for token in layer1):
+                return
+    raise AssertionError(
+        "no visit on the board was gated by any Layer 1 rule, so the gates are "
+        "either unreachable again or the roster is certified for everything")
+
+
+def test_a_gated_coordinator_is_refused_by_the_assign_route_too():
+    """The screen and the assignment path must agree about who is eligible.
+
+    They did not: candidates() filtered and assign() did not, so the board
+    showed somebody as ineligible and then accepted an assignment to them.
+    """
+    _, board = call("GET", "/api/board")
+    for v in board["queue"]:
+        _, detail = call("GET", f"/api/visit?id={v['id']}")
+        gated = [e for e in detail.get("excluded", [])
+                 if "signed off" in e["reason"].lower()]
+        if not gated:
+            continue
+        status, body = call("POST", "/api/assign",
+                            {"visit_id": v["id"], "coordinator_id": gated[0]["id"],
+                             "reason_code": "preference",
+                             "reason_text": "testing the gate"})
+        expect(status >= 400,
+               f"{v['id']}: assigning an uncertified coordinator returned {status}")
+        return
+
+
+def test_a_visit_nobody_is_certified_for_offers_no_recommendation():
+    """Silence is the right answer when the chart rules everyone out.
+
+    The board must not fall back to the best-scoring ineligible person: the
+    manual states certification as non-negotiable, so an empty list is correct
+    and a ranked list would be a suggestion nobody may act on.
+    """
+    _, board = call("GET", "/api/board")
+    for v in board["queue"]:
+        _, detail = call("GET", f"/api/visit?id={v['id']}")
+        if detail.get("recommended_id"):
+            continue
+        if not detail["candidates"] and detail["visit"]["automated"]:
+            expect(detail["excluded"],
+                   f"{v['id']}: nobody eligible and no reason given")
+            return
+    # Every visit had somebody; nothing to assert.
 
 
 def test_bad_reason_code_is_refused():
@@ -241,8 +308,17 @@ def test_fairness_and_week():
 def test_reset_clears_assignments():
     _, board = call("GET", "/api/board")
     vid = next(v["id"] for v in board["queue"] if v["status"] != "assigned")
-    _, detail = call("GET", f"/api/visit?id={vid}")
-    top = next(c for c in detail["candidates"] if c["assignable"])
+    # Find a visit that somebody is actually certified for.
+    top = None
+    for candidate_visit in board["queue"]:
+        if candidate_visit["status"] == "assigned":
+            continue
+        _, detail = call("GET", f"/api/visit?id={candidate_visit['id']}")
+        top = next((c for c in detail["candidates"] if c["assignable"]), None)
+        if top:
+            vid = candidate_visit["id"]
+            break
+    expect(top is not None, "no visit on the board has an assignable candidate")
     call("POST", "/api/assign", {"visit_id": vid, "coordinator_id": top["id"]})
     status, _ = call("POST", "/api/reset")
     expect(status == 200, "reset failed")

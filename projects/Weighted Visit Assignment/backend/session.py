@@ -438,6 +438,48 @@ class LabSession:
             ][:60],
         }
 
+    def certifications(self) -> dict:
+        """The reliability chart, as the board reads it.
+
+        Recency is reported as unknown rather than computed. The manual's chart
+        states current status only and carries no dates, so any decay curve here
+        would be arithmetic on a number nobody recorded.
+        """
+        m = self.matrix
+        labels = getattr(m, "labels", None) or {}
+        try:
+            import json as _json
+            with open(os.path.join("config", "reliability-matrix.json"),
+                      encoding="utf-8") as fh:
+                labels = _json.load(fh).get("_assessment_labels", {}) or {}
+        except (OSError, ValueError):
+            labels = {}
+
+        rows = []
+        for coord in sorted(self.state.active_coordinators(), key=lambda c: c.name):
+            cid = coord.coordinator_id
+            reliable = [a for a in m.assessments if m.is_reliable(cid, a)]
+            training = [a for a in m.assessments if m.is_in_training(cid, a)]
+            rows.append({
+                "coordinator_id": cid,
+                "name": coord.name,
+                "reliable": [labels.get(a, a) for a in reliable],
+                "training": [labels.get(a, a) for a in training],
+                "n_reliable": len(reliable),
+                "clinician": bool(reliable),
+                "recency": None,
+            })
+        return {
+            "rows": rows,
+            "assessments": [labels.get(a, a) for a in m.assessments],
+            "confirmed": m.confirmed,
+            "recency_recorded": False,
+            "requirements": {
+                p: reqs for p, reqs in m.requirements.items()
+                if not p.startswith("_")
+            },
+        }
+
     def availability_grid(self, slot_minutes: int = 30) -> dict:
         """Who is free in each slot this week, plus whose calendar is missing.
 
@@ -480,6 +522,7 @@ class LabSession:
             ],
             "review_band": round(self.cfg.epsilon_review_band, 3),
             "gamma_travel": round(self.cfg.gamma_travel, 3),
+            "certifications": self.certifications(),
             "weight_vector_id": self.cfg.weights_id
             if hasattr(self.cfg, "weights_id") else None,
             "priority_tiers": list(self.PRIORITY_TIERS),
@@ -822,6 +865,46 @@ class LabSession:
                 row["priority"] = list(row["priority"])
             return rows
 
+    def _apply_gates(self, visit, family, pool):
+        """Run the Layer 1 gates over a scored pool. One implementation.
+
+        Both the screen and the assignment path need this, and they have to
+        agree: when only the screen applied it, the board showed a coordinator
+        as ineligible and then accepted an assignment to them, and demanded an
+        override reason for its own recommendation because the two paths
+        disagreed about who the recommendation was.
+
+        Anyone a gate rejects leaves the ranking entirely. A hard rule is not
+        something a good score is allowed to argue with.
+        """
+        survivors, gated = [], []
+        roster = [
+            self.state.coordinators[c.coordinator_id]
+            for c in pool.candidates
+            if c.coordinator_id in self.state.coordinators
+        ]
+        for cand in pool.candidates:
+            coord = self.state.coordinators.get(cand.coordinator_id)
+            if coord is None:
+                survivors.append(cand)
+                continue
+            slot = None
+            if cand.feasibility.slot_start and cand.feasibility.slot_end:
+                slot = (cand.feasibility.slot_start, cand.feasibility.slot_end)
+            verdict = check_candidate(
+                coord, visit, family, self.state, self.now, slot=slot,
+                matrix=self.matrix, pool=roster,
+            )
+            if verdict.passed:
+                survivors.append(cand)
+            else:
+                gated.append({
+                    "id": cand.coordinator_id,
+                    "name": cand.coordinator_name,
+                    "reason": verdict.reason or verdict.gate,
+                })
+        return survivors, gated
+
     def candidates(self, visit_id: str) -> dict:
         """The full ranked pool for one visit, in the words the screen needs."""
         with self._lock:
@@ -829,8 +912,18 @@ class LabSession:
             pool = score_visit(visit, self.state, self.cfg, self.now)
             family = self.state.families[visit.family_id]
 
+            # Layer 1 gates, run over the scored pool. These were written to the
+            # Master spec and covered by their own tests, but nothing in the
+            # live path ever called them: the board's exclusions came only from
+            # the engine's feasibility stage. So the certification rule -- the
+            # one the manual states as non-negotiable -- was not being enforced
+            # on screen. Anyone a gate rejects is moved out of the ranking
+            # entirely rather than ranked and flagged, because a hard rule is
+            # not something a good score should be able to argue with.
+            survivors, gated = self._apply_gates(visit, family, pool)
+
             ranked = []
-            for cand in pool.candidates:
+            for cand in survivors:
                 vetoes = fairness_violations(
                     cand.coordinator_id, cand, self.state, self.cfg, self.now
                 )
@@ -905,7 +998,7 @@ class LabSession:
                 (c["id"] for c in ranked if c["assignable"]), None
             )
 
-            excluded = [
+            excluded = gated + [
                 {
                     "id": c.coordinator_id,
                     "name": c.coordinator_name,
@@ -1000,11 +1093,16 @@ class LabSession:
             if visit_id in self.assignments:
                 raise ValueError("This visit is already assigned.")
             visit = self.visits[visit_id]
+            family = self.state.families[visit.family_id]
             pool = score_visit(visit, self.state, self.cfg, self.now)
-            if not pool.candidates:
+            survivors, gated = self._apply_gates(visit, family, pool)
+            if not survivors:
                 raise ValueError("Nobody is eligible for this visit.")
+            blocked = next((g for g in gated if g["id"] == coordinator_id), None)
+            if blocked:
+                raise ValueError(blocked["reason"])
             chosen = next(
-                (c for c in pool.candidates if c.coordinator_id == coordinator_id), None
+                (c for c in survivors if c.coordinator_id == coordinator_id), None
             )
             if chosen is None:
                 raise ValueError("That coordinator is not eligible for this visit.")
@@ -1016,7 +1114,7 @@ class LabSession:
             # for it would both mislabel the decision and pollute the override
             # log that weight re-elicitation depends on.
             assignable = [
-                c for c in pool.candidates
+                c for c in survivors
                 if not fairness_violations(c.coordinator_id, c, self.state, self.cfg, self.now)
             ]
             recommended = assignable[0].coordinator_id if assignable else None

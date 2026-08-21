@@ -1,59 +1,101 @@
 {
-  "_comment": "When each protocol checkpoint is due, as days from the family's anchor date (enrolment or birth, whichever the study anchors on), plus how far either side of the target still counts as in-window. THESE ARE PROVISIONAL. The offsets were read off the checkpoint names -- '12mo' is 360 days -- and the windows are a flat +/- 30 days because nothing in the codebase records the study's real acceptance windows. Replace them with the protocol's own figures and set 'confirmed' to true; until then every due date the board shows is labelled provisional.",
-  "confirmed": false,
-  "confirmed_by": "",
-  "source": "derived from checkpoint names; windows are a placeholder",
+  "_comment": [
+    "Checkpoint timing and visit length, transcribed from the ESD Lab",
+    "Scheduling Manual (updated 7/7/26): the Visit Windows table and the Visit",
+    "Lengths table. Offsets are days from the family's anchor date; windows are",
+    "the manual's own tolerances, not a placeholder.",
+    "",
+    "Two things worth stating rather than burying:",
+    "",
+    "  * The 36m window is written in the manual as 'Ideal Date -> day before",
+    "    4th birthday'. Encoded as 0 days before and 364 after, which is that",
+    "    rule when the anchor is the child's birth date. If the study anchors on",
+    "    enrolment instead, this row is the one to revisit.",
+    "",
+    "  * IPSA 48m is not given a length in the manual. It is carried at 3 hours,",
+    "    the same as 36m, and flagged here so the assumption is visible.",
+    "",
+    "Offsets use 30-day months, which is how the checkpoint names read. If the",
+    "study computes ideal dates from calendar months, replace these with the",
+    "figures Access produces."
+  ],
+  "source": "ESD Lab Scheduling Manual, Visit Windows + Visit Lengths tables",
+  "source_updated": "2026-07-07",
+  "confirmed": true,
+  "confirmed_by": "ESD Lab Scheduling Manual (transcribed)",
   "protocols": {
-    "NICO": [
-      {
-        "name": "6mo",
-        "offset_days": 180,
-        "window_before": 30,
-        "window_after": 30
-      },
-      {
-        "name": "12mo",
-        "offset_days": 360,
-        "window_before": 30,
-        "window_after": 30
-      },
-      {
-        "name": "18mo",
-        "offset_days": 540,
-        "window_before": 30,
-        "window_after": 30
-      },
-      {
-        "name": "24mo",
-        "offset_days": 720,
-        "window_before": 30,
-        "window_after": 30
-      }
-    ],
     "NANO": [
       {
-        "name": "baseline",
-        "offset_days": 0,
-        "window_before": 30,
-        "window_after": 30
+        "name": "1m",
+        "offset_days": 30,
+        "window_before": 5,
+        "window_after": 7,
+        "duration_hours": 1.0
       },
       {
-        "name": "3mo",
+        "name": "2m",
+        "offset_days": 60,
+        "window_before": 5,
+        "window_after": 7,
+        "duration_hours": 1.0
+      },
+      {
+        "name": "3m",
         "offset_days": 90,
-        "window_before": 30,
-        "window_after": 30
+        "window_before": 5,
+        "window_after": 7,
+        "duration_hours": 1.5
       },
       {
-        "name": "9mo",
+        "name": "6m",
+        "offset_days": 180,
+        "window_before": 14,
+        "window_after": 28,
+        "duration_hours": 1.5
+      },
+      {
+        "name": "9m",
         "offset_days": 270,
-        "window_before": 30,
-        "window_after": 30
+        "window_before": 14,
+        "window_after": 28,
+        "duration_hours": 2.0
       },
       {
-        "name": "18mo",
-        "offset_days": 540,
-        "window_before": 30,
-        "window_after": 30
+        "name": "12m",
+        "offset_days": 360,
+        "window_before": 14,
+        "window_after": 42,
+        "duration_hours": 2.0
+      },
+      {
+        "name": "24m",
+        "offset_days": 720,
+        "window_before": 14,
+        "window_after": 42,
+        "duration_hours": 1.0
+      },
+      {
+        "name": "36m",
+        "offset_days": 1080,
+        "window_before": 0,
+        "window_after": 364,
+        "duration_hours": 3.0
+      }
+    ],
+    "IPSA": [
+      {
+        "name": "36m",
+        "offset_days": 1080,
+        "window_before": 0,
+        "window_after": 364,
+        "duration_hours": 3.0
+      },
+      {
+        "name": "48m",
+        "offset_days": 1440,
+        "window_before": 0,
+        "window_after": 364,
+        "duration_hours": 3.0
       }
     ]
   }

@@ -250,12 +250,28 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
                 checkpoint=checkpoint,
                 window_start=window_start,
                 window_end=window_start + timedelta(days=3, hours=9),
-                duration_hours=rng.choice([1.5, 2.0, 2.5, 3.0]),
+                duration_hours=_manual_duration(fam.protocol, checkpoint, rng),
                 location=location,
                 requires_clinician=(location == "lab" and rng.random() < 0.4),
             ), fam)
         )
     return state, visits
+
+
+def _manual_duration(protocol: str, checkpoint: str, rng) -> float:
+    """Visit length from the manual where it states one.
+
+    The lengths used to be a random pick from a plausible range, which was fine
+    while nothing better existed. The manual's Visit Lengths table is better,
+    and a 36m visit running three hours rather than two changes who still has
+    room that week.
+    """
+    from .schedule import ProtocolSchedule
+
+    stated = ProtocolSchedule.load().duration_for(protocol, checkpoint)
+    if stated is not None:
+        return stated
+    return rng.choice([1.5, 2.0, 2.5, 3.0])
 
 
 def _spread_anchors(state: LabState, now: datetime) -> None:

@@ -35,10 +35,22 @@ class Protocol:
                 required_credentials=frozenset({"ADOS", "CONSENT", "DRIVING"}),
                 checkpoint_sequence=("6mo", "12mo", "18mo", "24mo"),
             ),
+            # NANO is transcribed from the ESD Lab Scheduling Manual: these are
+            # the study's real time points. Certification is not a credential
+            # flag here -- the manual's Clinical Assessment Reliability chart
+            # decides who may run each visit, and config/reliability-matrix.json
+            # carries it. CONSENT and DRIVING remain because they are practical
+            # requirements for a home visit rather than clinical reliability.
             "NANO": Protocol(
                 name="NANO",
-                required_credentials=frozenset({"CONSENT", "DRIVING", "EEG"}),
-                checkpoint_sequence=("baseline", "3mo", "9mo", "18mo"),
+                required_credentials=frozenset({"CONSENT", "DRIVING"}),
+                checkpoint_sequence=("1m", "2m", "3m", "6m", "9m", "12m",
+                                     "24m", "36m"),
+            ),
+            "IPSA": Protocol(
+                name="IPSA",
+                required_credentials=frozenset({"CONSENT", "DRIVING"}),
+                checkpoint_sequence=("36m", "48m"),
             ),
         }
 

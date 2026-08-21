@@ -261,6 +261,54 @@ def test_offer_window_shrinks_with_drive_time():
     expect(f_close < n_close, "a long drive did not pull the latest start earlier")
 
 
+def test_the_shipped_matrix_matches_the_manual():
+    """Transcribed from the manual's Clinical Assessment Reliability chart.
+
+    Pinned because this file decides who may run a visit at all, and a silent
+    edit to it is a clinical claim about a real person.
+    """
+    from esd_scheduler.constraints import ReliabilityMatrix
+
+    m = ReliabilityMatrix.load()
+    expect(m.confirmed, "the shipped matrix should be confirmed from the manual")
+
+    # Sanjana: reliable on both CSBS bands, both Bayley bands and Orientation;
+    # in training on ADOS.
+    for a in ("CSBS_6m", "CSBS_9_12m", "Bayley_3m", "Bayley_9_12m",
+              "Orientation_1_3m"):
+        expect(m.is_reliable("C03", a), f"Sanjana should be reliable on {a}")
+    expect(m.is_in_training("C03", "ADOS"), "Sanjana is in training on ADOS")
+
+    # Lauren is in training on Bayley (3m), not reliable -- the difference the
+    # chart draws and the gate depends on.
+    expect(m.is_in_training("C02", "Bayley_3m"),
+           "Lauren is in training on Bayley (3m)")
+    expect(not m.is_reliable("C02", "Bayley_3m"),
+           "Lauren is not yet reliable on Bayley (3m)")
+
+    # Ramiro holds exactly one.
+    expect(m.is_reliable("C06", "Bayley_9_12m"), "Ramiro: Bayley (9-12m)")
+    expect(not m.is_reliable("C06", "CSBS_9_12m"), "Ramiro: not CSBS")
+
+    # Maggie is in training only, so cannot run a visit solo.
+    expect(m.is_in_training("C01", "CSBS_6m"), "Maggie is in training on CSBS")
+    expect(not m.is_reliable("C01", "CSBS_6m"), "Maggie is not yet reliable")
+
+
+def test_only_the_manuals_clinicians_can_run_a_nano_9m():
+    """9m needs CSBS (9-12m) and Bayley (9-12m). The chart decides who that is."""
+    from esd_scheduler.constraints import ReliabilityMatrix
+
+    m = ReliabilityMatrix.load()
+    needed = m.required_for("NANO", "9m")
+    expect(set(needed) == {"CSBS_9_12m", "Bayley_9_12m"},
+           f"9m requirements read as {needed}")
+    able = {c for c in ("C01", "C02", "C03", "C04", "C05", "C06", "C07")
+            if all(m.is_reliable(c, a) for a in needed)}
+    expect(able == {"C02", "C03", "C07"},
+           f"expected Lauren, Sanjana and Makenzie; got {sorted(able)}")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

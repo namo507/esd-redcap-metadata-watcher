@@ -1513,11 +1513,12 @@ function drawLogicDetail(L) {
       ${(L.priority_tiers || []).map((t) => `<span class="statchip is-skip">${esc(t)}</span>`).join(" ")}
       then already assigned. Inside a tier the raw day count decides, because
       pressure saturates the moment a window closes.</p>`,
-    gates: () => `<p>Eight hard rules, checked in this order. The first one to fail is
+    gates: () => `${certTable(L)}<p>Eight hard rules, checked in this order. The first one to fail is
       the reason shown, so the same situation always gets the same explanation.
       Nothing here is a score &mdash; a gate cannot be outweighed by a good fit.</p>
       <ol class="gatelist">${(L.gates || []).map((g) =>
         `<li><b>${esc(g.label)}</b><span>${esc(g.why)}</span></li>`).join("")}</ol>`,
+    gates_cert: () => "",
     score: () => `<p>Only candidates that passed every gate are scored. Four criteria,
       each between 0 and 1, multiplied by a weight and added up:</p>
       ${weightTiles(L)}
@@ -1575,6 +1576,34 @@ function drawBatchResult(box) {
 function nameFor(id) {
   const r = (S.board.roster || []).find((x) => x.id === id);
   return r ? r.name : id;
+}
+
+function certTable(L) {
+  /* Who may run what, straight from the manual's reliability chart. This is the
+     rule the manual calls non-negotiable, so it belongs beside the gate that
+     enforces it rather than in a settings page. */
+  const cert = L.certifications;
+  if (!cert || !cert.rows) return "";
+  return `
+    <h4 style="margin:.2rem 0 .5rem">Who is signed off on what</h4>
+    <div class="tablewrap"><table class="tbl">
+      <thead><tr><th>Coordinator</th><th>Fully reliable</th><th>In training</th></tr></thead>
+      <tbody>${cert.rows.map((r) => `<tr>
+        <td>${esc(r.name)}${r.clinician ? "" : ' <span class="statchip is-skip">tech</span>'}</td>
+        <td>${r.reliable.length
+          ? r.reliable.map((a) => `<span class="statchip is-pass">${esc(a)}</span>`).join(" ")
+          : "<i>none listed</i>"}</td>
+        <td>${r.training.length
+          ? r.training.map((a) => `<span class="statchip is-skip">${esc(a)}</span>`).join(" ")
+          : ""}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>
+    <p class="note">${cert.confirmed
+      ? "From the lab's Clinical Assessment Reliability chart."
+      : "Not yet confirmed against the manual."}
+      ${cert.recency_recorded ? "" :
+        "The chart records current status only &mdash; no certification dates &mdash; so " +
+        "recency is <b>unknown</b> rather than estimated."}</p>`;
 }
 
 function weightTiles(L) {

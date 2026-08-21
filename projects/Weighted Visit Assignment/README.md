@@ -170,6 +170,36 @@ five-minute cadence as the real sync job; without that the demo's evidence would
 age past the staleness threshold within the hour and veto the whole roster for a
 reason that is an artefact of nobody running the job.
 
+## What the manual decides
+
+Four things now come from the ESD Lab Scheduling Manual rather than from a
+placeholder, and each is pinned by a test so a later edit cannot drift from the
+document the lab actually schedules by:
+
+| From the manual | Lands in |
+|---|---|
+| Clinical Assessment Reliability chart | `config/reliability-matrix.json` |
+| Visit Windows table | `config/protocol-schedule.json` |
+| Visit Lengths table | the same file, per checkpoint |
+| NANO visit schedules | which assessments each checkpoint needs |
+
+**Certification is a hard gate, and it now actually runs.** A NANO 2m visit
+needs Orientation (1&ndash;3m), so only Lauren and Sanjana may take it; 9m needs
+CSBS (9&ndash;12m) and Bayley (9&ndash;12m), so only Lauren, Sanjana and Makenzie. Someone
+in training passes only when a signed-off colleague is free to pair with them,
+which is the manual's rule, not an invention.
+
+Two absences are recorded as absences rather than filled in. Sofia Tous and
+Morgan Soto do not appear on the reliability chart, so they hold no independent
+clinical reliability and are tech rather than clinician. And the chart carries
+no certification dates at all, so **recency is reported as unknown** &mdash; a decay
+curve would be arithmetic on a number nobody wrote down.
+
+Emma, Kali and Kim are on the chart but are not coordinators; the manual gives
+them a separate Clinician Shifts calendar. They are transcribed into the matrix
+under `clinicians_not_on_roster` so nothing is lost, and cannot be assigned
+until the board models non-coordinator clinicians.
+
 ## The protocol clock
 
 Ranking answers *who should take this visit*. The clock answers the question

@@ -1,58 +1,203 @@
 {
   "_comment": [
-    "Who is reliable on what. Editable without a code change, per Master prompt 5.3",
-    "('as people continue training, I will add in who's reliable on this').",
+    "Who is reliable on what, transcribed from the Clinical Assessment",
+    "Reliability chart in the ESD Lab Scheduling Manual (updated 7/7/26,",
+    "Sanjana Oak). This file was shipped empty for exactly this moment: the",
+    "gates read it and start enforcing with no code change.",
     "",
-    "STATUS OF THIS FILE: the age-banded assessment names come from the manual.",
-    "The per-coordinator rows are UNCONFIRMED and deliberately empty. The master",
-    "prompt names Emma, Makenzie and Maggie, none of whom are on the roster the",
-    "dashboard and the shared Outlook calendar carry (Margaret Bell, Lauren",
-    "Puttock, Sanjana Oak, Sofia Tous, Morgan Soto, Ramiro Lucas-Mariano).",
+    "MAPPING TO THE DASHBOARD ROSTER. The manual names people by first name.",
+    "Five map to the roster with certainty:",
+    "  Sanjana  -> C03 Sanjana Oak",
+    "  Lauren   -> C02 Lauren Puttock",
+    "  Ramiro   -> C06 Ramiro Lucas-Mariano",
+    "  Makenzie -> C07 Makenzie",
+    "  Maggie   -> C01 Margaret Bell   (alias confirmed by the lab)",
     "",
-    "Guessing a mapping would encode a clinical-certification claim about a real",
-    "person that nobody verified, so the gates read this file and escalate when",
-    "it is empty rather than substituting anyone. Fill in from the manual and the",
-    "gates start enforcing immediately - no code change.",
+    "Sofia Tous (C04) and Morgan Soto (C05) do NOT appear in the manual's",
+    "reliability chart. That is recorded here as an absence, not filled in:",
+    "on this chart they hold no independent clinical reliability, which makes",
+    "them tech rather than clinician on a visit. If that is wrong it is a",
+    "transcription question for the lab, not something to infer.",
+    "",
+    "Emma, Kali and Kim are in the chart but are not coordinators - the manual",
+    "describes a separate Clinician Shifts calendar for non-coordinator",
+    "clinicians. They are recorded below under 'clinicians_not_on_roster' so",
+    "the data is not lost, but they cannot be assigned until the board models",
+    "clinicians as assignable staff.",
+    "",
+    "RECENCY IS NOT RECORDED. The chart states current status only; it carries",
+    "no certification or last-practised dates. 'last_reliable_on' is therefore",
+    "left null everywhere rather than invented, and the board reports recency",
+    "as unknown instead of computing a decay from a made-up date.",
     "",
     "status values: RELIABLE | IN_TRAINING | (absent = not certified)"
   ],
-
+  "source": "ESD Lab Scheduling Manual, Clinical Assessment Reliability chart",
+  "source_updated": "2026-07-07",
+  "confirmed": true,
+  "confirmed_by": "ESD Lab Scheduling Manual (transcribed)",
+  "confirmed_on": "2026-08-21",
   "assessments": [
     "Orientation_1_3m",
     "Bayley_3m",
     "Bayley_9_12m",
     "CSBS_6m",
     "CSBS_9_12m",
+    "Mullen",
     "ADOS",
-    "NDD_cross_collab"
+    "DAS_II"
   ],
-
-  "confirmed": false,
-  "confirmed_by": null,
-  "confirmed_on": null,
-
-  "staff": {
-    "C01": { "_name": "Margaret Bell",         "assessments": {} },
-    "C02": { "_name": "Lauren Puttock",        "assessments": {} },
-    "C03": { "_name": "Sanjana Oak",           "assessments": {} },
-    "C04": { "_name": "Sofia Tous",            "assessments": {} },
-    "C05": { "_name": "Morgan Soto",           "assessments": {} },
-    "C06": { "_name": "Ramiro Lucas-Mariano",  "assessments": {} }
+  "_assessment_labels": {
+    "Orientation_1_3m": "Orientation (1-3m)",
+    "Bayley_3m": "Bayley (3m, motor)",
+    "Bayley_9_12m": "Bayley (9-12m)",
+    "CSBS_6m": "CSBS (6m)",
+    "CSBS_9_12m": "CSBS (9-12m)",
+    "Mullen": "Mullen",
+    "ADOS": "ADOS",
+    "DAS_II": "DAS-II"
   },
-
-  "visit_requirements": {
-    "_comment": "Which assessments a visit needs, by protocol and checkpoint.",
-    "NICO": {
-      "6mo":  ["CSBS_6m"],
-      "12mo": ["CSBS_9_12m", "Bayley_9_12m"],
-      "18mo": ["ADOS"],
-      "24mo": []
+  "staff": {
+    "C01": {
+      "_name": "Margaret Bell",
+      "_manual_name": "Maggie",
+      "_solo_range": null,
+      "assessments": {
+        "CSBS_6m": "IN_TRAINING",
+        "CSBS_9_12m": "IN_TRAINING"
+      },
+      "last_reliable_on": {}
     },
+    "C02": {
+      "_name": "Lauren Puttock",
+      "_manual_name": "Lauren",
+      "_solo_range": "1m - 12m",
+      "assessments": {
+        "CSBS_6m": "RELIABLE",
+        "CSBS_9_12m": "RELIABLE",
+        "Bayley_9_12m": "RELIABLE",
+        "Orientation_1_3m": "RELIABLE",
+        "Bayley_3m": "IN_TRAINING",
+        "ADOS": "IN_TRAINING"
+      },
+      "last_reliable_on": {}
+    },
+    "C03": {
+      "_name": "Sanjana Oak",
+      "_manual_name": "Sanjana",
+      "_solo_range": "1m - 12m",
+      "assessments": {
+        "CSBS_6m": "RELIABLE",
+        "CSBS_9_12m": "RELIABLE",
+        "Bayley_3m": "RELIABLE",
+        "Bayley_9_12m": "RELIABLE",
+        "Orientation_1_3m": "RELIABLE",
+        "ADOS": "IN_TRAINING"
+      },
+      "last_reliable_on": {}
+    },
+    "C04": {
+      "_name": "Sofia Tous",
+      "_manual_name": null,
+      "_note": "not listed in the manual's reliability chart",
+      "assessments": {},
+      "last_reliable_on": {}
+    },
+    "C05": {
+      "_name": "Morgan Soto",
+      "_manual_name": null,
+      "_note": "not listed in the manual's reliability chart",
+      "assessments": {},
+      "last_reliable_on": {}
+    },
+    "C06": {
+      "_name": "Ramiro Lucas-Mariano",
+      "_manual_name": "Ramiro",
+      "_solo_range": null,
+      "assessments": {
+        "Bayley_9_12m": "RELIABLE"
+      },
+      "last_reliable_on": {}
+    },
+    "C07": {
+      "_name": "Makenzie",
+      "_manual_name": "Makenzie",
+      "_solo_range": "6m - 12m",
+      "assessments": {
+        "CSBS_6m": "RELIABLE",
+        "CSBS_9_12m": "RELIABLE",
+        "Bayley_9_12m": "RELIABLE"
+      },
+      "last_reliable_on": {}
+    }
+  },
+  "clinicians_not_on_roster": {
+    "_comment": "In the manual's chart but not coordinators. Recorded so the transcription is complete; not assignable until the board models non-coordinator clinicians.",
+    "Emma": {
+      "_solo_range": "9m - 36m",
+      "_note": "only schedule for 36m visits",
+      "assessments": {
+        "Bayley_9_12m": "RELIABLE",
+        "Mullen": "RELIABLE",
+        "CSBS_9_12m": "RELIABLE",
+        "ADOS": "RELIABLE",
+        "DAS_II": "RELIABLE"
+      }
+    },
+    "Kali": {
+      "_solo_range": "36m",
+      "assessments": {
+        "ADOS": "RELIABLE",
+        "DAS_II": "RELIABLE"
+      }
+    },
+    "Kim": {
+      "_solo_range": "36m",
+      "assessments": {
+        "ADOS": "RELIABLE",
+        "DAS_II": "RELIABLE"
+      }
+    }
+  },
+  "visit_requirements": {
+    "_comment": "Assessments each visit needs that require clinical reliability, from the NANO and IPSA visit-schedule tables. Baseline, PIX/RIX, OIX, OPIX, Vineland and the 24m questionnaires are not on the reliability chart and so gate nobody.",
     "NANO": {
-      "baseline": ["Orientation_1_3m"],
-      "3mo":  ["Bayley_3m"],
-      "9mo":  ["CSBS_9_12m"],
-      "18mo": ["ADOS"]
+      "1m": [
+        "Orientation_1_3m"
+      ],
+      "2m": [
+        "Orientation_1_3m"
+      ],
+      "3m": [
+        "Orientation_1_3m",
+        "Bayley_3m"
+      ],
+      "6m": [
+        "CSBS_6m"
+      ],
+      "9m": [
+        "CSBS_9_12m",
+        "Bayley_9_12m"
+      ],
+      "12m": [
+        "CSBS_9_12m",
+        "Bayley_9_12m"
+      ],
+      "24m": [],
+      "36m": [
+        "DAS_II",
+        "ADOS"
+      ]
+    },
+    "IPSA": {
+      "36m": [
+        "Mullen",
+        "ADOS"
+      ],
+      "48m": [
+        "DAS_II",
+        "ADOS"
+      ]
     }
   }
 }

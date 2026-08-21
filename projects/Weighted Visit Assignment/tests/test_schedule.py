@@ -158,12 +158,34 @@ def test_the_queue_puts_actionable_families_first():
     expect(ranks == sorted(ranks), f"ordering is not by urgency tier: {tiers}")
 
 
-def test_the_shipped_schedule_is_marked_provisional():
-    """It must not read as authoritative until the study team confirms it."""
+def test_the_shipped_schedule_matches_the_manual():
+    """Transcribed from the manual's Visit Windows and Visit Lengths tables.
+
+    Pinned so a later edit cannot quietly drift from the document the lab
+    actually schedules by. If the manual changes, this test is the place that
+    says so.
+    """
     sched = ProtocolSchedule.load()
-    expect(sched.confirmed is False,
-           "the shipped protocol schedule claims to be confirmed")
-    expect(sched.checkpoints, "the shipped schedule is empty")
+    expect(sched.confirmed, "the schedule should be confirmed against the manual")
+    nano = {c.name: c for c in sched.for_protocol("NANO")}
+    expect(nano, "NANO is missing from the shipped schedule")
+
+    # (window before, window after, hours) exactly as the manual states them.
+    for name, before, after, hours in (
+            ("1m", 5, 7, 1.0),
+            ("3m", 5, 7, 1.5),
+            ("6m", 14, 28, 1.5),
+            ("9m", 14, 28, 2.0),
+            ("12m", 14, 42, 2.0),
+            ("24m", 14, 42, 1.0),
+            ("36m", 0, 364, 3.0)):
+        row = nano.get(name)
+        expect(row is not None, f"NANO {name} is missing")
+        expect((row.window_before, row.window_after) == (before, after),
+               f"{name} window is -{row.window_before}/+{row.window_after}, "
+               f"manual says -{before}/+{after}")
+        expect(row.duration_hours == hours,
+               f"{name} runs {row.duration_hours}h, manual says {hours}h")
 
 
 # --- exhaustive gate enumeration -------------------------------------------
