@@ -8,7 +8,7 @@
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
             section: "week", assignments: {}, lastImport: null,
-            syncTab: "availability" };
+            syncTab: "availability", logicNode: null, dueOpen: null };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
@@ -153,34 +153,78 @@ function drawDue() {
     .map((k) => `<span><i class="dot dot-${DUE_TONE[k]}"></i>${counts[k]} ${esc(k)}</span>`)
     .join("");
 
+  /* Tiles, not a table. A seven-column row per family made the reader scan a
+     grid of numbers to find the two that matter -- who is late, and by how
+     much. A tile leads with those and keeps the rest one tap away. */
   const rows = sched.rows.filter((r) => r.status !== "complete");
   $("due-list").innerHTML = `
-    <div class="tablewrap"><table class="tbl">
-      <thead><tr>
-        <th>Family</th><th>Study</th><th>Next checkpoint</th><th>Status</th>
-        <th>Window closes</th><th>Days</th><th>Pressure</th>
-      </tr></thead>
-      <tbody>${rows.map((r) => `<tr>
-        <td>Family ${esc(String(r.family_id).replace(/^F/, ""))}</td>
-        <td>${esc(r.protocol)}</td>
-        <td>${esc(r.checkpoint || "\u2014")}</td>
-        <td><span class="statchip is-${
-          r.status === "overdue" || r.status === "closing" ? "fail"
-          : r.status === "open" ? "pass" : "skip"}">${esc(r.status_label)}</span></td>
-        <td>${r.window_end ? esc(r.window_end) : "\u2014"}</td>
-        <td class="${r.status === "overdue" ? "over" : ""}">${
-          r.days_remaining == null ? "\u2014"
-          : r.status === "overdue" ? `${Math.abs(r.days_remaining)} late`
-          : r.days_remaining}</td>
-        <td>${urgencyBar(r.urgency)}</td>
-      </tr>`).join("")}</tbody>
-    </table></div>
-    ${sched.confirmed ? "" : `<div class="notice notice-warn" style="margin-top:.9rem">
-      <span>&#9432;</span><span>These dates are <b>provisional</b>. The offsets were
-      read off the checkpoint names and the windows are a placeholder, because the
-      study's real acceptance windows are not recorded anywhere in this repo.
-      Confirm them in <code>config/protocol-schedule.json</code> and every date here
-      becomes authoritative.</span></div>`}`;
+    <div class="tiles">${rows.map((r) => {
+      const late = r.status === "overdue";
+      const num = r.days_remaining == null ? "\u2014"
+        : late ? Math.abs(r.days_remaining) : r.days_remaining;
+      const unit = r.days_remaining == null ? "no anchor date"
+        : late ? (Math.abs(r.days_remaining) === 1 ? "day late" : "days late")
+        : (r.days_remaining === 1 ? "day left" : "days left");
+      const tip = r.window_end
+        ? `${r.protocol} ${r.checkpoint} \u00B7 window ${r.window_start} to ${r.window_end}`
+        : `${r.protocol} ${r.checkpoint} \u00B7 no anchor date recorded, so no due date`;
+      return `<button class="tile is-${esc(r.status)} ${S.dueOpen === r.family_id ? "is-open" : ""}"
+          type="button" data-due="${esc(r.family_id)}"
+          data-tip="${esc(tip)}" aria-expanded="${S.dueOpen === r.family_id}">
+        <span class="tile-top">
+          <span class="tile-dot"></span>
+          <span class="tile-study">${esc(r.protocol)}</span>
+          <span class="tile-cp">${esc(r.checkpoint || "\u2014")}</span>
+        </span>
+        <span class="tile-num">${num}</span>
+        <span class="tile-unit">${esc(unit)}</span>
+        <span class="tile-fam">Family ${esc(String(r.family_id).replace(/^F/, ""))}</span>
+        <span class="tile-bar"><i style="width:${Math.round((r.urgency || 0) * 100)}%"></i></span>
+      </button>`;
+    }).join("")}</div>
+    <div id="due-open"></div>
+    ${sched.confirmed ? "" : `<p class="note" style="margin-top:.9rem">
+      Dates are <b>provisional</b> until the study's real checkpoint windows are
+      recorded in <code>config/protocol-schedule.json</code>.</p>`}`;
+
+  $("due-list").querySelectorAll("[data-due]").forEach((b) =>
+    b.addEventListener("click", () => {
+      S.dueOpen = S.dueOpen === b.dataset.due ? null : b.dataset.due;
+      drawDue();
+    }));
+  drawDueOpen(rows);
+}
+
+function drawDueOpen(rows) {
+  const box = $("due-open");
+  if (!box) return;
+  const r = rows.find((x) => x.family_id === S.dueOpen);
+  if (!r) { box.innerHTML = ""; return; }
+  const visits = S.board.queue.filter((v) => v.family_id === r.family_id);
+  box.innerHTML = `
+    <div class="tile-detail">
+      <div class="tile-detail-head">
+        <h3>Family ${esc(String(r.family_id).replace(/^F/, ""))}</h3>
+        <span class="statchip is-${r.status === "overdue" || r.status === "closing"
+          ? "fail" : r.status === "open" ? "pass" : "skip"}">${esc(r.status_label)}</span>
+      </div>
+      <div class="facts">
+        <div class="fact"><div class="fact-k">Study</div><div class="fact-v">${esc(r.protocol)}</div></div>
+        <div class="fact"><div class="fact-k">Next checkpoint</div><div class="fact-v">${esc(r.checkpoint || "\u2014")}</div></div>
+        <div class="fact"><div class="fact-k">Window</div><div class="fact-v">${
+          r.window_start ? esc(r.window_start) + " to " + esc(r.window_end) : "\u2014"}</div></div>
+        <div class="fact"><div class="fact-k">Progress</div><div class="fact-v">${r.completed} of ${r.total} done</div></div>
+      </div>
+      ${visits.length ? `<div class="tile-links">${visits.map((v) =>
+        `<button class="btn btn-quiet" type="button" data-goto="${esc(v.id)}">
+           Open ${esc(v.title)} &rarr;</button>`).join("")}</div>`
+        : `<p class="note">No visit is on the board for this family yet.</p>`}
+    </div>`;
+  box.querySelectorAll("[data-goto]").forEach((b) =>
+    b.addEventListener("click", async () => {
+      await selectVisit(b.dataset.goto, { silent: true });
+      setSection("assign");
+    }));
 }
 
 function urgencyBar(u) {
@@ -265,10 +309,11 @@ const SECTIONS = {
   assign:   ["Next visit assignment", "Assign a visit.", "Pick a visit. The board checks every calendar, rules out who cannot go, and explains who it would send."],
   workload: ["Fair shares", "How the work is spread.", "Visits, hours, out-of-hours duty and van trips across the team."],
   sync:     ["Evidence", "Sync calendars.", "Upload the Outlook print. Nothing counts until a human has confirmed it."],
+  logic:    ["The architecture", "How it decides.", "Every step from an uploaded calendar to a named coordinator, with the real weights."],
   data:     ["Records", "Data and exports.", "Take the audit trail with you, or bring the roster in."],
 };
 
-const SECTION_NAMES = ["week", "assign", "workload", "sync", "data"];
+const SECTION_NAMES = ["week", "assign", "workload", "sync", "logic", "data"];
 
 /* ------------------------------------------------------------------ routing
    The board is one page, but its five views are places. Reflecting them in the
@@ -326,7 +371,7 @@ function setSection(name, opts) {
     b.classList.toggle("is-on", on);
     b.setAttribute("aria-current", on ? "page" : "false");
   });
-  ["week", "assign", "workload", "sync", "data"].forEach((k) => {
+  SECTION_NAMES.forEach((k) => {
     $("sec-" + k).hidden = k !== name;
   });
   const [eyebrow, title, sub] = SECTIONS[name];
@@ -336,6 +381,7 @@ function setSection(name, opts) {
   if (name === "week") { drawDue(); drawCalendar(); }
   if (name === "workload") { drawFairness(); drawEquity(); drawActivity(); }
   if (name === "sync") drawSync();
+  if (name === "logic") drawLogic();
   if (name === "data") drawData();
   if (!fromRoute) syncRoute(false);
 }
@@ -643,6 +689,7 @@ const TIER_WORD = {
   1: "Live Outlook feed",
   2: "Timed export",
   3: "Month grid",
+  4: "Screenshot",
 };
 
 /* One card, four views, instead of eight cards stacked down the page. The
@@ -830,12 +877,13 @@ function drawUpload() {
   }
   box.innerHTML = `
     <div class="uploadzone" id="dropzone">
-      <input id="pdf-file" type="file" accept="application/pdf,.pdf" hidden>
+      <input id="pdf-file" type="file" accept="application/pdf,.pdf,image/png,image/jpeg" hidden>
       <div class="uploadzone-inner">
-        <div class="uploadzone-title">Drop the Outlook PDF here</div>
+        <div class="uploadzone-title">Drop the Outlook calendar here</div>
         <div class="uploadzone-sub">or</div>
-        <label class="btn btn-primary" for="pdf-file">Choose a PDF&hellip;</label>
-        <div class="uploadzone-hint">Work Week or Day view gives schedulable times. Month view gives workload only.</div>
+        <label class="btn btn-primary" for="pdf-file">Choose a file&hellip;</label>
+        <div class="uploadzone-hint" data-tip="A PDF is read exactly; a screenshot is measured in pixels and every block has to be confirmed">
+          PDF or screenshot. A <b>Work Week</b> PDF is read exactly &mdash; a screenshot is approximate.</div>
       </div>
     </div>`;
 
@@ -921,7 +969,9 @@ function drawImportResult() {
         <div><b>${imp.block_count}</b><span>bookable blocks</span></div>
         <div><b>${imp.pending_review}</b><span>awaiting review</span></div>
       </div>
-      <div class="importverdict">${tier === 2
+      <div class="importverdict">${tier === 4
+        ? `Read from an image, so the times are measured in pixels rather than read off the file. Every block below has to be confirmed before it counts. The same calendar printed to PDF is read exactly.`
+        : tier === 2
         ? "This export has real start and end times, so once you confirm the blocks below the board will schedule around them."
         : "This is a month grid. It shows how loaded each day looks, but it cannot say when anyone is free. <b>Re-print the same dates as Work Week</b> to make it schedulable."}</div>
       ${(imp.blockers || []).length ? `<ul class="importlist">${
@@ -1193,6 +1243,191 @@ ${sections}
 </body></html>`;
 }
 
+/* ------------------------------------------------------------------- logic
+   A picture of the decision procedure, drawn from the live configuration
+   rather than kept in step by hand. Nodes are buttons: the diagram stays
+   readable at a glance, and the detail is one tap away instead of crowding it. */
+
+const LOGIC_NODES = [
+  { id: "upload", art: "assets/icons/upload.png",   x: 20,  y: 16,  w: 250, h: 62, title: "Upload a calendar",
+    sub: "Outlook PDF or image", icon: "\u2601" },
+  { id: "read", art: "assets/icons/read.png",     x: 20,  y: 118, w: 250, h: 62, title: "Read the file",
+    sub: "Times, colours, banners", icon: "\u25A6" },
+  { id: "who", art: "assets/icons/who.png",      x: 20,  y: 220, w: 250, h: 62, title: "Work out who is who",
+    sub: "From the printed legend", icon: "\u25D1" },
+  { id: "clock", art: "assets/icons/clock.png",    x: 470, y: 16,  w: 250, h: 62, title: "Protocol clock",
+    sub: "Anchor + checkpoint offset", icon: "\u25F7" },
+  { id: "due", art: "assets/icons/due.png",      x: 470, y: 118, w: 250, h: 62, title: "Which visit is next",
+    sub: "Ordered by window left", icon: "\u2691" },
+  { id: "gates", art: "assets/icons/gates.png",    x: 195, y: 334, w: 350, h: 72, title: "Can they go?",
+    sub: "8 hard gates, first failure wins", icon: "\u26D4" },
+  { id: "score", art: "assets/icons/score.png",    x: 195, y: 448, w: 350, h: 72, title: "How good a fit?",
+    sub: "4 criteria \u00D7 weights", icon: "\u2211" },
+  { id: "rank", art: "assets/icons/rank.png",     x: 195, y: 562, w: 350, h: 62, title: "Rank, flag close calls",
+    sub: "Review band", icon: "\u2263" },
+  { id: "assign", art: "assets/icons/assign.png",   x: 245, y: 664, w: 250, h: 62, title: "Assign, or override",
+    sub: "A reason is recorded", icon: "\u2713" },
+];
+
+const LOGIC_EDGES = [
+  ["upload", "read"], ["read", "who"], ["clock", "due"],
+  ["who", "gates"], ["due", "gates"],
+  ["gates", "score"], ["score", "rank"], ["rank", "assign"],
+];
+
+function logicNode(id) { return LOGIC_NODES.find((n) => n.id === id); }
+
+function drawLogic() {
+  const L = S.board.logic || {};
+  const W = 740, H = 748;
+
+  const edges = LOGIC_EDGES.map(([a, b]) => {
+    const from = logicNode(a), to = logicNode(b);
+    const x1 = from.x + from.w / 2, y1 = from.y + from.h;
+    const x2 = to.x + to.w / 2, y2 = to.y;
+    // Straight where the boxes line up, a soft elbow where they do not. An
+    // arrow that wanders is harder to follow than one that turns once.
+    const d = Math.abs(x1 - x2) < 2
+      ? `M${x1} ${y1} L${x2} ${y2 - 7}`
+      : `M${x1} ${y1} L${x1} ${(y1 + y2) / 2} L${x2} ${(y1 + y2) / 2} L${x2} ${y2 - 7}`;
+    return `<path class="lx" d="${d}" marker-end="url(#lhead)"/>`;
+  }).join("");
+
+  const nodes = LOGIC_NODES.map((n) => `
+    <g class="lnode ${S.logicNode === n.id ? "is-on" : ""}" data-node="${esc(n.id)}"
+       role="button" tabindex="0" aria-label="${esc(n.title)}">
+      <rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="18"/>
+      <image href="${esc(n.art)}" x="${n.x + 14}" y="${n.y + n.h / 2 - 15}"
+             width="30" height="30" preserveAspectRatio="xMidYMid meet"/>
+      <text class="ltitle" x="${n.x + 54}" y="${n.y + n.h / 2 - 3}">${esc(n.title)}</text>
+      <text class="lsub" x="${n.x + 54}" y="${n.y + n.h / 2 + 15}">${esc(n.sub)}</text>
+    </g>`).join("");
+
+  $("logic-map").innerHTML = `
+    <div class="logicwrap">
+      <svg viewBox="0 0 ${W} ${H}" class="logicmap" role="img"
+           aria-label="How the board turns a calendar into a decision">
+        <defs>
+          <marker id="lhead" viewBox="0 0 10 10" refX="8" refY="5"
+                  markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="var(--esd-science-blue)"/>
+          </marker>
+        </defs>
+        ${edges}${nodes}
+      </svg>
+    </div>`;
+
+  $("logic-map").querySelectorAll("[data-node]").forEach((g) => {
+    const pick = () => { S.logicNode = g.dataset.node; drawLogic(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); }
+    });
+  });
+
+  drawLogicDetail(L);
+  drawLogicExample(L);
+}
+
+function drawLogicDetail(L) {
+  const id = S.logicNode;
+  const box = $("logic-detail");
+  if (!id) {
+    box.innerHTML = `<p class="note" style="margin-top:.9rem">
+      Every step is a button. Tap one to see exactly what it does and the numbers
+      it uses.</p>`;
+    return;
+  }
+  const n = logicNode(id);
+  const body = {
+    upload: () => `<p>An Outlook print, or a photo of one. The file type decides what
+      it is worth: a <b>Work Week</b> or <b>Day</b> print carries real start and end
+      times; a <b>Month</b> grid carries neither, so it can only say how loaded a day
+      looks. An image is read by shape rather than text, so it always needs a human
+      to confirm it.</p>`,
+    read: () => `<p>Event boxes are vector rectangles and the hour column is vector
+      text, so times are read exactly rather than guessed. A constant few-minute
+      offset from Outlook insetting each box is measured off the page and removed,
+      which is why every time lands on a real appointment boundary.</p>`,
+    who: () => `<p>Outlook prints each calendar's name in that calendar's own colour.
+      That hidden legend is what tells the board who is who, with nothing to set up.
+      A colour it cannot match is attributed to <b>nobody</b> rather than guessed &mdash;
+      a wrong guess moves the wrong person's workload.</p>`,
+    clock: () => `<p>Each family's next checkpoint is due at
+      <code>anchor date + offset</code>, and counts as in-window for a tolerance either
+      side. No anchor date means no due date: the board reports <b>unknown</b> rather
+      than inventing lateness.</p>`,
+    due: () => `<p>Visits are ordered by pressure, not by id:
+      ${(L.priority_tiers || []).map((t) => `<span class="statchip is-skip">${esc(t)}</span>`).join(" ")}
+      then already assigned. Inside a tier the raw day count decides, because
+      pressure saturates the moment a window closes.</p>`,
+    gates: () => `<p>Eight hard rules, checked in this order. The first one to fail is
+      the reason shown, so the same situation always gets the same explanation.
+      Nothing here is a score &mdash; a gate cannot be outweighed by a good fit.</p>
+      <ol class="gatelist">${(L.gates || []).map((g) =>
+        `<li><b>${esc(g.label)}</b><span>${esc(g.why)}</span></li>`).join("")}</ol>`,
+    score: () => `<p>Only candidates that passed every gate are scored. Four criteria,
+      each between 0 and 1, multiplied by a weight and added up:</p>
+      ${weightTiles(L)}
+      <p class="note">Weights sum to ${L.weight_total}. They are analyst-assigned and
+      still to be validated against the lab's own choices.</p>`,
+    rank: () => `<p>Highest total wins. If the top two are within
+      <b>${L.review_band}</b> of each other the board says so rather than pretending
+      the ranking is decisive &mdash; that gap is smaller than the noise in the inputs.</p>`,
+    assign: () => `<p>Assigning the recommended person records the decision. Choosing
+      anyone else records a reason as well, which is what separates "the data was
+      wrong" from "I disagreed" when the weights are reviewed.</p>`,
+  }[id];
+
+  box.innerHTML = `<div class="logicdetail">
+    <div class="logicdetail-head">
+      <span class="lico-badge"><img src="${esc(n.art)}" alt="" width="20" height="20"></span>
+      <h3>${esc(n.title)}</h3></div>
+    ${body ? body() : ""}
+  </div>`;
+}
+
+function weightTiles(L) {
+  return `<div class="wtiles">${(L.weights || []).map((w) => `
+    <div class="wtile" title="${esc(w.label)} carries ${Math.round(w.weight * 100)}% of the score">
+      <b>${Math.round(w.weight * 100)}%</b><span>${esc(w.label)}</span>
+    </div>`).join("")}</div>`;
+}
+
+function drawLogicExample(L) {
+  const d = S.detail;
+  const box = $("logic-example");
+  const top = d && d.candidates && d.candidates[0];
+  if (!top) {
+    box.innerHTML = `<p class="note">Pick a visit under <b>Assign a visit</b> and the
+      arithmetic for its top choice appears here.</p>`;
+    return;
+  }
+  $("logic-example-title").textContent = `Why ${top.name} came first`;
+  const rows = (top.contributions || []).map((c) => `
+    <tr>
+      <td>${esc(c.label)}</td>
+      <td class="num" title="${esc(c.help)}">${c.value.toFixed(3)}</td>
+      <td class="num">&times; ${c.weight}</td>
+      <td class="num"><b>${c.contribution.toFixed(3)}</b></td>
+    </tr>`).join("");
+  box.innerHTML = `
+    <p class="note">${esc(d.visit.family_label)} &middot; ${esc(d.visit.title)}.
+      Each criterion scores 0 to 1, is multiplied by its weight, and the four add up.</p>
+    <div class="tablewrap"><table class="tbl calc">
+      <thead><tr><th>Criterion</th><th class="num">Score</th>
+        <th class="num">Weight</th><th class="num">Contributes</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="3">Total</td>
+        <td class="num"><b>${top.score.toFixed(3)}</b></td></tr></tfoot>
+    </table></div>
+    <p class="note">${top.review_band
+      ? `The next candidate is only <b>${(top.gap_to_next || 0).toFixed(3)}</b> behind, inside the
+         ${L.review_band} review band, so the board calls this too close to call.`
+      : `The next candidate is <b>${(top.gap_to_next || 0).toFixed(3)}</b> behind, clear of the
+         ${L.review_band} review band.`}</p>`;
+}
+
 function drawData() {
   const stamp = new Date().toISOString().slice(0, 10);
   $("exports").innerHTML = EXPORTS.map(([key, title, blurb]) =>
@@ -1295,6 +1530,7 @@ function redrawCurrent() {
   if (S.section === "week") { drawDue(); drawCalendar(); }
   if (S.section === "workload") { drawFairness(); drawEquity(); drawActivity(); }
   if (S.section === "sync") drawSync();
+  if (S.section === "logic") drawLogic();
   if (S.section === "data") drawData();
 }
 

@@ -111,6 +111,7 @@ def build() -> str:
         "reasonCodes": session.reason_codes(),
         "calendar": _demo_calendar(session),
         "schedule": session.schedule_rows(),
+        "logic": session.logic(),
         # The live board orders the queue by how pressing each visit is. Bake
         # that order rather than letting the static copy rebuild it from visit
         # ids, which is how the published page ended up in a different order

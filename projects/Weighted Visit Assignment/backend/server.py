@@ -97,8 +97,16 @@ def r_calendar_upload(params, body):
         blob = base64.b64decode(raw, validate=True)
     except (ValueError, TypeError, binascii.Error):
         return 400, {"error": "The upload could not be decoded. Try the file again."}
+    hours = body.get("hours")
+    span = None
+    if isinstance(hours, (list, tuple)) and len(hours) == 2:
+        try:
+            span = (float(hours[0]), float(hours[1]))
+        except (TypeError, ValueError):
+            span = None
     try:
-        return 200, SESSION.upload_calendar_pdf(str(body.get("filename") or ""), blob)
+        return 200, SESSION.upload_calendar_pdf(
+            str(body.get("filename") or ""), blob, image_hours=span)
     except ValueError as exc:
         return 400, {"error": str(exc)}
     except RuntimeError as exc:
@@ -119,6 +127,12 @@ def r_calendar_review(params, body):
         )
     except KeyError as exc:
         return 404, {"error": str(exc)}
+
+
+@get("/api/logic")
+def r_logic(params, body):
+    """How the board decides, described from its own configuration."""
+    return 200, SESSION.logic()
 
 
 @get("/api/schedule")
@@ -149,6 +163,7 @@ def r_board(params, body):
         "activity": SESSION.activity[:12],
         "calendar": SESSION.imports(),
         "schedule": SESSION.schedule_rows(),
+        "logic": SESSION.logic(),
     }
 
 

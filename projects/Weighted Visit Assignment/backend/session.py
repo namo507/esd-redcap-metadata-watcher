@@ -253,7 +253,8 @@ class LabSession:
             )
         return self.color_map_state()
 
-    def upload_calendar_pdf(self, filename: str, blob: bytes) -> dict:
+    def upload_calendar_pdf(self, filename: str, blob: bytes,
+                            image_hours: Optional[tuple] = None) -> dict:
         """Ingest an uploaded Outlook print and record it at its honest tier."""
         if not blob:
             raise ValueError("The upload was empty.")
@@ -262,8 +263,13 @@ class LabSession:
                 f"That file is {len(blob) // (1024 * 1024)} MB; the limit is "
                 f"{MAX_UPLOAD_BYTES // (1024 * 1024)} MB."
             )
-        if not blob.startswith(b"%PDF"):
-            raise ValueError("That is not a PDF. Print the Outlook calendar to PDF first.")
+        is_pdf = blob.startswith(b"%PDF")
+        is_pic = (blob.startswith(b"\x89PNG") or blob.startswith(b"\xff\xd8\xff")
+                  or blob[:4] == b"GIF8" or blob[8:12] == b"WEBP")
+        if not (is_pdf or is_pic):
+            raise ValueError(
+                "That is neither a PDF nor an image. Print the Outlook calendar "
+                "to PDF, or take a screenshot of the calendar view.")
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         safe = os.path.basename(filename or "calendar.pdf").replace("\\", "_")
@@ -278,10 +284,18 @@ class LabSession:
                 coordinators=self.state.coordinators,
                 now=datetime.now(),
                 year_hint=self.now.year,
+                # An image has no readable hour column without an OCR engine, so
+                # the caller says what it covers. The defaults are the ordinary
+                # Outlook print range and the current week, and whatever is used
+                # is reported back rather than left implicit.
+                image_hours=image_hours or (8.0, 18.0),
+                image_start=self.epoch.date(),
             )
             self.store.record_import(result)
             payload = result.to_dict()
             payload["stored_as"] = os.path.basename(path)
+            if result.view_type == "image":
+                payload["assumed_hours"] = list(image_hours or (8.0, 18.0))
             self.last_import = payload
             if result.availability:
                 self.availability = result.availability
@@ -417,6 +431,35 @@ class LabSession:
                 }
                 for b in (dict(r) for r in self.store.confirmed_blocks())
             ][:60],
+        }
+
+    def logic(self) -> dict:
+        """The decision procedure, described from the live configuration.
+
+        Everything here is read from the same objects the engine uses, so the
+        explanation cannot drift from the behaviour. A diagram maintained by
+        hand would be wrong the first time a weight changed.
+        """
+        from esd_scheduler.scenarios import GATE_LABEL, GATE_ORDER
+
+        w = self.cfg.weights.as_dict()
+        return {
+            "weights": [
+                {"key": k, "label": CRITERION_LABEL.get(k, k), "weight": round(v, 3)}
+                for k, v in w.items()
+            ],
+            "weight_total": round(sum(w.values()), 3),
+            "gates": [
+                {"order": i + 1, "key": g,
+                 "label": GATE_LABEL.get(g, (g, ""))[0],
+                 "why": GATE_LABEL.get(g, (g, ""))[1]}
+                for i, g in enumerate(GATE_ORDER)
+            ],
+            "review_band": round(self.cfg.epsilon_review_band, 3),
+            "gamma_travel": round(self.cfg.gamma_travel, 3),
+            "weight_vector_id": self.cfg.weights_id
+            if hasattr(self.cfg, "weights_id") else None,
+            "priority_tiers": list(self.PRIORITY_TIERS),
         }
 
     def schedule_rows(self) -> dict:

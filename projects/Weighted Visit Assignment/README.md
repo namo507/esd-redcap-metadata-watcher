@@ -119,6 +119,26 @@ downloads as a popup, so everything goes into a single HTML document that Excel
 imports directly &mdash; and it carries the caveats with it, which a bare CSV
 loses the moment it is emailed on.
 
+## Reading a screenshot
+
+The upload accepts an image as well as a PDF, but the two are not equivalent and
+the board does not pretend they are.
+
+A PDF's event boxes are vector rectangles and its hour column is vector text, so
+times are *measured*. An image has neither: blocks are found by colour, the grid
+by its ruled lines, and the clock axis is interpolated between them. That is
+*inference*, so an image import is a tier of its own &mdash; nothing from it
+commits without review, whatever the colour map says.
+
+Two things it refuses to guess. Without an OCR engine installed the hour column
+cannot be read, so the caller states the visible range rather than the board
+assuming one; a wrong axis would shift every event by hours. And an image with
+no ruled grid is rejected outright, because there is nothing to measure against.
+
+Verified against a rendered copy of the test calendar: every non-overlapping
+event comes back with the right day, time and colour. Events drawn overlapping
+in one column are the known limit &mdash; they merge into a single block.
+
 ## Two clocks
 
 The board keeps them apart, because conflating them is what made it claim

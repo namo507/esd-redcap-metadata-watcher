@@ -31,6 +31,7 @@
     <button class="navbtn" data-section="assign" type="button">Assign a visit</button>
     <button class="navbtn" data-section="workload" type="button">Workload</button>
     <button class="navbtn" data-section="sync" type="button">Sync calendars</button>
+    <button class="navbtn" data-section="logic" type="button">How it decides</button>
     <button class="navbtn" data-section="data" type="button">Data &amp; exports</button>
   </nav>
 </header>
@@ -183,6 +184,28 @@
       </div>
       <div id="sync-history"></div>
     </details>
+  </section>
+
+  <!-- ========================================================== LOGIC -->
+  <section id="sec-logic" hidden>
+    <div class="card">
+      <div class="card-head"><div>
+        <p class="eyebrow">The whole picture</p>
+        <h2>From a calendar to a decision</h2>
+      </div>
+        <span class="note">Tap any step</span>
+      </div>
+      <div id="logic-map"></div>
+      <div id="logic-detail"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem">
+      <div class="card-head"><div>
+        <p class="eyebrow">Worked example</p>
+        <h2 id="logic-example-title">The sum behind the top choice</h2>
+      </div></div>
+      <div id="logic-example"></div>
+    </div>
   </section>
 
   <!-- =========================================================== DATA -->

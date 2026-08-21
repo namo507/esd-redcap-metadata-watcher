@@ -97,9 +97,21 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
                          color=rgb(hexc) if coloured_legend else (0.25, 0.25, 0.25))
         x += 6.2 * len(label) + 10
 
+    # Ruled grid. Outlook prints these and the image reader needs them to know
+    # where the calendar area starts and ends; without them the fixture was
+    # unreadable as a screenshot even though it read fine as a PDF.
+    grid_grey = (0.78, 0.80, 0.82)
     for hour in range(8, 18):
+        y = y_for(hour)
+        page.draw_line(fitz.Point(COL_X[0] - 6, y),
+                       fitz.Point(COL_X[-1] + COL_W - 12, y),
+                       color=grid_grey, width=0.6)
         label = f"{(hour - 1) % 12 + 1} {'AM' if hour < 12 else 'PM'}"
-        page.insert_text((GUTTER_X, y_for(hour)), label, fontsize=5.3)
+        page.insert_text((GUTTER_X, y), label, fontsize=5.3)
+    for i in range(len(COL_X) + 1):
+        x = (COL_X[i] - 6) if i < len(COL_X) else (COL_X[-1] + COL_W - 12)
+        page.draw_line(fitz.Point(x, y_for(8)), fitz.Point(x, y_for(17)),
+                       color=grid_grey, width=0.6)
 
     for i, name in enumerate(DAYS):
         page.insert_text((COL_X[i], 87.0), name, fontsize=5.3)

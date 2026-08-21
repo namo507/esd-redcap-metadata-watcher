@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from datetime import datetime
+from datetime import date, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures"))
@@ -56,6 +56,17 @@ os.environ["ESD_CALENDAR_ROLES_PATH"] = os.path.join(TMP, "roles.json")
 WEEK = build_week(os.path.join(TMP, "week.pdf"))
 PLAIN_WEEK = build_week(os.path.join(TMP, "week-plain.pdf"), coloured_legend=False)
 MONTH = build_month(os.path.join(TMP, "month.pdf"))
+
+
+def _render(pdf_path, png_path, dpi=150):
+    """A screenshot of the same calendar, for the image reader."""
+    doc = fitz.open(pdf_path)
+    doc[0].get_pixmap(dpi=dpi).save(png_path)
+    doc.close()
+    return png_path
+
+
+WEEK_PNG = _render(WEEK, os.path.join(TMP, "week.png"))
 
 STATE, _ = build_lab(datetime(2026, 8, 17, 9, 0))
 ROSTER = STATE.coordinators
@@ -428,6 +439,78 @@ def test_a_matched_absence_blocks_the_whole_day():
     for block in whole:
         expect(block.start.date() == block.end.date(),
                "a whole-day block should not spill into the next day")
+
+
+# --- reading a screenshot ---------------------------------------------------
+
+
+def test_an_image_is_a_lower_tier_than_the_same_calendar_as_a_pdf():
+    """Pixel measurement and vector extraction must not be treated alike."""
+    from esd_scheduler.calendar_import import TIER_IMAGE, TIER_TIMED_EXPORT
+
+    pdf = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    img = import_pdf(WEEK_PNG, coordinators=ROSTER,
+                     image_hours=(8.0, 17.0), image_start=date(2026, 8, 17))
+    expect(pdf.tier == TIER_TIMED_EXPORT, f"pdf tier wrong: {pdf.tier}")
+    expect(img.tier == TIER_IMAGE, f"image tier wrong: {img.tier}")
+
+
+def test_nothing_read_from_an_image_commits_without_review():
+    from esd_scheduler.calendar_import import ColorMap
+
+    cmap = ColorMap(mapping={"cranberry": "C03", "brown": "C02", "yellow": "C05"},
+                    confirmed=True, confirmed_by="test")
+    result = import_pdf(WEEK_PNG, coordinators=ROSTER, color_map=cmap,
+                        image_hours=(8.0, 17.0), image_start=date(2026, 8, 17))
+    expect(result.blocks, "the image produced no blocks at all")
+    for block in result.blocks:
+        expect(not block.reviewed,
+               "a block measured off pixels committed without review")
+
+
+def test_image_times_match_the_pdf_they_were_rendered_from():
+    """The same calendar by two routes should agree where both can see it."""
+    from esd_scheduler.calendar_import import ColorMap
+
+    cmap = ColorMap(mapping={"cranberry": "C03", "brown": "C02", "yellow": "C05",
+                             "green": "C01", "blue": "C04"},
+                    confirmed=True, confirmed_by="test")
+    img = import_pdf(WEEK_PNG, coordinators=ROSTER, color_map=cmap,
+                     image_hours=(8.0, 17.0), image_start=date(2026, 8, 17))
+    seen = {
+        (b.start.strftime("%Y-%m-%d %H:%M"), b.end.strftime("%H:%M"))
+        for b in img.blocks
+    }
+    # Three events the fixture draws without any overlap, so the image reader
+    # can see them whole. Overlapping events in one column are a known limit.
+    for want in (("2026-08-18 08:00", "08:30"),
+                 ("2026-08-19 10:00", "12:00"),
+                 ("2026-08-20 15:00", "17:00")):
+        expect(want in seen, f"image missed or misread {want}: {sorted(seen)}")
+
+
+def test_an_image_without_a_time_range_refuses_rather_than_guessing():
+    from esd_scheduler.ingest_image import extract, ocr_available
+
+    if ocr_available():
+        return                       # the hour column can be read; nothing to refuse
+    parsed = extract(WEEK_PNG, day_start=date(2026, 8, 17), n_days=5, hours=None)
+    expect(not parsed.entries, "times were invented with no clock axis")
+    expect(any("TIME RANGE UNKNOWN" in u for u in parsed.unresolved),
+           f"no explanation for refusing: {parsed.unresolved}")
+
+
+def test_the_header_legend_is_not_mistaken_for_events():
+    """Coloured calendar names sit above the grid and dragged the axis with them."""
+    from esd_scheduler.ingest_image import _load, find_blocks, find_grid
+
+    image = _load(WEEK_PNG)
+    grid = find_grid(image)
+    expect(grid is not None, "no ruled grid found in a calendar screenshot")
+    blocks = find_blocks(image)
+    inside = [b for b in blocks if b[1] >= grid.top - 2]
+    expect(len(inside) < len(blocks),
+           "nothing was excluded, so the header was never being filtered")
 
 
 if __name__ == "__main__":

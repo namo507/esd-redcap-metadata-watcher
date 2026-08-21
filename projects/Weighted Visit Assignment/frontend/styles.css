@@ -555,3 +555,104 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   padding: .1rem .45rem; }
 .qitem-due.is-overdue { background: #FDE7E1; color: #8C2F16; }
 .qitem-due.is-closing { background: #FFF3C4; color: #4A3B00; }
+
+/* ---------- decision map ---------- */
+.logicwrap { margin-top: 1rem; overflow-x: auto; }
+.logicmap { width: 100%; min-width: 40rem; max-width: 46rem; height: auto; display: block;
+  margin: 0 auto; font-family: var(--font); }
+.logicmap .lx { fill: none; stroke: var(--esd-science-blue); stroke-width: 2; }
+.logicmap .lnode rect {
+  fill: #fff; stroke: var(--line); stroke-width: 1.5;
+  transition: fill .15s, stroke .15s;
+}
+.logicmap .lnode { cursor: pointer; }
+.logicmap .lnode:hover rect,
+.logicmap .lnode:focus rect { stroke: var(--accent); fill: var(--tint); }
+.logicmap .lnode:focus { outline: none; }
+/* Selected reads as a tint with a strong border rather than a solid fill: the
+   node keeps its icon legible, and the map stays light. */
+.logicmap .lnode.is-on rect { fill: var(--tint); stroke: var(--accent); stroke-width: 2.5; }
+.logicmap .ltitle { font-size: 15px; font-weight: 700; fill: var(--ink); }
+.logicmap .lsub { font-size: 12px; fill: var(--muted); }
+.logicmap .lico { font-size: 17px; fill: var(--accent); }
+.logicmap .lnode.is-on .ltitle { fill: var(--accent); }
+
+.logicdetail { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: 1.1rem; }
+.logicdetail-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; }
+.logicdetail h3 { font-size: 1.05rem; }
+.lico-badge { width: 32px; height: 32px; border-radius: 50%; background: var(--tint);
+  display: grid; place-items: center; }
+.logicdetail p { font-size: .92rem; max-width: 72ch; }
+.gatelist { margin: .8rem 0 0; padding-left: 1.2rem; font-size: .88rem; }
+.gatelist li { margin-bottom: .45rem; }
+.gatelist span { display: block; color: var(--muted); font-size: .84rem; }
+
+.wtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: .6rem; margin: .9rem 0; }
+.wtile { background: var(--surface); border-radius: var(--r-sm); padding: .7rem .8rem;
+  text-align: center; }
+.wtile b { display: block; font-size: 1.5rem; line-height: 1.1; color: var(--accent); }
+.wtile span { font-size: .74rem; color: var(--muted); }
+
+.tbl.calc td.num, .tbl.calc th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl.calc tfoot td { border-top: 2px solid var(--line); font-weight: 700; }
+
+/* ---------- status tiles ----------
+   Equal tracks and uniform rows so the grid stays symmetrical however many
+   families are on it, and the eye can compare tiles down a column. */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: .7rem; margin-top: 1rem; grid-auto-rows: 1fr; }
+.tile {
+  position: relative; text-align: left; cursor: pointer; font: inherit;
+  display: grid; gap: .1rem; align-content: start;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--r-card);
+  padding: .8rem .9rem 1rem; transition: border-color .15s, box-shadow .15s, transform .12s;
+}
+.tile:hover { border-color: var(--esd-science-blue); box-shadow: var(--shadow);
+  transform: translateY(-1px); }
+.tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile.is-open { border-color: var(--accent); box-shadow: var(--shadow); }
+.tile-top { display: flex; align-items: center; gap: .35rem; font-size: .68rem;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+.tile-cp { margin-left: auto; color: var(--ink); }
+.tile-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.tile-num { font-size: 2rem; font-weight: 800; line-height: 1.05; margin-top: .35rem; }
+.tile-unit { font-size: .74rem; color: var(--muted); }
+.tile-fam { font-size: .85rem; font-weight: 700; margin-top: .35rem; }
+.tile-bar { display: block; height: 5px; border-radius: var(--r-pill);
+  background: var(--surface); margin-top: .55rem; overflow: hidden; }
+.tile-bar i { display: block; height: 100%; background: var(--esd-science-blue); }
+
+.tile.is-overdue .tile-dot,
+.tile.is-overdue .tile-bar i { background: var(--esd-firetruck-red); }
+.tile.is-overdue .tile-num { color: var(--esd-firetruck-red); }
+.tile.is-closing .tile-dot,
+.tile.is-closing .tile-bar i { background: var(--esd-confident-orange); }
+.tile.is-closing .tile-num { color: var(--esd-confident-orange); }
+.tile.is-open .tile-dot, .tile.is-open .tile-bar i { background: var(--ok); }
+.tile.is-upcoming .tile-dot, .tile.is-unknown .tile-dot { background: var(--esd-science-blue); }
+.tile.is-unknown .tile-num { color: var(--muted); font-size: 1.5rem; }
+
+/* ---------- hover info, without a metadata dump on the tile ---------- */
+[data-tip] { position: relative; }
+[data-tip]::after {
+  content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px); width: max-content; max-width: 20rem;
+  background: var(--ink); color: #fff; font-size: .74rem; font-weight: 500;
+  line-height: 1.35; text-transform: none; letter-spacing: 0;
+  padding: .45rem .6rem; border-radius: 10px; pointer-events: none;
+  opacity: 0; transition: opacity .12s, transform .12s; z-index: 20;
+}
+[data-tip]:hover::after, [data-tip]:focus-visible::after {
+  opacity: 1; transform: translateX(-50%) translateY(0);
+}
+@media (hover: none) { [data-tip]::after { display: none; } }
+
+.tile-detail { margin-top: 1rem; border: 1px solid var(--accent); border-radius: var(--r-card);
+  padding: 1rem 1.1rem; background: var(--tint); }
+.tile-detail-head { display: flex; align-items: center; gap: .7rem; }
+.tile-detail-head h3 { font-size: 1.05rem; }
+.tile-detail .facts { margin-top: .8rem; }
+.tile-detail .fact { background: #fff; }
+.tile-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
+.tierbadge.is-t4 { background: var(--esd-baby-pink); color: #6B1F1E; }

@@ -54,6 +54,33 @@ GATE_ORDER: Tuple[str, ...] = (
     "kit_ceiling",
 )
 
+# Plain-language name and reason for each gate, so the board can explain its
+# own decision procedure rather than making a reader open the source.
+GATE_LABEL = {
+    "ndd_override": ("NDD certification",
+                     "An NDD cross-collaboration visit may only be taken by staff "
+                     "certified on NDD measures."),
+    "reliability": ("Assessment reliability",
+                    "The visit's assessments require sign-off, and this person is "
+                    "not signed off on all of them."),
+    "in_training_unpaired": ("Training buddy",
+                             "Someone still in training needs a signed-off "
+                             "colleague free to pair with."),
+    "lab_day": ("In-lab day",
+                "This is their day in the lab, so they cannot be off-site."),
+    "friday": ("Friday hold",
+               "Fridays are held for lab meetings; taking one needs a logged "
+               "override."),
+    "calendar_conflict": ("Calendar conflict",
+                          "Their calendar is already busy across the window."),
+    "insufficient_evidence": ("No usable evidence",
+                              "Nothing current enough to prove they are free. "
+                              "Absence of a busy block is not proof of free."),
+    "kit_ceiling": ("NANO kit ceiling",
+                    "Only so many NANO kits exist, and they are all out at that "
+                    "time."),
+}
+
 # Each factor is one thing that can be true or false about a candidate, paired
 # with the veto it should provoke when set. None means "provokes nothing".
 FACTORS: Dict[str, Tuple[object, ...]] = {

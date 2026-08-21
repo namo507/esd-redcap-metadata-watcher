@@ -61,11 +61,13 @@ from .models import CalendarBlock, CalendarSyncRun
 TIER_GRAPH = 1
 TIER_TIMED_EXPORT = 2
 TIER_MONTH_GRID = 3
+TIER_IMAGE = 4
 
 TIER_RULES = {
     TIER_GRAPH: "may confirm availability and may veto",
     TIER_TIMED_EXPORT: "may veto once reviewed; intervals are real",
     TIER_MONTH_GRID: "advisory load signal only; may never confirm or veto",
+    TIER_IMAGE: "measured in pixels, so every block needs confirming first",
 }
 
 def _color_map_path() -> str:
@@ -353,8 +355,12 @@ class ImportResult:
 
     @property
     def schedulable(self) -> bool:
-        """Whether this upload can affect a hard availability gate at all."""
-        return self.tier == TIER_TIMED_EXPORT
+        """Whether this upload can affect a hard availability gate at all.
+
+        An image can, but only after review -- which is why it is a separate
+        tier rather than being folded in with the exact one.
+        """
+        return self.tier in (TIER_TIMED_EXPORT, TIER_IMAGE)
 
     @property
     def blocks(self) -> List[CalendarBlock]:
@@ -424,6 +430,14 @@ def file_hash(path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def is_image(path: str) -> bool:
+    """Whether this upload is a picture rather than a PDF."""
+    with open(path, "rb") as fh:
+        head = fh.read(12)
+    return (head.startswith(b"\x89PNG") or head.startswith(b"\xff\xd8\xff")
+            or head[:4] in (b"GIF8",) or head[8:12] == b"WEBP")
+
+
 def import_pdf(
     path: str,
     coordinators: Optional[Dict[str, object]] = None,
@@ -431,17 +445,31 @@ def import_pdf(
     now: Optional[datetime] = None,
     year_hint: Optional[int] = None,
     auto_confirm: bool = True,
+    image_hours: Optional[tuple] = None,
+    image_start: Optional[date] = None,
+    image_days: int = 5,
 ) -> ImportResult:
-    """Parse an uploaded print and emit evidence at whatever tier it earns."""
+    """Parse an uploaded calendar and emit evidence at whatever tier it earns."""
     now = now or datetime.now()
     color_map = color_map if color_map is not None else ColorMap.load()
-    parsed: PdfIngestResult = load(path, year_hint=year_hint)
 
-    tier = (
-        TIER_TIMED_EXPORT
-        if parsed.calendar_view_type in (VIEW_WORK_WEEK, VIEW_DAY)
-        else TIER_MONTH_GRID
-    )
+    if is_image(path):
+        from .ingest_image import extract as extract_image
+
+        start = image_start or (now.date() - timedelta(days=now.weekday()))
+        parsed = extract_image(path, day_start=start, n_days=image_days,
+                               hours=image_hours)
+        tier = TIER_IMAGE
+        # Never auto-commit an image. The PDF path is exact measurement and has
+        # earned committing on import; this is inference off pixels and has not.
+        auto_confirm = False
+    else:
+        parsed = load(path, year_hint=year_hint)
+        tier = (
+            TIER_TIMED_EXPORT
+            if parsed.calendar_view_type in (VIEW_WORK_WEEK, VIEW_DAY)
+            else TIER_MONTH_GRID
+        )
     result = ImportResult(
         import_id=uuid.uuid4().hex[:12],
         source_file=os.path.basename(path),
