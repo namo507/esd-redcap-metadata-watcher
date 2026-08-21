@@ -1,4 +1,6 @@
 {
   "_comment": "What each overlaid Outlook calendar means to the scheduler. Roles are guessed from the calendar's printed name, so this file only needs an entry when the guess is wrong or the name is unusual. Polarity is the thing to get right: 'offered_window' and 'clinician_shift' mark time a visit MAY use, while 'coordinator' and 'lab_space' mark time that is already TAKEN. Reading a positive calendar as busy time would rule out exactly the slots the lab set aside for visits. Valid roles: clinician_shift, coordinator, lab_space, offered_window, owner, unknown.",
-  "roles": {}
+  "roles": {},
+  "_name_aliases_comment": "First names the lab uses on its all-day 'X unavailable for visits' banners, mapped to a coordinator id. A nickname is not derivable -- 'Maggie' may or may not be Margaret -- and marking the wrong person unavailable is a hard veto on someone who was free, so unlisted names are reported rather than guessed. Example: {\"Maggie\": \"C01\"}.",
+  "name_aliases": {}
 }

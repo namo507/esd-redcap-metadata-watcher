@@ -38,11 +38,13 @@ from esd_scheduler.calendar_roles import (  # noqa: E402
     classify,
 )
 from esd_scheduler.constraints import resource_checks  # noqa: E402
+from esd_scheduler.calendar_roles import RoleMap  # noqa: E402
 from esd_scheduler.ingest_outlook_pdf import (  # noqa: E402
     _nearest_hue,
     detect_view_type,
     extract_legend,
     load,
+    read_unavailability,
 )
 from make_month_pdf import build as build_month  # noqa: E402
 from make_work_week_pdf import build as build_week  # noqa: E402
@@ -160,11 +162,16 @@ def test_a_legend_beats_a_stored_map_that_disagrees():
            f"stored map overrode the printed legend: {teal[0]['coordinator_id']}")
 
 
-def test_without_a_legend_nothing_is_attributed():
+def test_without_a_legend_no_colour_is_attributed_to_anyone():
+    """Colour attribution needs the legend. Absence notices do not -- they are
+    read from the banner text, so they survive an export with no colours."""
     result = import_pdf(PLAIN_WEEK, coordinators=ROSTER, year_hint=2026)
     expect(result.attribution_source == "none",
-           f"expected no attribution, got {result.attribution_source}")
-    expect(not result.blocks, "blocks were attributed with no legend and no map")
+           f"expected no colour attribution, got {result.attribution_source}")
+    timed = [b for b in result.blocks
+             if not (b.start.hour == 0 and b.start.minute == 0)]
+    expect(not timed,
+           f"timed blocks were attributed with no legend and no map: {len(timed)}")
 
 
 def test_calendars_not_on_the_roster_are_left_alone():
@@ -316,9 +323,13 @@ def test_all_day_banners_are_whole_days_not_intervals():
     for entry in banners:
         expect(entry.start_time is None and entry.end_time is None,
                "an all-day banner must not carry a time")
-    # The two-day banner in the fixture must appear on both days.
-    lab_days = {e.day for e in banners if e.calendar_label == "PSYCHOLOGY, ESDI LAB"}
-    expect(len(lab_days) == 2, f"multi-day banner did not span: {sorted(lab_days)}")
+    # At least one banner in the fixture covers two days and must appear on both.
+    spans = {}
+    for entry in banners:
+        spans.setdefault(entry.evidence_text + str(entry.calendar_label), set())
+    lab_days = sorted({e.day for e in banners
+                       if e.calendar_label == "PSYCHOLOGY, ESDI LAB"})
+    expect(len(lab_days) >= 2, f"lab banners did not span days: {lab_days}")
 
 
 def test_a_dark_shade_is_attributed_to_its_own_calendar():
@@ -336,6 +347,87 @@ def test_a_pale_tint_reads_as_tentative():
 
     expect(_hue(0xFEF7B2)[0] == "yellow", "a pale tint lost its hue")
     expect(_hue(0xA9D3F2)[0] == "blue", "a pale tint lost its hue")
+
+
+# --- whole-day absence notices ---------------------------------------------
+
+
+def test_only_absence_shaped_text_is_ever_read():
+    """The allowlist is the whole privacy story for banner text."""
+    accepted = {
+        "Sanjana Out": ("Sanjana", "out"),
+        "Ramiro Unavailable for Visits": ("Ramiro", "unavailable for visits"),
+        "Lauren is OOO": ("Lauren", "ooo"),
+        "Sofia PTO": ("Sofia", "pto"),
+        "Aug 11 Sanjana Out": ("Sanjana", "out"),
+    }
+    for text, expected in accepted.items():
+        got = read_unavailability(text)
+        expect(got == expected, f"{text!r} read as {got}, expected {expected}")
+
+    for text in ("Free", "Team standup", "Home Visit -- CONF PSYCHOLOGY",
+                 "Grant meeting with Sofia", "12mo NICO visit", ""):
+        got = read_unavailability(text)
+        expect(got is None, f"{text!r} should not be read as an absence, got {got}")
+
+
+def test_free_all_day_items_are_not_absences():
+    """'Free' marks an all-day item, which is the opposite of unavailable."""
+    parsed = load(WEEK, year_hint=2026)
+    names = {u["name"] for u in parsed.unavailability}
+    expect("Free" not in names, "a Free banner was read as a person")
+
+
+def test_a_banner_is_attributed_by_its_text_not_its_colour():
+    """The lab posts these on a shared calendar, so colour identifies nothing."""
+    parsed = load(WEEK, year_hint=2026)
+    notices = [u for u in parsed.unavailability if u["name"] == "Sofia"]
+    expect(notices, "the Sofia notice was not read")
+    expect(all(n["posted_on"] == "PSYCHOLOGY, ESDI LAB" for n in notices),
+           "fixture posts this notice on the lab calendar")
+    result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    sofia = [u for u in result.unavailable if u["name"] == "Sofia Tous"]
+    expect(sofia, "a notice posted on another calendar was not attributed to Sofia")
+
+
+def test_a_multi_day_banner_blocks_every_day_it_spans():
+    result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    days = sorted({u["day"] for u in result.unavailable if u["name"] == "Sofia Tous"})
+    expect(len(days) == 2, f"multi-day notice did not span: {days}")
+
+
+def test_an_unrecognised_nickname_is_reported_not_guessed():
+    """Maggie may or may not be Margaret; a wrong veto benches someone free."""
+    result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    names = {u["name"] for u in result.unresolved_names}
+    expect("Maggie" in names, f"Maggie should be unresolved, got {names}")
+    expect(not any(u["name"] == "Margaret Bell" for u in result.unavailable),
+           "a nickname was guessed onto a real coordinator")
+    expect(any("NOT MATCHED" in b for b in result.blockers),
+           f"unresolved names must be reported: {result.blockers}")
+
+
+def test_a_declared_alias_resolves_the_nickname():
+    path = os.environ["ESD_CALENDAR_ROLES_PATH"]
+    RoleMap(declared={}, aliases={"maggie": "C01"}).save(path)
+    try:
+        result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+        expect(any(u["name"] == "Margaret Bell" for u in result.unavailable),
+               "a declared alias did not resolve")
+        expect(not result.unresolved_names,
+               f"nothing should remain unresolved: {result.unresolved_names}")
+    finally:
+        os.remove(path)
+
+
+def test_a_matched_absence_blocks_the_whole_day():
+    result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    whole = [b for b in result.blocks
+             if b.start.hour == 0 and b.start.minute == 0 and b.end.hour == 23]
+    expect(whole, "no whole-day blocks were produced")
+    for block in whole:
+        expect(block.start.date() == block.end.date(),
+               "a whole-day block should not spill into the next day")
 
 
 if __name__ == "__main__":

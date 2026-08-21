@@ -175,6 +175,27 @@ quiet pass &mdash; it means the calendar was absent or empty for that range, so
 nothing was checked. A filter with no windows shows as off rather than being
 hidden, because an empty calendar and a missing one mean different things.
 
+**Whole-day absence notices.** The lab posts all-day banners like "Ramiro
+unavailable for visits". Those are read and block the named person's whole day
+outright.
+
+This is the **only** event text the board ever reads. A banner must match a
+narrow allowlist &mdash; a name followed by *unavailable*, *out*, *OOO*, *PTO*,
+*on leave* or *off* &mdash; and anything else printed on the page, ordinary
+meeting subjects included, is discarded rather than stored. "Free" marks an
+all-day item and is not an absence, so it matches nothing.
+
+A notice is attributed by the **name in its text**, not by its colour: the lab
+posts these on a shared calendar, so the colour identifies nothing. Matching is
+on the exact first name plus any alias declared under `name_aliases` in
+`config/calendar-roles.json`. Nicknames are never inferred &mdash; "Maggie" may
+or may not be Margaret, and a hard veto on the wrong person benches someone who
+was free. An unmatched name is reported on the dashboard, and **its days are not
+blocked** until someone declares the alias.
+
+The Microsoft Graph path is unchanged and still never requests event titles at
+all; this applies only to a PDF someone deliberately uploads.
+
 **Cut-off days.** A month cell fits a fixed number of rows and prints no "+N
 more" marker — it simply stops drawing, and afternoons go first. The importer
 detects this by noticing many cells stopping at exactly the same count, and

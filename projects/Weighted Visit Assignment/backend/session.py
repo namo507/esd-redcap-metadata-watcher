@@ -171,6 +171,8 @@ class LabSession:
             self.availability: List[dict] = []
             self.resources: Dict[str, List[dict]] = {}
             self.calendar_roles: List[dict] = []
+            self.unavailable: List[dict] = []
+            self.unresolved_names: List[dict] = []
             self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
@@ -277,6 +279,9 @@ class LabSession:
                 self.resources = result.resources
             if result.roles:
                 self.calendar_roles = result.to_dict()["role_summary"]
+            if result.unavailable or result.unresolved_names:
+                self.unavailable = result.unavailable
+                self.unresolved_names = result.unresolved_names
             applied = self._apply_confirmed_blocks()
             payload["applied_blocks"] = applied
             who = ", ".join(
@@ -360,6 +365,8 @@ class LabSession:
             "resources": self.resources,
             "roles": self.calendar_roles,
             "filters": self.filter_state(),
+            "unavailable": self.unavailable,
+            "unresolved_names": self.unresolved_names,
             "applied": [
                 {
                     "block_id": b["block_id"],

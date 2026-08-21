@@ -303,21 +303,29 @@ def test_legend_attributes_people_with_no_setup_at_all():
     expect(status == 200, f"work-week upload returned {status}: {body}")
     expect(body["attribution_source"] == "legend",
            f"expected legend attribution, got {body['attribution_source']}")
-    expect(body["block_count"] == 6,
-           f"legend should attribute all 6 blocks, got {body['block_count']}")
+    # Six timed events from the colour legend, plus one whole-day block per
+    # matched absence notice read off the all-day banners.
+    expect(body["block_count"] == 6 + len(body["unavailable"]),
+           f"unexpected block count {body['block_count']} against "
+           f"{len(body['unavailable'])} absences")
+    expect(body["unavailable"], "the absence notices were not read")
     expect(not any("NOBODY COULD BE IDENTIFIED" in b for b in body["blockers"]),
            "a file with a legend must not report that nobody was identified")
 
 
-def test_export_without_a_colour_legend_attributes_to_nobody():
-    """The fallback still holds: no legend and no stored map means no guessing."""
+def test_export_without_a_colour_legend_attributes_no_colour_to_anyone():
+    """No legend and no stored map means no colour is guessed onto a person.
+
+    Absence notices are a separate path: they name the person in the banner
+    text, so they still resolve on an export whose header lost its colours.
+    """
     _clear_colours()
     status, body = _upload(PLAIN_WEEK_PDF)
     expect(status == 200, f"upload returned {status}: {body}")
     expect(body["attribution_source"] == "none",
-           f"expected no attribution, got {body['attribution_source']}")
-    expect(body["block_count"] == 0,
-           "without a legend nothing may be attributed to a person")
+           f"expected no colour attribution, got {body['attribution_source']}")
+    expect(body["block_count"] == len(body["unavailable"]),
+           "only absence notices may produce blocks without a legend")
     expect(any("NOBODY COULD BE IDENTIFIED" in b for b in body["blockers"]),
            f"missing the no-identification blocker: {body['blockers']}")
 
@@ -351,7 +359,8 @@ def test_work_week_upload_applies_immediately():
     expect(status == 200, f"work-week upload returned {status}")
     expect(body["tier"] == 2 and body["schedulable"] is True,
            "a timed export must be schedulable")
-    expect(body["block_count"] == 6, f"expected 6 blocks, got {body['block_count']}")
+    expect(body["block_count"] == 6 + len(body["unavailable"]),
+           f"unexpected block count {body['block_count']}")
     expect(body["pending_review"] == 0,
            "an exact PDF parse should not sit in a review queue")
     expect(body["applied_blocks"] >= 6,
@@ -411,6 +420,34 @@ def test_board_carries_calendar_state_in_one_round_trip():
     _, board = call("GET", "/api/board")
     expect("calendar" in board, "board must expose calendar state")
     expect("color_map" in board["calendar"], "board must expose the colour map state")
+    for key in ("filters", "unavailable", "unresolved_names", "roles"):
+        expect(key in board["calendar"], f"board must expose {key}")
+
+
+def test_an_absence_notice_blocks_that_person_for_the_whole_day():
+    """The point of reading a banner: it has to actually take someone off."""
+    _upload(WEEK_PDF)
+    _, imports = call("GET", "/api/calendar/imports")
+    whole = [b for b in imports["applied"] if b["start"].endswith("T00:00:00")]
+    expect(whole, "no whole-day absence blocks reached the board")
+
+    _, board = call("GET", "/api/board")
+    blocked = {b["coordinator"] for b in whole}
+    expect(blocked, "absences resolved to nobody")
+    for row in board["calendar"]["unavailable"]:
+        expect(row["coordinator_id"], "an absence row lost its coordinator")
+
+
+def test_unmatched_absence_names_are_surfaced_not_applied():
+    _upload(WEEK_PDF)
+    _, board = call("GET", "/api/board")
+    unresolved = board["calendar"]["unresolved_names"]
+    expect(unresolved, "the unmatched nickname was not surfaced")
+    names = {u["name"] for u in unresolved}
+    expect("Maggie" in names, f"expected Maggie unresolved, got {names}")
+    applied = {u["name"] for u in board["calendar"]["unavailable"]}
+    expect("Margaret Bell" not in applied,
+           "a nickname was guessed onto a real coordinator")
 
 
 # ---------------------------------------------------------------------------

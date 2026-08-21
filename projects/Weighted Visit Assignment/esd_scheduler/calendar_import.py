@@ -343,6 +343,8 @@ class ImportResult:
     attribution_source: str = "none"   # legend | stored_map | none
     matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
     roles: Dict[str, str] = field(default_factory=dict)
+    unavailable: List[dict] = field(default_factory=list)
+    unresolved_names: List[dict] = field(default_factory=list)
     resources: Dict[str, List[dict]] = field(default_factory=dict)
     all_day: List[dict] = field(default_factory=list)
     unattributed_hues: List[str] = field(default_factory=list)
@@ -401,6 +403,8 @@ class ImportResult:
             ],
             "resources": self.resources,
             "all_day": self.all_day,
+            "unavailable": self.unavailable,
+            "unresolved_names": self.unresolved_names,
             "unattributed_hues": self.unattributed_hues,
             "blockers": self.blockers,
             "notes": self.notes,
@@ -475,6 +479,7 @@ def import_pdf(
         if attributed:
             result.attribution_source = "legend"
     _collect_resources(parsed, result)
+    _resolve_unavailability(parsed, result, coordinators, role_map)
 
     for hue in result.hues_seen:
         attributed.setdefault(hue, color_map.resolve(hue))
@@ -504,8 +509,66 @@ def import_pdf(
         _rollup_month(parsed, result, attributed, coordinators)
     else:
         _build_runs(parsed, result, attributed, now, auto_confirm)
+    _add_absence_blocks(result, now, auto_confirm)
 
     return result
+
+
+def _resolve_unavailability(parsed, result, coordinators, role_map) -> None:
+    """Turn "X unavailable for visits" banners into named, whole-day absences.
+
+    A banner is posted on whichever calendar the lab keeps them on, so its
+    colour identifies nothing; the name in the text is the only evidence of who
+    it concerns. Matching is on the exact first name, plus any alias the lab has
+    declared. Nicknames are never inferred: "Maggie" is a plausible Margaret and
+    a hard veto on the wrong person is worse than an unresolved one, so an
+    unmatched name is reported for a human instead.
+    """
+    if not parsed.unavailability:
+        return
+
+    by_first: Dict[str, List[str]] = {}
+    for cid, coord in (coordinators or {}).items():
+        name = getattr(coord, "name", "")
+        first = name.split()[0].lower() if name.split() else ""
+        if first:
+            by_first.setdefault(first, []).append(cid)
+
+    unresolved: Dict[str, dict] = {}
+    for note in parsed.unavailability:
+        token = note["name"].strip()
+        key = token.lower()
+        cid = role_map.aliases.get(key)
+        if cid is None:
+            hits = by_first.get(key, [])
+            cid = hits[0] if len(hits) == 1 else None
+        if cid is None:
+            row = unresolved.setdefault(
+                token, {"name": token, "days": [], "reason": (
+                    "ambiguous: more than one coordinator has this first name"
+                    if len(by_first.get(key, [])) > 1
+                    else "no coordinator on the roster has this first name")})
+            row["days"].append(note["day"])
+            continue
+        result.unavailable.append({
+            "coordinator_id": cid,
+            "name": getattr(coordinators[cid], "name", cid),
+            "day": note["day"],
+            "status": note["status"],
+        })
+
+    result.unresolved_names = sorted(unresolved.values(), key=lambda r: r["name"])
+    if result.unresolved_names:
+        listed = ", ".join(
+            f"{r['name']} ({len(r['days'])} day{'s' if len(r['days']) != 1 else ''})"
+            for r in result.unresolved_names
+        )
+        result.blockers.append(
+            "UNAVAILABILITY NOTICES NOT MATCHED TO ANYONE: " + listed + ". These "
+            "days are NOT blocked, because guessing which coordinator a nickname "
+            "refers to would take someone off the board who is actually free. Add "
+            "the name to 'name_aliases' in config/calendar-roles.json."
+        )
 
 
 def _collect_resources(parsed, result) -> None:
@@ -592,6 +655,59 @@ def _rollup_month(parsed, result, attributed, coordinators) -> None:
         node["named"] += sig.named_events
     result.per_coordinator_days = sorted(
         per.values(), key=lambda n: (-n["busy"], n["label"])
+    )
+
+
+def _add_absence_blocks(result, now, auto_confirm: bool) -> None:
+    """Give every matched absence a whole-day block, so the gate simply sees it.
+
+    "Unavailable for visits" is a statement about the entire day, not a meeting,
+    so it becomes a midnight-to-midnight block rather than anything narrower.
+    Feeding it through the same evidence path as every other block means the
+    existing availability gate rejects the day without needing a special case,
+    and the block can be rejected afterwards like any other.
+    """
+    if not result.unavailable:
+        return
+    by_coord: Dict[str, List[CalendarBlock]] = {}
+    for absence in result.unavailable:
+        try:
+            day = datetime.fromisoformat(absence["day"])
+        except ValueError:
+            continue
+        by_coord.setdefault(absence["coordinator_id"], []).append(
+            CalendarBlock(
+                coordinator_id=absence["coordinator_id"],
+                start=day.replace(hour=0, minute=0),
+                end=day.replace(hour=23, minute=59),
+                reviewed=auto_confirm,
+                confirmed=True,
+                source_hash=result.source_hash,
+                run_id="",
+            )
+        )
+
+    existing = {run.coordinator_id: run for run in result.runs}
+    for cid, blocks in sorted(by_coord.items()):
+        run = existing.get(cid)
+        if run is None:
+            run = CalendarSyncRun(
+                run_id=f"{result.import_id}-{cid}",
+                coordinator_id=cid,
+                captured_at=now,
+                view_type=result.view_type,
+                source_hash=result.source_hash,
+                blocks=[],
+                auto_committed=auto_confirm,
+            )
+            result.runs.append(run)
+        for block in blocks:
+            block.run_id = run.run_id
+        run.blocks.extend(blocks)
+
+    result.notes.append(
+        f"{len(result.unavailable)} whole-day absence notice(s) were read off the "
+        "all-day banners and block those days outright."
     )
 
 

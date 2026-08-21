@@ -78,9 +78,17 @@ def _config_path() -> str:
 
 @dataclass
 class RoleMap:
-    """Declared roles, plus whatever the names imply for anything undeclared."""
+    """Declared roles, plus whatever the names imply for anything undeclared.
+
+    ``aliases`` maps a first name the lab uses on its banners to a coordinator
+    id. It exists because a nickname is not derivable: "Maggie" may or may not
+    be Margaret, and marking the wrong person unavailable is a hard veto on
+    someone who was free. Nothing here is guessed -- an unlisted name stays
+    unresolved and is reported.
+    """
 
     declared: Dict[str, str] = field(default_factory=dict)
+    aliases: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "RoleMap":
@@ -89,10 +97,16 @@ class RoleMap:
             return cls()
         with open(path, encoding="utf-8") as fh:
             raw = json.load(fh)
-        return cls(declared={
-            str(k): str(v) for k, v in (raw.get("roles") or {}).items()
-            if v in POLARITY
-        })
+        return cls(
+            declared={
+                str(k): str(v) for k, v in (raw.get("roles") or {}).items()
+                if v in POLARITY
+            },
+            aliases={
+                str(k).strip().lower(): str(v)
+                for k, v in (raw.get("name_aliases") or {}).items() if v
+            },
+        )
 
     def save(self, path: Optional[str] = None) -> None:
         path = path or _config_path()
@@ -109,6 +123,7 @@ class RoleMap:
                         + ", ".join(sorted(POLARITY))
                     ),
                     "roles": self.declared,
+                    "name_aliases": self.aliases,
                 },
                 fh,
                 indent=2,

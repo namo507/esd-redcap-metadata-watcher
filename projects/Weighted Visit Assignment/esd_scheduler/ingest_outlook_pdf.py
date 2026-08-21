@@ -81,6 +81,20 @@ DAYNUM_RE = re.compile(r"^(?:([A-Z][a-z]{2})\s+)?(\d{1,2})$")
 RANGE_RE = re.compile(
     r"(\d{1,2})/(\d{1,2})/(\d{4})\s*(?:to|-|\u2013)\s*(\d{1,2})/(\d{1,2})/(\d{4})")
 SINGLE_DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
+
+# The ONLY event text this module will read. The lab posts whole-day banners
+# naming who cannot take visits, which is real availability information and the
+# reason to look at banner text at all. Everything that does not match one of
+# these shapes is discarded rather than stored, so an ordinary meeting subject
+# never enters the system even though it was printed on the same page.
+UNAVAILABLE_RE = re.compile(
+    r"^(?P<name>[A-Z][A-Za-z'\u2019\-]{1,30})"
+    r"(?:\s+[A-Z][A-Za-z'\u2019\-]{1,30})?"
+    r"\s+(?:is\s+)?"
+    r"(?P<status>unavailable(?:\s+for\s+visits)?|out(?:\s+of\s+office)?|ooo|pto"
+    r"|on\s+leave|off)\s*$",
+    re.I,
+)
 MONTHS = {m: i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], start=1)}
@@ -119,6 +133,9 @@ class PdfIngestResult:
     timezone: Optional[str] = None
     entries: List[PdfEntry] = field(default_factory=list)
     overflow_cells: List[str] = field(default_factory=list)
+    # Whole-day "X unavailable for visits" banners, as (day, name, status).
+    # Only the derived fields are kept; the raw banner text is never stored.
+    unavailability: List[dict] = field(default_factory=list)
     # days whose cell stopped at the grid's row ceiling, so the count is a floor
     saturated_cells: List[str] = field(default_factory=list)
     # calendar label -> hue, read from the colour Outlook prints each name in
@@ -865,6 +882,20 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
         (columns[-1] - columns[0]) / max(1, len(columns) - 1)
         if len(columns) > 1 else page.rect.width - columns[0])
 
+    # Column boundaries sit midway between the day headers. Assigning by
+    # distance to the header text instead misses banners and side-by-side
+    # events, which are drawn from the cell's own left edge -- several points
+    # left of where the header label starts, and further left in each column.
+    bounds = [
+        (columns[i] + columns[i + 1]) / 2 for i in range(len(columns) - 1)
+    ]
+
+    def column_of(x: float) -> int:
+        for i, edge in enumerate(bounds):
+            if x < edge:
+                return i
+        return len(columns) - 1
+
     dates = _column_dates(spans, columns, headers, year_hint)
     result.visible_date_range = (
         f"{min(dates.values()).isoformat()} to {max(dates.values()).isoformat()}"
@@ -908,9 +939,9 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
 
     timed = []
     for r, label, hue, tone in _dedupe_boxes(boxes):
-        ci = min(range(len(columns)), key=lambda i: abs(columns[i] - r.x0))
-        if not (columns[ci] - 8 <= r.x0 <= columns[ci] + col_width):
+        if r.x0 > columns[-1] + col_width:
             continue
+        ci = column_of(r.x0)
         day = dates.get(ci)
         if day is None:
             continue
@@ -919,6 +950,7 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
         # covers, so it becomes one whole-day entry per day it touches.
         if r.y1 <= grid_top - 1 and r.y0 >= header_bottom - 2:
             span_days = max(1, int(round(r.width / col_width)))
+            note = read_unavailability(_text_inside(spans, r))
             for offset in range(span_days):
                 banner_day = dates.get(ci + offset)
                 if banner_day is None:
@@ -939,6 +971,16 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
                         all_day=True,
                     )
                 )
+                if note is not None:
+                    # The banner is posted on whichever calendar the lab keeps
+                    # them on, so its colour says nothing about who it concerns.
+                    # The name in the text is the only evidence of that.
+                    result.unavailability.append({
+                        "day": banner_day.isoformat(),
+                        "name": note[0],
+                        "status": note[1],
+                        "posted_on": label,
+                    })
             continue
 
         if r.y1 <= grid_top:
@@ -974,6 +1016,42 @@ def extract_work_week(path: str, year_hint: Optional[int] = None) -> "PdfIngestR
             "NO EVENT BLOCKS DETECTED. If the calendar really is empty this is "
             "correct; otherwise check the export used a colour theme.")
     return result
+
+
+def read_unavailability(text: str) -> Optional[Tuple[str, str]]:
+    """Pull ``(name, status)`` out of a banner, or None if it is not one.
+
+    Deliberately strict. "Sanjana Out" and "Ramiro Unavailable for Visits" are
+    operational statements the lab publishes about who can take a visit; an
+    ordinary appointment subject is not, and must not be captured just because
+    it shared the page. A banner reading "Free" says an all-day item is marked
+    free, which is not an absence, so it matches nothing here.
+    """
+    cleaned = _clean_label(text)
+    if not cleaned:
+        return None
+    tokens = cleaned.split()
+    # Outlook prints a week marker ("Aug 11") into the first banner row, so the
+    # banner text does not always begin with the name. Drop a couple of leading
+    # tokens before giving up -- but only a couple, so this cannot wander into
+    # the middle of an ordinary subject line and find a match there.
+    for skip in range(min(3, len(tokens))):
+        match = UNAVAILABLE_RE.match(" ".join(tokens[skip:]))
+        if match:
+            status = " ".join(match.group("status").lower().split())
+            return match.group("name"), status
+    return None
+
+
+def _text_inside(spans, rect, pad: float = 1.5) -> str:
+    """Text drawn within one banner rectangle, in reading order."""
+    inside = [
+        s for s in spans
+        if rect.x0 - pad <= (s["bbox"][0] + s["bbox"][2]) / 2 <= rect.x1 + pad
+        and rect.y0 - 4 <= (s["bbox"][1] + s["bbox"][3]) / 2 <= rect.y1 + 4
+    ]
+    inside.sort(key=lambda s: s["bbox"][0])
+    return " ".join(s["text"] for s in inside)
 
 
 def _rgb_int(fill) -> Optional[int]:

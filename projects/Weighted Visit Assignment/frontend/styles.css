@@ -482,3 +482,12 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .chip.is-pass { background: #CDEBD9; color: #14532B; }
 .chip.is-fail { background: #FDE7E1; color: #8C2F16; }
 .chip.is-skip { background: var(--surface); color: var(--muted); }
+
+/* ---------- whole-day absences ---------- */
+.absencelist { display: grid; gap: .5rem; margin-top: 1rem; }
+.absencerow { display: grid; grid-template-columns: 9rem 1fr; gap: .8rem;
+  align-items: center; border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: .55rem .75rem; }
+.absenceday { font-weight: 700; font-size: .85rem; }
+.absencewho { display: flex; flex-wrap: wrap; gap: .35rem; }
+@media (max-width: 520px) { .absencerow { grid-template-columns: 1fr; } }

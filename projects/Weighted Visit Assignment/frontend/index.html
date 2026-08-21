@@ -21,7 +21,7 @@
     <div class="topbar-right">
       <span class="sync-badge" id="sync-badge" title="How current the availability evidence is">&nbsp;</span>
       <span class="privacy-badge" title="The board reads free/busy only. Event titles are never requested and never received.">
-        <span class="lock">&#128274;</span> Reads free/busy only<span class="long"> &middot; never event titles</span>
+        <span class="lock">&#128274;</span> Free/busy only<span class="long"> &middot; no meeting subjects</span>
       </span>
       <button id="btn-reset" class="btn btn-ghost" type="button">Reset board</button>
     </div>
@@ -145,6 +145,21 @@
       </p>
       <div id="sync-upload"></div>
       <div id="sync-result"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem" id="sync-absence-card" hidden>
+      <div class="card-head"><div>
+        <p class="eyebrow">From the all-day banners</p>
+        <h2>Who cannot take visits</h2>
+      </div></div>
+      <p class="note" style="max-width:74ch">
+        The lab posts whole-day notices like &ldquo;Ramiro unavailable for
+        visits&rdquo;. Those days are blocked outright. This is the only event
+        text the board reads: a notice has to match that exact shape, and
+        anything else on the page &mdash; ordinary meeting subjects included
+        &mdash; is discarded rather than stored.
+      </p>
+      <div id="sync-absence"></div>
     </div>
 
     <div class="card" style="margin-top:1.3rem" id="sync-filters-card" hidden>

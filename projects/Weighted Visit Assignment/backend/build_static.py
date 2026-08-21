@@ -66,6 +66,8 @@ def _demo_calendar(session) -> dict:
                       year_hint=session.now.year)
     session.resources = week.resources
     session.calendar_roles = week.to_dict()["role_summary"]
+    session.unavailable = week.unavailable
+    session.unresolved_names = week.unresolved_names
     month = ""
     days = [d["day"] for a in result.availability for d in a.get("days", [])]
     if days:
@@ -80,6 +82,8 @@ def _demo_calendar(session) -> dict:
         "resources": week.resources,
         "roles": week.to_dict()["role_summary"],
         "filters": session.filter_state(),
+        "unavailable": week.unavailable,
+        "unresolved_names": week.unresolved_names,
     }
 
 

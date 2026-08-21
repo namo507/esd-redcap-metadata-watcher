@@ -55,8 +55,17 @@ EVENTS = [
     (2, 14.0, 16.0, "PSYCHOLOGY, ESDI LAB", 0.3),
 ]
 
-# (day index, span in days, calendar name)
-BANNERS = [(0, 1, "Oak, Sanjana"), (1, 2, "PSYCHOLOGY, ESDI LAB")]
+# (day index, span in days, calendar the banner is posted on, banner text)
+# The lab posts absence notices on a shared calendar, so the banner's colour
+# says nothing about who it concerns -- only the text does. "Free" and an
+# ordinary subject are included to prove neither is read as an absence.
+BANNERS = [
+    (0, 1, "Oak, Sanjana", "Free"),
+    (1, 2, "PSYCHOLOGY, ESDI LAB", "Sofia Unavailable for Visits"),
+    (3, 1, "PSYCHOLOGY, ESDI LAB", "Maggie Unavailable for Visits"),
+    (2, 1, "PSYCHOLOGY, ESDI LAB", "Ramiro Out"),
+    (4, 1, "Bell, Margaret", "Grant meeting with Sofia"),
+]
 
 
 def y_for(hour: float) -> float:
@@ -96,7 +105,7 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
         page.insert_text((COL_X[i], 87.0), name, fontsize=5.3)
         page.insert_text((COL_X[i], 96.6), str(first_day + i), fontsize=7.1)
 
-    for row, (day, span, label) in enumerate(BANNERS):
+    for row, (day, span, label, text) in enumerate(BANNERS):
         if not with_policy and label == "PSYCHOLOGY, ESDI LAB":
             continue
         top = BANNER_TOP + row * (BANNER_H + 1.3)
@@ -104,6 +113,7 @@ def build(path: str, first_day: int = 17, month: int = 8, year: int = 2026,
             fitz.Rect(COL_X[day] - 4, top, COL_X[day] - 4 + span * COL_W - 8,
                       top + BANNER_H),
             color=None, fill=rgb(COLOUR[label], 0.3))
+        page.insert_text((COL_X[day] + 2, top + 6.2), text, fontsize=6.2)
 
     for day, start, end, label, factor in EVENTS:
         if not with_policy and label in (

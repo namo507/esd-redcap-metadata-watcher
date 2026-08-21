@@ -523,6 +523,7 @@ function drawSync() {
   drawSyncRoster();
   drawUpload();
   drawImportResult();
+  drawAbsences();
   drawFilters();
   drawAvailability();
   drawColorMatch();
@@ -536,6 +537,39 @@ const AVAIL_WORD = {
 const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
 
 const FILTER_ICON = { offered_window: "\u25F7", clinician_shift: "\u271A", lab_space: "\u25A3" };
+
+function drawAbsences() {
+  const cal = S.board.calendar || {};
+  const rows = cal.unavailable || [];
+  const unresolved = cal.unresolved_names || [];
+  const card = $("sync-absence-card");
+  if (!rows.length && !unresolved.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const byDay = {};
+  rows.forEach((r) => { (byDay[r.day] = byDay[r.day] || []).push(r); });
+
+  $("sync-absence").innerHTML = `
+    ${Object.keys(byDay).sort().length ? `<div class="absencelist">${
+      Object.keys(byDay).sort().map((day) => {
+        const dt = new Date(day + "T00:00:00");
+        return `<div class="absencerow">
+          <div class="absenceday">${dt.toLocaleDateString(undefined,
+            { weekday: "short", month: "short", day: "numeric" })}</div>
+          <div class="absencewho">${byDay[day].map((r) =>
+            `<span class="chip is-fail">${esc(r.name)}</span>`).join("")}</div>
+        </div>`;
+      }).join("")}</div>` : ""}
+    ${unresolved.length ? `<div class="notice notice-alert" style="margin-top:1rem">
+      <span>&#9888;</span><span>
+      ${unresolved.map((u) => `<b>${esc(u.name)}</b> (${u.days.length} day${
+        u.days.length === 1 ? "" : "s"})`).join(", ")}
+      could not be matched to anyone on the roster, so <b>those days are not
+      blocked</b>. Guessing which person a nickname means would take someone off
+      the board who is actually free. Add the name to
+      <code>config/calendar-roles.json</code> under <code>name_aliases</code>.
+      </span></div>` : ""}`;
+}
 
 function drawFilters() {
   const cal = S.board.calendar || {};
