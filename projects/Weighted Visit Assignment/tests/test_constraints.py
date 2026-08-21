@@ -220,7 +220,11 @@ def test_insufficient_evidence_fails_the_gate_with_a_useful_reason():
     slot = (MON, MON + timedelta(hours=2))
     r = check_candidate(c1, a_visit(), Family("F1", "NICO"), st, MON, slot=slot, matrix=m)
     expect(not r.passed and r.gate == "insufficient_evidence", f"got {r.gate}")
-    expect("Sync calendars" in (r.reason or ""), f"unhelpful reason: {r.reason}")
+    # The wording is plain rather than fixed, so test what it has to convey:
+    # that the fix is uploading a calendar, not that the person is unavailable.
+    reason = (r.reason or "").lower()
+    expect("calendar" in reason and "upload" in reason,
+           f"the reason does not say what to do about it: {r.reason}")
     expect(r.evidence == EVIDENCE_INSUFFICIENT, "evidence state not reported")
 
 
