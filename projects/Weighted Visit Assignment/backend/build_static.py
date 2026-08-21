@@ -44,6 +44,7 @@ def _demo_calendar(session) -> dict:
     sys.path.insert(0, os.path.join(ROOT, "tests", "fixtures"))
     try:
         from make_month_pdf import build as build_month
+        from make_work_week_pdf import build as build_week
 
         from esd_scheduler.calendar_import import import_pdf
     except ImportError:
@@ -54,6 +55,17 @@ def _demo_calendar(session) -> dict:
                        year=session.now.year, month=session.now.month, vary=True)
     result = import_pdf(path, coordinators=session.state.coordinators,
                         year_hint=session.now.year)
+
+    # A second, timed export so the public copy also shows the policy filters.
+    # Both are generated: a real work-week print names who is in the lab and
+    # when, which is not ours to publish.
+    week_path = build_week(
+        os.path.join(tmp, "demo-week.pdf"),
+        first_day=session.now.day, month=session.now.month, year=session.now.year)
+    week = import_pdf(week_path, coordinators=session.state.coordinators,
+                      year_hint=session.now.year)
+    session.resources = week.resources
+    session.calendar_roles = week.to_dict()["role_summary"]
     month = ""
     days = [d["day"] for a in result.availability for d in a.get("days", [])]
     if days:
@@ -65,6 +77,9 @@ def _demo_calendar(session) -> dict:
                       "roster": [], "calendar_names": []},
         "availability": result.availability,
         "availability_month": month,
+        "resources": week.resources,
+        "roles": week.to_dict()["role_summary"],
+        "filters": session.filter_state(),
     }
 
 

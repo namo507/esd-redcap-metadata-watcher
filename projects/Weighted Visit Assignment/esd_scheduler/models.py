@@ -112,6 +112,13 @@ class Visit:
     window_end: datetime
     duration_hours: float = 2.0
     priority: float = 1.0
+    # Where the visit happens, and whether it needs clinical cover. These decide
+    # which of the lab's policy calendars apply: only a lab-held visit competes
+    # for the ESDI room, and only a clinical one needs a clinician on shift.
+    # Neither can be inferred from the protocol alone, so they are recorded
+    # rather than guessed; the demo fills them synthetically.
+    location: str = "lab"          # lab | home | remote
+    requires_clinician: bool = False
 
     @property
     def window_days(self) -> int:

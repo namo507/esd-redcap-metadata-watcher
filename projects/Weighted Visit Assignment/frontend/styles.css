@@ -462,3 +462,23 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .availkey.is-unknown { background: repeating-linear-gradient(45deg, #E4E4EA 0 3px, #F4F4F6 3px 6px); }
 .inforce { font-size: .7rem; font-weight: 700; color: var(--ok); text-transform: uppercase;
   letter-spacing: .05em; align-self: center; }
+
+/* ---------- scheduling filters ---------- */
+.filtergrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: .8rem; margin-top: 1rem; }
+.filtercard { border: 1px solid var(--line); border-left: 4px solid var(--muted);
+  border-radius: var(--r-sm); padding: .85rem; display: grid; gap: .45rem; }
+.filtercard.is-on  { border-left-color: var(--accent); }
+.filtercard.is-off { border-left-color: var(--line); opacity: .72; }
+.filterhead { display: flex; gap: .55rem; align-items: center; }
+.filtericon { font-size: 1.1rem; color: var(--accent); }
+.filterstate { font-size: .9rem; }
+.filterstate b { font-size: 1.2rem; }
+.filterwhy { font-size: .78rem; color: var(--muted); }
+
+.chiprow { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .9rem; }
+.chip { font-size: .74rem; font-weight: 700; border-radius: var(--r-pill);
+  padding: .22rem .6rem; background: var(--surface); color: var(--muted); }
+.chip.is-pass { background: #CDEBD9; color: #14532B; }
+.chip.is-fail { background: #FDE7E1; color: #8C2F16; }
+.chip.is-skip { background: var(--surface); color: var(--muted); }

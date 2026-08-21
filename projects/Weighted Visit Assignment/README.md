@@ -153,6 +153,28 @@ month grid of clear / some commitments / spoken for. It cannot answer "free at
 2pm", because no end time is printed anywhere on the page. For that, print
 **Work Week**.
 
+**The lab's own calendars.** An Outlook overlay mixes two kinds of calendar,
+and they must never be treated the same way. A person's calendar lists times
+they are *not* free. A policy calendar often lists the opposite:
+
+| Calendar | Role | It marks time that is |
+|---|---|---|
+| Offered Times ESD | `offered_window` | **allowed** &mdash; a visit must sit inside one |
+| Clinician Shifts | `clinician_shift` | **covered** &mdash; needed for clinical visits |
+| PSYCHOLOGY, ESDI LAB | `lab_space` | **taken** &mdash; the room is already booked |
+| A coordinator's name | `coordinator` | **taken** &mdash; that person is busy |
+
+Roles are guessed from the printed calendar name and can be corrected in
+`config/calendar-roles.json`. Getting the polarity backwards is the failure that
+matters: reading "Offered Times ESD" as busy time would rule out exactly the
+slots the lab set aside for visits. Anything unrecognised stays `unknown` and
+affects nothing.
+
+Each filter reports `pass`, `fail` or **not applicable**, and the last is not a
+quiet pass &mdash; it means the calendar was absent or empty for that range, so
+nothing was checked. A filter with no windows shows as off rather than being
+hidden, because an empty calendar and a missing one mean different things.
+
 **Cut-off days.** A month cell fits a fixed number of rows and prints no "+N
 more" marker — it simply stops drawing, and afternoons go first. The importer
 detects this by noticing many cells stopping at exactly the same count, and

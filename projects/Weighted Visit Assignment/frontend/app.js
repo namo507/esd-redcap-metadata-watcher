@@ -256,6 +256,18 @@ function contributionBar(c) {
     <div class="legend">${legend}</div>`;
 }
 
+function filterChips(v) {
+  const rows = (v.filters || []).filter((f) => f.state !== "not_applicable");
+  const skipped = (v.filters || []).filter((f) => f.state === "not_applicable");
+  if (!rows.length && !skipped.length) return "";
+  return `<div class="chiprow">
+    ${rows.map((f) => `<span class="chip is-${esc(f.state)}" title="${esc(f.why)}">
+      ${esc(f.label)}: ${f.state === "pass" ? "ok" : "no"}</span>`).join("")}
+    ${skipped.map((f) => `<span class="chip is-skip" title="${esc(f.why)}">
+      ${esc(f.label)}: n/a</span>`).join("")}
+  </div>`;
+}
+
 function whyLine(c) {
   const bits = [];
   if (c.prior_visits > 0) {
@@ -366,9 +378,13 @@ function drawDetail() {
         <div class="fact"><div class="fact-k">Contact by</div><div class="fact-v">${esc(v.preferred_contact_method)}</div></div>
         <div class="fact"><div class="fact-k">Visit length</div><div class="fact-v">${v.duration_hours} h${v.is_ndd ? " <span class=\"tag tag-ndd\">NDD +60m</span>" : ""}</div></div>
         <div class="fact"><div class="fact-k">Drive</div><div class="fact-v">${v.drive_time_minutes} min</div></div>
-        <div class="fact"><div class="fact-k">Where</div><div class="fact-v">Home visit</div></div>
+        <div class="fact"><div class="fact-k">Where</div><div class="fact-v">${
+          v.location === "home" ? "Home visit"
+          : v.location === "remote" ? "Remote" : "In the lab"}${
+          v.requires_clinician ? " <span class=\"tag tag-ndd\">clinician</span>" : ""}</div></div>
         <div class="fact"><div class="fact-k">Who can go</div><div class="fact-v">${d.candidates.length} of ${d.candidates.length + d.excluded.length}</div></div>
       </div>
+      ${filterChips(v)}
       ${notices}
     </div>
 
@@ -507,6 +523,7 @@ function drawSync() {
   drawSyncRoster();
   drawUpload();
   drawImportResult();
+  drawFilters();
   drawAvailability();
   drawColorMatch();
   drawReviewQueue();
@@ -517,6 +534,37 @@ const AVAIL_WORD = {
   busy: "Spoken for", light: "Some commitments", open: "Clear", unknown: "Not visible",
 };
 const DAY_INITIAL = ["M", "T", "W", "T", "F", "S", "S"];
+
+const FILTER_ICON = { offered_window: "\u25F7", clinician_shift: "\u271A", lab_space: "\u25A3" };
+
+function drawFilters() {
+  const cal = S.board.calendar || {};
+  const filters = cal.filters || [];
+  const card = $("sync-filters-card");
+  if (!filters.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const roles = (cal.roles || []).filter((r) => r.role !== "coordinator");
+  $("sync-filters").innerHTML = `
+    <div class="filtergrid">${filters.map((f) => `
+      <div class="filtercard is-${f.active ? "on" : "off"}">
+        <div class="filterhead">
+          <span class="filtericon">${FILTER_ICON[f.role] || "\u25CF"}</span>
+          <div>
+            <div class="cand-name">${esc(f.label)}</div>
+            <div class="cand-sub">${f.polarity === "positive"
+              ? "Says when a visit may happen" : "Says when the room is taken"}</div>
+          </div>
+        </div>
+        <div class="filterstate">${f.active
+          ? `<b>${f.windows}</b> window${f.windows === 1 ? "" : "s"}, ${f.hours} h`
+          : "Nothing in the uploaded range"}</div>
+        <div class="filterwhy">${esc(f.meaning)}</div>
+      </div>`).join("")}</div>
+    ${roles.length ? `<p class="note" style="margin-top:.9rem">
+      Read from this export: ${roles.map((r) =>
+        `<b>${esc(r.label)}</b> &rarr; ${esc(r.role_label)}`).join(" &middot; ")}</p>` : ""}`;
+}
 
 function drawAvailability() {
   const cal = S.board.calendar || {};

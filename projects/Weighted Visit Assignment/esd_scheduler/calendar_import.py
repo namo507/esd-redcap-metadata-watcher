@@ -42,6 +42,20 @@ from .ingest_outlook_pdf import (
     load,
 )
 from datetime import date, timedelta
+from .calendar_roles import (
+    POLARITY,
+    ROLE_CLINICIAN,
+    ROLE_COORDINATOR,
+    ROLE_LAB,
+    ROLE_LABEL,
+    ROLE_MEANING,
+    ROLE_OFFERED,
+    ROLE_OWNER,
+    ROLE_UNKNOWN,
+    Interval,
+    RoleMap,
+    merge,
+)
 from .models import CalendarBlock, CalendarSyncRun
 
 TIER_GRAPH = 1
@@ -328,6 +342,9 @@ class ImportResult:
     legend: Dict[str, str] = field(default_factory=dict)
     attribution_source: str = "none"   # legend | stored_map | none
     matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
+    roles: Dict[str, str] = field(default_factory=dict)
+    resources: Dict[str, List[dict]] = field(default_factory=dict)
+    all_day: List[dict] = field(default_factory=list)
     unattributed_hues: List[str] = field(default_factory=list)
     blockers: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
@@ -368,6 +385,22 @@ class ImportResult:
             "legend": self.legend,
             "attribution_source": self.attribution_source,
             "matched_names": self.matched_names,
+            "roles": self.roles,
+            "role_summary": [
+                {
+                    "label": label,
+                    "role": role,
+                    "role_label": ROLE_LABEL.get(role, role),
+                    "polarity": POLARITY.get(role, "ignored"),
+                    "meaning": ROLE_MEANING.get(role, ""),
+                    "coordinator_id": self.matched_names.get(label),
+                    "blocks": len(self.resources.get(role, []))
+                    if role != ROLE_COORDINATOR else None,
+                }
+                for label, role in sorted(self.roles.items())
+            ],
+            "resources": self.resources,
+            "all_day": self.all_day,
             "unattributed_hues": self.unattributed_hues,
             "blockers": self.blockers,
             "notes": self.notes,
@@ -429,15 +462,19 @@ def import_pdf(
     # header lost its colours.
     result.legend = dict(parsed.legend)
     attributed: Dict[str, Optional[str]] = {}
+    role_map = RoleMap.load()
     if parsed.legend and coordinators:
         matches = suggest_roster_matches(list(parsed.legend), coordinators)
         result.matched_names = dict(matches)
         for label, hue in parsed.legend.items():
+            role = role_map.role_of(label, is_roster_name=bool(matches.get(label)))
+            result.roles[label] = role
             cid = matches.get(label)
-            if cid:
+            if cid and role == ROLE_COORDINATOR:
                 attributed[hue] = cid
         if attributed:
             result.attribution_source = "legend"
+    _collect_resources(parsed, result)
 
     for hue in result.hues_seen:
         attributed.setdefault(hue, color_map.resolve(hue))
@@ -469,6 +506,52 @@ def import_pdf(
         _build_runs(parsed, result, attributed, now, auto_confirm)
 
     return result
+
+
+def _collect_resources(parsed, result) -> None:
+    """Bucket the non-person calendars into the windows the gates consult.
+
+    Only calendars with a declared or recognised role contribute. An
+    unclassified calendar is left out entirely rather than folded into
+    someone's busy time, because guessing its polarity wrong is worse than
+    ignoring it.
+    """
+    buckets: Dict[str, List[Interval]] = {}
+    for entry in parsed.entries:
+        label = entry.calendar_label
+        if not label:
+            continue
+        role = result.roles.get(label)
+        if role in (None, ROLE_COORDINATOR, ROLE_OWNER, ROLE_UNKNOWN):
+            continue
+        if entry.all_day:
+            result.all_day.append({
+                "day": entry.day, "label": label, "role": role,
+                "role_label": ROLE_LABEL.get(role, role),
+            })
+            continue
+        if not entry.start_time or not entry.end_time:
+            continue
+        try:
+            start = datetime.fromisoformat(f"{entry.day}T{entry.start_time}")
+            end = datetime.fromisoformat(f"{entry.day}T{entry.end_time}")
+        except ValueError:
+            continue
+        if end > start:
+            buckets.setdefault(role, []).append(Interval(start, end))
+
+    for role, intervals in buckets.items():
+        result.resources[role] = [iv.to_dict() for iv in merge(intervals)]
+
+    # Say plainly when a named calendar is present but contributes nothing, so
+    # an empty filter is never mistaken for a filter that is switched off.
+    for label, role in result.roles.items():
+        if role in (ROLE_OFFERED, ROLE_CLINICIAN, ROLE_LAB) and not buckets.get(role):
+            result.notes.append(
+                f"'{label}' is overlaid on this export but has no events in this "
+                f"range, so the {ROLE_LABEL.get(role, role).lower()} filter has "
+                "nothing to apply here."
+            )
 
 
 def _rollup_month(parsed, result, attributed, coordinators) -> None:

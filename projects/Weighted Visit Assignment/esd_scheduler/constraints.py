@@ -382,3 +382,87 @@ def _pretty(assessment: str) -> str:
         .replace("NDD cross collab", "NDD measures")
         .strip()
     )
+
+
+# ---------------------------------------------------------------------------
+# Resource and policy calendars (Master §7 extension)
+# ---------------------------------------------------------------------------
+
+FILTER_OFFERED = "offered_window"
+FILTER_CLINICIAN = "clinician_shift"
+FILTER_LAB = "lab_space"
+
+
+def resource_checks(
+    start,
+    end,
+    resources,
+    requires_clinician: bool = False,
+    in_lab: bool = False,
+):
+    """Test one proposed visit window against the lab's policy calendars.
+
+    Three questions, each answered only when the calendar that answers it is
+    actually present:
+
+      * **Offered times.** Did the lab set this slot aside for visits? A visit
+        must sit wholly inside an offered block.
+      * **Clinician shifts.** Is a clinician on shift, for visits that need one?
+      * **ESDI lab room.** Is the room already taken, for visits held in it?
+
+    Each check reports ``pass``, ``fail`` or ``not_applicable``. The last is not
+    a quiet pass: it says the calendar was absent or empty, so nothing was
+    verified. Treating "no offered-times calendar" as "every time is offered"
+    would let the board schedule straight through a policy it simply could not
+    see.
+    """
+    from .calendar_roles import Interval, any_overlap, covered_by
+
+    def _load(role):
+        return [
+            Interval(datetime.fromisoformat(iv["start"]),
+                     datetime.fromisoformat(iv["end"]))
+            for iv in (resources or {}).get(role, [])
+        ]
+
+    out = {}
+
+    offered = _load(FILTER_OFFERED)
+    if not offered:
+        out[FILTER_OFFERED] = ("not_applicable",
+                               "No offered-times calendar covers this week.")
+    elif covered_by(offered, start, end):
+        out[FILTER_OFFERED] = ("pass", "Inside an offered visit window.")
+    else:
+        out[FILTER_OFFERED] = ("fail",
+                               "Outside every window the lab offered for visits.")
+
+    shifts = _load(FILTER_CLINICIAN)
+    if not requires_clinician:
+        out[FILTER_CLINICIAN] = ("not_applicable",
+                                 "This visit does not need a clinician.")
+    elif not shifts:
+        out[FILTER_CLINICIAN] = ("not_applicable",
+                                 "No clinician-shift calendar covers this week.")
+    elif covered_by(shifts, start, end):
+        out[FILTER_CLINICIAN] = ("pass", "A clinician is on shift throughout.")
+    else:
+        out[FILTER_CLINICIAN] = ("fail", "No clinician is on shift for all of it.")
+
+    lab = _load(FILTER_LAB)
+    if not in_lab:
+        out[FILTER_LAB] = ("not_applicable", "This visit is not held in the lab.")
+    elif not lab:
+        out[FILTER_LAB] = ("not_applicable",
+                           "No ESDI lab calendar covers this week.")
+    elif any_overlap(lab, start, end):
+        out[FILTER_LAB] = ("fail", "The ESDI lab room is already booked then.")
+    else:
+        out[FILTER_LAB] = ("pass", "The ESDI lab room is free then.")
+
+    return out
+
+
+def resource_blockers(checks) -> List[str]:
+    """Just the reasons a window failed, for a gate that wants to say no."""
+    return [why for state, why in checks.values() if state == "fail"]

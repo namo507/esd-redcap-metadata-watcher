@@ -27,11 +27,14 @@ from esd_scheduler.calendarsync import MockProvider
 from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
 from esd_scheduler.drift import weekly_drift
+from esd_scheduler.calendar_roles import ROLE_LABEL, ROLE_MEANING, POLARITY
 from esd_scheduler.constraints import (
     ROUTE_MANUAL,
     ROUTE_REMOTE,
     ReliabilityMatrix,
     check_candidate,
+    resource_blockers,
+    resource_checks,
     evidence_state,
     offer_window,
     route_visit,
@@ -166,6 +169,8 @@ class LabSession:
             self.assignments: Dict[str, dict] = {}
             self.last_import: Optional[dict] = None
             self.availability: List[dict] = []
+            self.resources: Dict[str, List[dict]] = {}
+            self.calendar_roles: List[dict] = []
             self._attention_cache: Dict[str, bool] = {}
             self.activity: List[dict] = []
             if getattr(self, "store", None):
@@ -268,6 +273,10 @@ class LabSession:
             self.last_import = payload
             if result.availability:
                 self.availability = result.availability
+            if result.resources:
+                self.resources = result.resources
+            if result.roles:
+                self.calendar_roles = result.to_dict()["role_summary"]
             applied = self._apply_confirmed_blocks()
             payload["applied_blocks"] = applied
             who = ", ".join(
@@ -348,6 +357,9 @@ class LabSession:
             "color_map": self.color_map_state(),
             "availability": self.availability,
             "availability_month": self._availability_month(),
+            "resources": self.resources,
+            "roles": self.calendar_roles,
+            "filters": self.filter_state(),
             "applied": [
                 {
                     "block_id": b["block_id"],
@@ -360,6 +372,55 @@ class LabSession:
                 for b in (dict(r) for r in self.store.confirmed_blocks())
             ][:60],
         }
+
+    def filter_state(self) -> List[dict]:
+        """The policy calendars in force, and how much they cover.
+
+        A filter with no windows is reported as inactive rather than hidden: an
+        empty offered-times calendar and an absent one look identical on screen
+        otherwise, and they mean very different things.
+        """
+        out = []
+        for role in ("offered_window", "clinician_shift", "lab_space"):
+            windows = self.resources.get(role, [])
+            hours = 0.0
+            for w in windows:
+                try:
+                    hours += (
+                        datetime.fromisoformat(w["end"])
+                        - datetime.fromisoformat(w["start"])
+                    ).total_seconds() / 3600.0
+                except (TypeError, ValueError, KeyError):
+                    continue
+            out.append({
+                "role": role,
+                "label": ROLE_LABEL.get(role, role),
+                "meaning": ROLE_MEANING.get(role, ""),
+                "polarity": POLARITY.get(role, "ignored"),
+                "windows": len(windows),
+                "hours": round(hours, 1),
+                "active": bool(windows),
+            })
+        return out
+
+    def visit_filters(self, visit) -> List[dict]:
+        """How one visit fares against each policy calendar."""
+        start = visit.window_start
+        end = start + timedelta(hours=visit.duration_hours)
+        checks = resource_checks(
+            start, end, self.resources,
+            requires_clinician=getattr(visit, "requires_clinician", False),
+            in_lab=getattr(visit, "location", "lab") == "lab",
+        )
+        return [
+            {
+                "role": role,
+                "label": ROLE_LABEL.get(role, role),
+                "state": state,
+                "why": why,
+            }
+            for role, (state, why) in checks.items()
+        ]
 
     def _availability_month(self) -> str:
         """The month the current availability grid covers, for the heading."""
@@ -497,6 +558,9 @@ class LabSession:
             "route_reason": routing.reason,
             "escalate": routing.escalate,
             "offer_window": [round(x, 2) for x in offer_window(v, family)],
+            "location": getattr(v, "location", "lab"),
+            "requires_clinician": getattr(v, "requires_clinician", False),
+            "filters": self.visit_filters(v),
             "assigned_to": assigned["coordinator_name"] if assigned else None,
             "assigned_id": assigned["coordinator_id"] if assigned else None,
             "provisional": bool(assigned and assigned.get("provisional")),

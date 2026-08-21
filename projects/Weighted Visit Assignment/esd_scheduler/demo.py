@@ -225,15 +225,23 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
         while window_start.weekday() >= 5:
             window_start += timedelta(days=1)
         seq = checkpoints[fam.protocol]
+        checkpoint = seq[min(1 + (i // len(family_ids)), len(seq) - 1)]
+        # SYNTHETIC. Where a visit happens and whether it needs a clinician are
+        # real operational facts the lab holds and this file does not, so they
+        # are invented here purely to exercise the policy-calendar filters.
+        # Replace from the protocol schedule before the pilot.
+        location = "lab" if rng.random() < 0.55 else "home"
         visits.append(
             apply_visit_duration(Visit(
                 visit_id=f"V{i + 1:03d}",
                 family_id=fid,
                 protocol=fam.protocol,
-                checkpoint=seq[min(1 + (i // len(family_ids)), len(seq) - 1)],
+                checkpoint=checkpoint,
                 window_start=window_start,
                 window_end=window_start + timedelta(days=3, hours=9),
                 duration_hours=rng.choice([1.5, 2.0, 2.5, 3.0]),
+                location=location,
+                requires_clinician=(location == "lab" and rng.random() < 0.4),
             ), fam)
         )
     return state, visits

@@ -27,6 +27,17 @@ from esd_scheduler.calendar_import import (  # noqa: E402
     suggest_roster_matches,
 )
 from esd_scheduler.demo import build_lab  # noqa: E402
+from esd_scheduler.calendar_roles import (  # noqa: E402
+    POLARITY,
+    ROLE_CLINICIAN,
+    ROLE_COORDINATOR,
+    ROLE_LAB,
+    ROLE_OFFERED,
+    ROLE_OWNER,
+    ROLE_UNKNOWN,
+    classify,
+)
+from esd_scheduler.constraints import resource_checks  # noqa: E402
 from esd_scheduler.ingest_outlook_pdf import (  # noqa: E402
     _nearest_hue,
     detect_view_type,
@@ -38,6 +49,7 @@ from make_work_week_pdf import build as build_week  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="esd-cal-")
 os.environ["ESD_COLOR_MAP_PATH"] = os.path.join(TMP, "colors.json")
+os.environ["ESD_CALENDAR_ROLES_PATH"] = os.path.join(TMP, "roles.json")
 
 WEEK = build_week(os.path.join(TMP, "week.pdf"))
 PLAIN_WEEK = build_week(os.path.join(TMP, "week-plain.pdf"), coloured_legend=False)
@@ -197,6 +209,133 @@ def test_a_quiet_calendar_is_not_mistaken_for_a_truncated_one():
     parsed = load(quiet, year_hint=2026)
     expect(not parsed.saturated_cells,
            f"a two-item day was read as a full cell: {parsed.saturated_cells[:3]}")
+
+
+# --- the lab's policy calendars --------------------------------------------
+
+
+def test_policy_calendars_are_classified_from_their_names():
+    expected = {
+        "Offered Times ESD": ROLE_OFFERED,
+        "Clinician Shifts": ROLE_CLINICIAN,
+        "PSYCHOLOGY, ESDI LAB": ROLE_LAB,
+        "Calendar": ROLE_OWNER,
+        "Some Other Diary": ROLE_UNKNOWN,
+    }
+    for label, role in expected.items():
+        got = classify(label)
+        expect(got == role, f"{label!r} classified as {got}, expected {role}")
+    expect(classify("Bell, Margaret", is_roster_name=True) == ROLE_COORDINATOR,
+           "a matched roster name must be a coordinator")
+
+
+def test_offered_and_shift_calendars_are_positive_not_busy_time():
+    """Reading these as busy would rule out exactly the slots set aside."""
+    expect(POLARITY[ROLE_OFFERED] == "positive", "offered times must be positive")
+    expect(POLARITY[ROLE_CLINICIAN] == "positive", "clinician shifts must be positive")
+    expect(POLARITY[ROLE_LAB] == "negative", "a booked room is taken time")
+    expect(POLARITY[ROLE_COORDINATOR] == "negative", "a person's diary is busy time")
+
+
+def test_policy_calendars_become_resource_windows():
+    result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
+    for role in (ROLE_OFFERED, ROLE_CLINICIAN, ROLE_LAB):
+        expect(result.resources.get(role),
+               f"no windows collected for {role}: {list(result.resources)}")
+    # Policy calendars must never be mistaken for a person's busy time.
+    for run in result.runs:
+        expect(run.coordinator_id in ROSTER,
+               f"a policy calendar became a coordinator: {run.coordinator_id}")
+
+
+def test_an_overlaid_but_empty_calendar_is_reported_not_ignored():
+    """An empty filter and a missing filter mean different things."""
+    result = import_pdf(PLAIN_WEEK, coordinators=ROSTER, year_hint=2026)
+    expect(not result.resources.get(ROLE_OFFERED),
+           "the plain fixture should carry no policy windows")
+
+
+def test_resource_checks_answer_only_what_they_can_see():
+    from datetime import datetime as _dt
+
+    res = {ROLE_LAB: [{"start": "2026-08-17T09:00:00", "end": "2026-08-17T17:00:00"}]}
+    checks = resource_checks(
+        _dt(2026, 8, 17, 13, 0), _dt(2026, 8, 17, 15, 0), res,
+        requires_clinician=True, in_lab=True)
+    expect(checks[ROLE_LAB][0] == "fail", "a booked room must fail a lab visit")
+    expect(checks[ROLE_OFFERED][0] == "not_applicable",
+           "an absent offered-times calendar must not silently pass")
+    expect(checks[ROLE_CLINICIAN][0] == "not_applicable",
+           "an absent shift calendar must not silently pass")
+
+
+def test_a_visit_outside_every_offered_window_fails():
+    from datetime import datetime as _dt
+
+    res = {ROLE_OFFERED: [{"start": "2026-08-17T13:00:00",
+                           "end": "2026-08-17T16:00:00"}]}
+    inside = resource_checks(_dt(2026, 8, 17, 13, 30), _dt(2026, 8, 17, 15, 30), res)
+    outside = resource_checks(_dt(2026, 8, 17, 9, 30), _dt(2026, 8, 17, 11, 0), res)
+    expect(inside[ROLE_OFFERED][0] == "pass", "a visit inside an offer should pass")
+    expect(outside[ROLE_OFFERED][0] == "fail", "a visit outside every offer should fail")
+
+
+# --- what a real work-week export looks like --------------------------------
+
+
+def test_abbreviated_day_headers_are_recognised():
+    """Outlook writes Mon/Tue in a work week and Monday/Tuesday in a month."""
+    doc = fitz.open(WEEK)
+    expect(detect_view_type(doc[0]) == "work_week",
+           "a work week with abbreviated headers was misdetected")
+    doc.close()
+
+
+def test_the_printed_date_range_wins_over_reconstruction():
+    parsed = load(WEEK, year_hint=2026)
+    expect(parsed.visible_date_range == "2026-08-17 to 2026-08-21",
+           f"wrong range: {parsed.visible_date_range}")
+
+
+def test_times_land_on_real_appointment_boundaries():
+    """Outlook insets each box, so a raw read is minutes early on every event."""
+    parsed = load(WEEK, year_hint=2026)
+    for entry in parsed.entries:
+        if not entry.start_time:
+            continue
+        for clock in (entry.start_time, entry.end_time):
+            minutes = int(clock.split(":")[1])
+            expect(minutes % 5 == 0,
+                   f"{clock} is not on a five-minute boundary")
+
+
+def test_all_day_banners_are_whole_days_not_intervals():
+    parsed = load(WEEK, year_hint=2026)
+    banners = [e for e in parsed.entries if e.all_day]
+    expect(banners, "no all-day banners were read")
+    for entry in banners:
+        expect(entry.start_time is None and entry.end_time is None,
+               "an all-day banner must not carry a time")
+    # The two-day banner in the fixture must appear on both days.
+    lab_days = {e.day for e in banners if e.calendar_label == "PSYCHOLOGY, ESDI LAB"}
+    expect(len(lab_days) == 2, f"multi-day banner did not span: {sorted(lab_days)}")
+
+
+def test_a_dark_shade_is_attributed_to_its_own_calendar():
+    """Every box is a shade; near-black ones sit close to several palettes."""
+    parsed = load(WEEK, year_hint=2026)
+    friday = [e for e in parsed.entries
+              if e.day == "2026-08-21" and e.start_time == "11:00"]
+    expect(friday, "the Friday event went missing")
+    expect(friday[0].calendar_label == "Lucas-Mariano, Ramiro",
+           f"dark shade misattributed to {friday[0].calendar_label}")
+
+
+def test_a_pale_tint_reads_as_tentative():
+    from esd_scheduler.ingest_outlook_pdf import _nearest_hue as _hue
+
+    expect(_hue(0xFEF7B2)[0] == "yellow", "a pale tint lost its hue")
+    expect(_hue(0xA9D3F2)[0] == "blue", "a pale tint lost its hue")
 
 
 if __name__ == "__main__":
