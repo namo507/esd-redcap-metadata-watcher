@@ -55,10 +55,10 @@ case "$JOB" in
     fi
     log "inbox processed"
 
-    # A calendar that has been imported should reach the published copy without
-    # anybody running a command. Building always; deploying only when the
-    # operator has opted in, because the destination is a public URL.
-    if [ -x "$PROJECT_DIR/automation/publish.sh" ]; then
+    # The live board picks up an import on its next read, so nothing further is
+    # needed for the deployed site. This rebuild only refreshes the frozen
+    # offline copy, and only when someone has asked for it.
+    if [ "${ESD_REFRESH_STATIC:-0}" = "1" ] && [ -x "$PROJECT_DIR/automation/publish.sh" ]; then
       "$PROJECT_DIR/automation/publish.sh" >>"$LOG" 2>&1 \
         && log "public copy rebuilt" \
         || log "public copy rebuild failed; the board itself is unaffected"

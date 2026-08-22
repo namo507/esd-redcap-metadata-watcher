@@ -49,7 +49,7 @@ async function detectMode() {
   // the static build. Deciding by probe rather than by build flag keeps one
   // copy of the frontend for both.
   try {
-    const res = await fetch("/api/health", { cache: "no-store" });
+    const res = await fetch(apiUrl("/api/health"), { cache: "no-store" });
     if (res.ok) return false;
   } catch (err) { /* no backend here */ }
   await window.StaticBoard.load();

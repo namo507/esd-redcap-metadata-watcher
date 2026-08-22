@@ -1,0 +1,12 @@
+# What the running board needs, and nothing else.
+#
+# The API and the scoring engine import only the standard library; every heavy
+# package below is imported inside a function, not at module level. So the
+# container needs exactly one thing to serve a full working board with calendar
+# upload: PyMuPDF, for reading Outlook PDF prints.
+#
+# Verified rather than assumed: blocking fitz, cv2, numpy, PIL, pytesseract,
+# pptx, matplotlib and fontTools at import time still lets backend.server and
+# backend.session import cleanly.
+
+PyMuPDF>=1.22

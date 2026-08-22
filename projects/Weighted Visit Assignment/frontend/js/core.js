@@ -20,6 +20,15 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g,
 
 let STATIC = false;
 
+/* The API's base URL. Empty means same origin, which is what `make serve`
+   gives you; a full URL is what a separately hosted page needs. Trailing
+   slashes are trimmed so "https://host/" and "https://host" behave alike. */
+const API_BASE = ((window.ESD_CONFIG || {}).API_BASE || "").replace(/\/+$/, "");
+
+function apiUrl(path) {
+  return API_BASE + path;
+}
+
 async function api(path, opts) {
   if (STATIC) {
     try {
@@ -28,7 +37,8 @@ async function api(path, opts) {
       throw new Error(err.message);
     }
   }
-  const res = await fetch(path, Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
+  const res = await fetch(apiUrl(path),
+    Object.assign({ headers: { "Content-Type": "application/json" } }, opts));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;

@@ -1,0 +1,58 @@
+# Fly.io deployment for the ESD Visitboard.
+#
+# Run flyctl from THIS directory, not the repository root: the repo holds
+# several unrelated projects and only this one belongs in the image.
+#
+#     cd "projects/Weighted Visit Assignment"
+#     fly launch --no-deploy --copy-config    # first time only, claims the name
+#     fly deploy
+#
+# The app name has to be unique across Fly, so change it here if it is taken.
+
+app = "esd-visitboard"
+primary_region = "iad"          # Ashburn, closest to South Carolina
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  ESD_BIND = "0.0.0.0"          # a container binding loopback answers nobody
+  ESD_DATA_DIR = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # The lab opens this a few times a day and should never wait for a cold
+  # start, so the machine stays up rather than stopping when idle.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/api/health"        # the route backend/server.py actually defines
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# The audit trail does not survive a redeploy without a volume.
+#
+# That is fine while the board runs on the synthetic demo lab, which is rebuilt
+# from scratch on every start anyway. It stops being fine the moment the lab
+# records real assignments and overrides, because that log is what the weights
+# are eventually re-checked against. When that day comes:
+#
+#     fly volumes create esd_data --size 1 --region iad
+#
+# then uncomment the two lines below and redeploy. ESD_DATA_DIR already points
+# at /data, so nothing else changes.
+#
+# [mounts]
+#   source = "esd_data"
+#   destination = "/data"

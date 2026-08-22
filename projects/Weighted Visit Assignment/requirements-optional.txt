@@ -1,0 +1,15 @@
+# Nice to have in the container, never required to boot.
+#
+# Screenshot reading (opencv, numpy, Pillow, pytesseract) and rebuilding the
+# slide deck (python-pptx, matplotlib, fonttools). Each is imported inside the
+# function that needs it, and every one of those paths already reports a clear
+# message when its library is missing, so the board runs without them: PDF
+# upload works, screenshot upload says an OCR engine is not installed.
+#
+# The image installs these best-effort. A wheel that will not build on the
+# platform must not stop the board from starting.
+
+opencv-python-headless>=4.8
+numpy>=1.24
+Pillow>=10.0
+pytesseract>=0.3.10

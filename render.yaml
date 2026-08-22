@@ -1,0 +1,36 @@
+# Render.com deployment for the ESD Visitboard, as an alternative to Fly.io.
+#
+# Render reads this file from the repository root, which is why it lives here
+# rather than beside the project. rootDir points it at the project directory,
+# so the Docker build context is still just the Visitboard.
+#
+# Pick this over Fly.io if you would rather not put a card on file. The
+# tradeoff is real and worth knowing before you choose: a free Render web
+# service sleeps after about 15 minutes with no traffic, and the next request
+# waits roughly 10 to 30 seconds while it wakes. Fly's machine stays up.
+#
+# Render deploys on every push to main once the repo is connected in its
+# dashboard. No API token or GitHub secret is involved.
+
+services:
+  - type: web
+    name: esd-visitboard
+    runtime: docker
+    plan: free
+    region: ohio
+    rootDir: projects/Weighted Visit Assignment
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: ESD_BIND
+        value: "0.0.0.0"
+      # Render's free plan has no persistent disk, so the audit database is
+      # rebuilt on each deploy. That matches the synthetic demo lab, which is
+      # regenerated at start anyway. Real assignment history needs either a
+      # paid Render disk or the Fly.io volume described in fly.toml.
+      - key: ESD_DATA_DIR
+        value: /tmp/esd-data

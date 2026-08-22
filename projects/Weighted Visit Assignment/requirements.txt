@@ -4,6 +4,10 @@
 # Everything below is for reading calendars and building the deck, and each one
 # is here because it is the right tool rather than a familiar one.
 
+# Deployment splits this file in two: requirements-core.txt is what the
+# container must have, requirements-optional.txt is installed best-effort.
+# This file stays the single list for local development.
+#
 # --- reading calendar PDFs (required for any upload) -----------------------
 # Vector text and vector rectangles, which is what makes a PDF import exact
 # rather than inferred. No other Python PDF library exposes drawing geometry

@@ -186,6 +186,8 @@
 
 <!-- One file per section, loaded in order. core first because the rest
      assume its helpers exist; boot last because it starts everything. -->
+<!-- Where the API lives. Loaded before everything so core.js can read it. -->
+<script src="config.js"></script>
 <script src="static-board.js"></script>
 <script src="js/core.js"></script>
 <script src="js/team.js"></script>
