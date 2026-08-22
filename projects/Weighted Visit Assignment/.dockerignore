@@ -1,0 +1,12 @@
+# Keep the image to what actually runs.
+.git
+data/
+dist-static/
+logs/
+reports/
+deck/
+archive/
+dashboard/
+**/__pycache__/
+*.pyc
+.DS_Store

@@ -4,8 +4,10 @@ Fair and efficient assignment of coordinators to home visits, for the NICO and
 NANO protocols. Three-layer policy, four-criterion score, and a full audit trail
 so the weights can be validated rather than asserted.
 
-**Live board:** <https://esd-visitboard.netlify.app> — public, no login, no
-backend. Demonstration data.
+**Live board:** <GH_PAGES_URL> (fill in after the first deploy, it will be
+`https://<user>.github.io/<repo>/visitboard/`). Public, no login. It talks to a
+live engine at <BACKEND_URL>, so uploading a calendar and assigning a visit
+work on the hosted copy, not just locally. Demonstration data.
 
 **Start here:** [`ESD-Visit-Scheduling-v3-SPEC.md`](ESD-Visit-Scheduling-v3-SPEC.md)
 is the specification and operating manual.
@@ -15,11 +17,51 @@ the lab meeting.
 ```bash
 make serve     # the Visitboard at http://127.0.0.1:8765
 make static    # build the public, backend-free copy into dist-static/
-make publish   # build it and deploy to Netlify
 make demo      # synthetic lab (real roster names, synthetic attributes)
-make test      # 66 anchors across engine, privacy, API and the static build
+make test      # every suite: engine, gates, calendars, pairing, deployment
 make debrief   # reports/debrief-<week>.md and .html
 ```
+
+## How it is deployed
+
+Two free pieces, both redeployed by GitHub Actions on every push to `main`.
+
+**The engine** runs as a container. `Dockerfile` builds it, and it is deployed
+either to Fly.io (a machine that stays up, so the lab never waits for a cold
+start) or to Render (no card needed, but a free service sleeps after about 15
+minutes and the next request waits 10 to 30 seconds while it wakes). Both
+configs are in the repo; pick one and ignore the other.
+
+**The page** is copied to `docs/visitboard/` and served by the GitHub Pages
+site this repository already has. It is the same HTML, CSS and JS that runs
+locally, byte for byte, with no bundler and no build step.
+
+It goes in a subfolder rather than taking over Pages because the Pages site is
+already in use: "Publish Dashboard Site" builds the REDCap recruitment
+dashboard into `docs/` every morning, and a repository gets exactly one Pages
+site. Switching the source to "GitHub Actions" would have published this board
+and quietly taken that one offline.
+
+`frontend/config.js` is the one line that connects them:
+
+```js
+window.ESD_CONFIG = { API_BASE: "https://your-app.fly.dev" };
+```
+
+Leave it empty for local use. Empty means same origin, which is what
+`make serve` gives you, so nothing about local development changes. If the API
+cannot be reached at all the page still opens and falls back to the frozen
+snapshot, exactly as it did before.
+
+The API answers any origin (`Access-Control-Allow-Origin: *`). That is
+deliberate: the page and the engine are on different hosts, this is an internal
+tool for one lab, and nothing it serves is a secret.
+
+`make static` and `make publish` remain for anyone who wants a frozen offline
+copy. Nothing automated calls them any more.
+
+The one-time setup, and the two ways to get it wrong, are in
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## What is on screen
 

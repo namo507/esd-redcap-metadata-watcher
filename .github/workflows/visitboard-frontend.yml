@@ -1,0 +1,107 @@
+name: Visitboard frontend
+
+# Publishes the Visitboard page to the site this repository already has.
+#
+# WHY IT COPIES INTO docs/ RATHER THAN USING actions/deploy-pages:
+#
+# GitHub gives a repository exactly one Pages site, and this one is already
+# taken. "Publish Dashboard Site" builds the REDCap recruitment dashboard into
+# docs/ every morning and the Pages source is set to "deploy from a branch,
+# main /docs". Switching the source to "GitHub Actions" would publish this
+# board and silently take that dashboard offline.
+#
+# So the Visitboard goes into docs/visitboard/ instead. Both sites are served
+# from the same Pages deployment, neither touches the other, and there is no
+# repository setting to change. The recruitment build only writes its own
+# files into docs/ and never clears the directory, so this subfolder survives
+# its daily commit.
+#
+#   recruitment dashboard  https://<user>.github.io/<repo>/
+#   visitboard             https://<user>.github.io/<repo>/visitboard/
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'projects/Weighted Visit Assignment/frontend/**'
+      - '.github/workflows/visitboard-frontend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: visitboard-frontend
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The page falls back to a frozen snapshot when it cannot reach the API,
+      # and that snapshot has to ship with it or the fallback is a blank board.
+      # Built with the engine itself so it can never drift from the real thing.
+      - name: Build the offline snapshot
+        working-directory: 'projects/Weighted Visit Assignment'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-core.txt
+          python -m backend.build_static
+
+      - name: Copy the page into the site
+        run: |
+          set -euo pipefail
+          SRC="projects/Weighted Visit Assignment/frontend"
+          DEST="docs/visitboard"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          # Byte-identical: the same HTML, CSS, JS and assets that run locally.
+          # No bundler, no transpile, no rewriting.
+          cp -R "$SRC"/. "$DEST"/
+          rm -f "$DEST/README.md"
+          # The frozen snapshot, for when the API is unreachable.
+          cp "projects/Weighted Visit Assignment/dist-static/board.json" "$DEST/board.json"
+          # Pages runs Jekyll by default, which skips files starting with an
+          # underscore. Nothing here starts with one today, but the cost of
+          # being wrong later is a missing asset nobody can explain.
+          touch "$DEST/.nojekyll"
+
+      - name: Check the page can stand on its own
+        run: |
+          set -euo pipefail
+          cd docs/visitboard
+          test -s index.html
+          for f in config.js static-board.js styles.css board.json js/core.js \
+                   js/team.js js/assign.js js/calendars.js js/logic.js js/boot.js; do
+            test -s "$f" || { echo "missing $f"; exit 1; }
+          done
+          # Served from /<repo>/visitboard/, a root-relative path resolves to
+          # the wrong place. Catch it here rather than as a blank page.
+          if grep -nE '(src|href)="/[^/]' index.html; then
+            echo "root-relative path above will 404 under a project subpath"
+            exit 1
+          fi
+          echo "page looks self-contained"
+
+      - name: Commit if anything changed
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain -- docs/visitboard)" ]; then
+            echo "No frontend changes to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/visitboard
+          git commit -m "Publish Visitboard frontend"
+          # The recruitment dashboard commits to docs/ on its own schedule, so
+          # rebase rather than fail if it landed something first.
+          git pull --rebase origin main
+          git push
