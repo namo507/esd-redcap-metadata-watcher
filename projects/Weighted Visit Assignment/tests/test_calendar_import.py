@@ -66,7 +66,7 @@ from esd_scheduler.ingest_outlook_pdf import (  # noqa: E402
     read_unavailability,
 )
 from make_month_pdf import build as build_month  # noqa: E402
-from make_work_week_pdf import build as build_week  # noqa: E402
+from make_work_week_pdf import build as build_week, y_for  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="esd-cal-")
 os.environ["ESD_COLOR_MAP_PATH"] = os.path.join(TMP, "colors.json")
@@ -77,7 +77,10 @@ PLAIN_WEEK = build_week(os.path.join(TMP, "week-plain.pdf"), coloured_legend=Fal
 MONTH = build_month(os.path.join(TMP, "month.pdf"))
 
 
-def _render(pdf_path, png_path, dpi=150):
+PNG_DPI = 150
+
+
+def _render(pdf_path, png_path, dpi=PNG_DPI):
     """A screenshot of the same calendar, for the image reader."""
     doc = fitz.open(pdf_path)
     doc[0].get_pixmap(dpi=dpi).save(png_path)
@@ -86,6 +89,11 @@ def _render(pdf_path, png_path, dpi=150):
 
 
 WEEK_PNG = _render(WEEK, os.path.join(TMP, "week.png"))
+
+
+def _px(hour: float) -> float:
+    """Where the fixture draws a given hour's rule, in screenshot pixels."""
+    return y_for(hour) * PNG_DPI / 72.0
 
 STATE, _ = build_lab(datetime(2026, 8, 17, 9, 0))
 ROSTER = STATE.coordinators
@@ -645,6 +653,55 @@ def test_the_fitted_axis_matches_the_calendar_it_was_read_from():
     expect(abs(top_hour - 8.0) < 0.2, f"grid top read as {top_hour:.2f}, not 8")
     expect(abs(bottom_hour - 17.0) < 0.2,
            f"grid bottom read as {bottom_hour:.2f}, not 17")
+
+
+def test_the_grid_is_bounded_by_the_hour_rules_not_the_ink_around_them():
+    """The band the day separators sweep is wider than the hours it holds.
+
+    Outlook runs its separators through the all-day strip and a little past the
+    last rule, and this fixture reproduces that: its final absence banner
+    overlaps the 8 AM rule and touches a separator, so the ink starts twelve
+    pixels high at 150dpi. Twelve pixels is nothing to look at and a scale error
+    to measure with -- a stated range mapped through it reads every block short.
+    """
+    from esd_scheduler.ingest_image import _load, find_grid
+
+    grid = find_grid(_load(WEEK_PNG))
+    expect(grid is not None, "no ruled grid found in a calendar screenshot")
+    expect(abs(grid.top - _px(8.0)) <= 3,
+           f"grid top at {grid.top}px, but 8 AM is drawn at {_px(8.0):.0f}px")
+    expect(abs(grid.bottom - _px(17.0)) <= 3,
+           f"grid bottom at {grid.bottom}px, but 5 PM is drawn at "
+           f"{_px(17.0):.0f}px")
+
+
+def test_a_stated_range_reads_the_same_times_as_the_hour_column():
+    """The no-OCR route must agree with the OCR one, not merely come close.
+
+    Read short, a busy block's tail looks free, and free is the one direction
+    that can put a visit on top of someone's existing appointment. The stated
+    axis is also the route nobody developing on a machine with tesseract ever
+    exercises, so it is forced here rather than left to the environment.
+    """
+    from esd_scheduler import ingest_image
+
+    installed = ingest_image.ocr_available
+    ingest_image.ocr_available = lambda: False
+    try:
+        parsed = ingest_image.extract(WEEK_PNG, day_start=date(2026, 8, 17),
+                                      n_days=5, hours=(8.0, 17.0))
+    finally:
+        ingest_image.ocr_available = installed
+
+    expect(parsed.axis_source == "stated",
+           f"the OCR path was taken after all: {parsed.axis_source}")
+    seen = {(e.day, e.start_time, e.end_time) for e in parsed.entries}
+    for want in (("2026-08-18", "08:00", "08:30"),
+                 ("2026-08-19", "10:00", "12:00"),
+                 ("2026-08-19", "14:00", "16:00"),
+                 ("2026-08-20", "15:00", "17:00")):
+        expect(want in seen,
+               f"stated axis missed or misread {want}: {sorted(seen)}")
 
 
 def test_overlapping_events_are_left_unattributed():

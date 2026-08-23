@@ -168,28 +168,29 @@ def find_grid(image, blocks=None) -> Optional[ImageGrid]:
     h_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, h_kernel)
     v_lines = cv2.morphologyEx(binary, cv2.MORPH_OPEN, v_kernel)
 
-    def _positions(mask, axis, min_run):
+    def _groups(mask, axis, min_run):
         counts = mask.sum(axis=axis) / 255
         hits = [i for i, c in enumerate(counts) if c >= min_run]
-        groups, out = [], []
+        groups = []
         for i in hits:
             if groups and i - groups[-1][-1] <= 3:
                 groups[-1].append(i)
             else:
                 groups.append([i])
-        for g in groups:
-            out.append(int(sum(g) / len(g)))
-        return out
+        return groups
+
+    def _positions(mask, axis, min_run):
+        return [int(sum(g) / len(g)) for g in _groups(mask, axis, min_run)]
 
     cols = _positions(v_lines, 0, height * 0.35)
     if len(cols) < 2:
         return None
 
-    # The day separators run the exact height of the timed area, so their own
-    # vertical extent bounds it. Horizontal rules were the obvious source and a
-    # worse one: an all-day band above the grid contributes its own rules, and
-    # event blocks contribute edges, so the "longest evenly spaced run" of them
-    # could settle on the wrong stripe of the page entirely.
+    # The day separators sweep the whole ruled band, so their own vertical
+    # extent finds it. Horizontal rules were the obvious source and a worse one
+    # for this first pass: an all-day band above the grid contributes its own
+    # rules, and event blocks contribute edges, so the longest evenly spaced run
+    # of them could settle on the wrong stripe of the page entirely.
     ink = v_lines.max(axis=1)
     rows_on = [i for i, v in enumerate(ink) if v > 0]
     if len(rows_on) < 20:
@@ -198,7 +199,56 @@ def find_grid(image, blocks=None) -> Optional[ImageGrid]:
     left, right = cols[0], cols[-1]
     if bottom - top < 40 or right - left < 40:
         return None
+
+    # That band is where the clock is drawn; it is not the clock. A separator
+    # runs on through the all-day strip above the first hour rule and a little
+    # past the last, so the band is taller than the hours it holds -- twelve
+    # pixels at 150dpi on the work-week fixture, where a banner overlaps the 8 AM
+    # rule and touches a separator. Reading the band's edges as the first and
+    # last hour stretches the pixels-per-hour a stated range is mapped through,
+    # and every block then reads short: 15:00-17:00 came back as 15:00-16:55,
+    # and the missing five minutes look free. The hour rules are what the labels
+    # are written against, so once they are in hand they are the honest bounds.
+    thin = max(3, height // 300)
+    rules = _rule_lattice(
+        [int(sum(g) / len(g))
+         for g in _groups(h_lines, 1, (right - left) * 0.6) if len(g) <= thin],
+        top, bottom)
+    if rules:
+        top, bottom = rules[0], rules[-1]
     return ImageGrid(left, top, right, bottom, [])
+
+
+def _rule_lattice(rows: Sequence[int], top: int, bottom: int) -> List[int]:
+    """The hour rules bounding the timed area, or [] if they cannot be trusted.
+
+    An hour grid is uniform by construction, so its rules are recognisable as a
+    lattice at one pitch and the chrome around them is not. Whole rules do go
+    missing: where an hour is busy in every column the blocks fill the row and
+    the pale rule drawn under them stops standing out. A gap of two or three
+    pitches is therefore allowed, while anything landing off the pitch is not an
+    hour rule and disqualifies the reading rather than bending it.
+
+    The lattice also has to reach both ends of the band the separators sweep.
+    A rule missed at the very top or the very bottom sits on the pitch like any
+    other absence and would pass the test above, but it would shorten the axis
+    by a whole hour -- the same failure this exists to remove, an order of
+    magnitude larger. Unreached ends mean the rules are refused and the caller
+    keeps the band, which is approximate rather than wrong.
+    """
+    inside = [r for r in rows if top - 4 <= r <= bottom + 4]
+    if len(inside) < 4:
+        return []
+    gaps = [b - a for a, b in zip(inside, inside[1:])]
+    pitch = min(gaps)
+    if pitch <= 4:
+        return []
+    tolerance = max(3.0, pitch * 0.18)
+    if any(abs(g - round(g / pitch) * pitch) > tolerance for g in gaps):
+        return []
+    if inside[0] - top > pitch / 2 or bottom - inside[-1] > pitch / 2:
+        return []
+    return inside
 
 
 DAY_WORDS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
@@ -245,32 +295,6 @@ def read_day_columns(path: str, grid: "ImageGrid") -> List[float]:
             continue
         merged.append(x)
     return merged
-
-
-def _evenly_spaced(positions: Sequence[int], tolerance: float = 0.18) -> List[int]:
-    """The longest run of lines at a constant pitch.
-
-    An hour grid is uniform by construction; the rules around a header or an
-    all-day band are not. Picking the longest evenly spaced run therefore finds
-    the timed area and ignores the chrome above it, without needing to know
-    anything about the particular calendar's layout.
-    """
-    if len(positions) < 3:
-        return list(positions)
-    best: List[int] = []
-    for i in range(len(positions) - 1):
-        for j in range(i + 1, len(positions)):
-            pitch = positions[j] - positions[i]
-            if pitch <= 4:
-                continue
-            run = [positions[i], positions[j]]
-            for k in range(j + 1, len(positions)):
-                expected = run[-1] + pitch
-                if abs(positions[k] - expected) <= max(3.0, pitch * tolerance):
-                    run.append(positions[k])
-            if len(run) > len(best):
-                best = run
-    return best if len(best) >= 3 else list(positions)
 
 
 def read_time_axis(path: str, grid: "ImageGrid"):
