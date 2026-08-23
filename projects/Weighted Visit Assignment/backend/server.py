@@ -271,12 +271,30 @@ class VisitboardHandler(BaseHTTPRequestHandler):
 
     # -- helpers ------------------------------------------------------------
 
+    # The board is an internal tool for one lab, and the page is hosted on a
+    # different origin from the API (GitHub Pages calling the app host), so the
+    # API answers any origin. Nothing here is a secret and nothing is
+    # destructive without a deliberate click.
+    def _cors(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Max-Age", "86400")
+
+    def do_OPTIONS(self):  # noqa: N802
+        """Preflight. A cross-origin POST with a JSON body always sends one."""
+        self.send_response(204)
+        self._cors()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _send_json(self, status: int, payload: object) -> None:
         blob = json.dumps(payload, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(blob)))
         self.send_header("Cache-Control", "no-store")
+        self._cors()
         self.end_headers()
         self.wfile.write(blob)
 
@@ -349,26 +367,50 @@ class VisitboardHandler(BaseHTTPRequestHandler):
         self._send_json(status, payload)
 
 
-def build_server(port: int = 8765, db_path: Optional[str] = None) -> ThreadingHTTPServer:
+def data_dir() -> str:
+    """Where the audit database lives.
+
+    Defaults to the repo's own data/ folder so local `make serve` is unchanged.
+    A container sets ESD_DATA_DIR to a mounted volume when the lab wants the
+    assignment history to outlive a redeploy.
+    """
+    return os.environ.get("ESD_DATA_DIR") or os.path.join(ROOT, "data")
+
+
+def build_server(port: int = 8765, db_path: Optional[str] = None,
+                 host: Optional[str] = None) -> ThreadingHTTPServer:
     global SESSION
-    SESSION = LabSession(db_path or os.path.join(ROOT, "data", "visitboard.db"))
-    return ThreadingHTTPServer(("127.0.0.1", port), VisitboardHandler)
+    directory = data_dir()
+    os.makedirs(directory, exist_ok=True)
+    SESSION = LabSession(db_path or os.path.join(directory, "visitboard.db"))
+    # Loopback locally, every interface in a container. A container that binds
+    # 127.0.0.1 accepts nothing from outside itself, so the platform's health
+    # check fails and the deploy is rolled back with the app looking healthy
+    # in its own logs.
+    bind = host or os.environ.get("ESD_BIND") or "127.0.0.1"
+    return ThreadingHTTPServer((bind, port), VisitboardHandler)
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", type=int, default=8765)
+    # PORT is what every hosting platform sets. Falling back to 8765 keeps the
+    # local command line exactly as it was.
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("PORT") or 8765))
+    parser.add_argument("--host", default=None,
+                        help="bind address; 0.0.0.0 in a container")
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        httpd = build_server(args.port)
+        httpd = build_server(args.port, host=args.host)
     except OSError as exc:
         print(f"Could not bind port {args.port}: {exc}", file=sys.stderr)
         print("Another copy may already be running. Try --port 8766.", file=sys.stderr)
         return 2
 
-    url = f"http://127.0.0.1:{args.port}/"
+    shown_host = httpd.server_address[0]
+    url = f"http://{'127.0.0.1' if shown_host == '0.0.0.0' else shown_host}:{args.port}/"
     print(f"ESD Visitboard  ->  {url}")
     print(f"  engine {SESSION.health()['engine_version']}   "
           f"weights {SESSION.cfg.weight_vector_id}")

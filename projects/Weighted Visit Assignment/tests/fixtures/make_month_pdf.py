@@ -74,7 +74,11 @@ def build(path: str, year: int = 2026, month: int = 8, events_per_day: int = 5,
                 text = str(day.day)
             page.insert_text((x, y), text, fontsize=7)
 
-            rng = random.Random((seed, day.toordinal()))
+            # A string, because seeding on the tuple this is built from is a
+            # TypeError from Python 3.11 on and the suite could not be run at
+            # all there. Any stable seed will do -- the page only has to be the
+            # same page every time, not the same page as some earlier Python.
+            rng = random.Random(f"{seed}:{day.toordinal()}")
             n = events_per_day if day.month == month else 1
             if vary:
                 n = rng.choice([0, 1, 2, 3, 3, 4, 5, 6]) if day.weekday() < 5 else 0
