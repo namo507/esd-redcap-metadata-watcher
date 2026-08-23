@@ -47,6 +47,7 @@ test:
 	$(PY) tests/test_pairing.py
 	$(PY) tests/test_roster.py
 	$(PY) tests/test_deployment.py
+	$(PY) tests/test_frontend.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
