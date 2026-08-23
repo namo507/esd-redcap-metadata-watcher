@@ -50,7 +50,7 @@ function drawTeam() {
           ${r.days.map((d, dayIndex) => `
             <td class="teamcell">
               <span class="strip" style="--delay:${(rowIndex * 5 + dayIndex) * 22}ms">
-                ${d.slots.map((sl) => `<i class="seg is-${esc(sl.state)}"
+                ${d.slots.map((sl) => `<i class="hourbar is-${esc(sl.state)}"
                    data-tip="${esc(r.name)} ${esc(d.label)} ${esc(sl.label)}: ${
                      sl.state === "free" ? "free" : "not available"}"></i>`).join("")}
               </span>

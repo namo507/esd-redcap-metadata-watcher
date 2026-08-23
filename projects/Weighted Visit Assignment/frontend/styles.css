@@ -94,7 +94,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 940px) { .layout { grid-template-columns: 1fr; } }
 
 .card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 1.25rem; }
-.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: .8rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .card.empty { color: var(--muted); text-align: center; padding: 3rem 1rem; }
 
 /* ------------------------------------------------------------ queue */
@@ -512,8 +513,6 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .synccard > *, .filtercard > * { min-width: 0; }
 
 /* Card headers keep a common baseline whether or not they carry an eyebrow. */
-.card-head { display: flex; justify-content: space-between; align-items: flex-start;
-  gap: .8rem; flex-wrap: wrap; }
 
 /* Stat blocks: the number is the thing to align, so give the label a fixed
    line box rather than letting a two-line label shove one tile out of step. */
@@ -534,11 +533,15 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .exportcard.is-primary { border-color: var(--accent); background: var(--tint); }
 
 /* ---------- segmented control ---------- */
+/* The strip sits opposite a heading in a flex row, so without this it is a
+   shrinkable flex item: the buttons collapse to a fraction of their label and
+   the words print on top of each other. Keep each button at its text width and
+   let the strip wrap to its own line when the heading leaves no room. */
 .segmented { display: inline-flex; background: var(--surface); border-radius: var(--r-pill);
-  padding: 3px; gap: 2px; flex-wrap: wrap; }
+  padding: 3px; gap: 2px; flex-wrap: wrap; flex-shrink: 0; max-width: 100%; }
 .seg { border: 0; background: transparent; border-radius: var(--r-pill);
   padding: .35rem .8rem; font: inherit; font-size: .82rem; font-weight: 700;
-  color: var(--muted); cursor: pointer; }
+  color: var(--muted); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .seg:hover { color: var(--ink); }
 .seg.is-on { background: #fff; color: var(--accent); box-shadow: var(--shadow); }
 
@@ -713,14 +716,17 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 /* The strip is the day, hour by hour. It grows in on load so the eye is drawn
    along the week rather than landing on a static block of colour. */
 .strip { display: flex; gap: 1px; justify-content: center; }
-.seg { display: block; width: 5px; height: 20px; border-radius: 2px;
+/* Named for the strip it belongs to, not shortened to .seg: that is the
+   segmented control's class, and whichever of the two came last in this file
+   silently resized the other. */
+.hourbar { display: block; width: 5px; height: 20px; border-radius: 2px;
   background: var(--surface);
   transform: scaleY(.25); transform-origin: bottom;
-  animation: segIn .32s cubic-bezier(.2,.8,.3,1) forwards;
+  animation: hourbarIn .32s cubic-bezier(.2,.8,.3,1) forwards;
   animation-delay: var(--delay, 0ms); }
-.seg.is-free { background: #CDEBD9; }
-.seg.is-busy { background: var(--esd-science-blue); opacity: .55; }
-@keyframes segIn { to { transform: scaleY(1); } }
+.hourbar.is-free { background: #CDEBD9; }
+.hourbar.is-busy { background: var(--esd-science-blue); opacity: .55; }
+@keyframes hourbarIn { to { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .seg { animation: none; transform: none; }
+  .hourbar { animation: none; transform: none; }
 }
