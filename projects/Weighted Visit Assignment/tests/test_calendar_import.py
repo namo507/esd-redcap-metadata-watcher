@@ -569,46 +569,32 @@ def test_nothing_read_from_an_image_commits_without_review():
 def test_image_times_match_the_pdf_they_were_rendered_from():
     """The same calendar by two routes should agree where both can see it.
 
-    How closely depends on where the clock axis came from, which the reader
-    reports rather than leaves to chance. Read by OCR off the hour column the
-    two routes agree to the minute. Interpolated from a stated range the axis
-    carries a slight scale error that grows down the page, so a time late in
-    the day can land one five-minute step early. Asking for exact agreement
-    on that path only passes on a machine that happens to have an OCR engine
-    installed, which is a fact about the machine and not about the reader.
+    Exactly, and by both routes. The allowance this test used to make for the
+    interpolated axis -- one five-minute step, granted only where no OCR engine
+    was installed -- was measuring a bug rather than a limit: the axis was
+    stretched over the whole band the day separators sweep instead of the hours
+    inside it. It reads the hour rules now, so there is nothing left to allow
+    for, and a step of slack here would hide the next reader that loses one.
     """
     needs_opencv()
     from esd_scheduler.calendar_import import ColorMap
-    from esd_scheduler.ingest_image import ocr_available
 
     cmap = ColorMap(mapping={"cranberry": "C03", "brown": "C02", "yellow": "C05",
                              "green": "C01", "blue": "C04"},
                     confirmed=True, confirmed_by="test")
     img = import_pdf(WEEK_PNG, coordinators=ROSTER, color_map=cmap,
                      image_hours=(8.0, 17.0), image_start=date(2026, 8, 17))
-    # One five-minute snap step on the interpolated axis, nothing on the axis
-    # OCR measured for itself.
-    slack = 0 if ocr_available() else 5
-    seen = [(b.start, b.end) for b in img.blocks]
-
-    def near(want_day, want_start, want_end):
-        want_s = datetime.strptime(f"{want_day} {want_start}", "%Y-%m-%d %H:%M")
-        want_e = datetime.strptime(f"{want_day} {want_end}", "%Y-%m-%d %H:%M")
-        for got_s, got_e in seen:
-            if (abs((got_s - want_s).total_seconds()) <= slack * 60
-                    and abs((got_e - want_e).total_seconds()) <= slack * 60):
-                return True
-        return False
-
+    seen = {
+        (b.start.strftime("%Y-%m-%d %H:%M"), b.end.strftime("%H:%M"))
+        for b in img.blocks
+    }
     # Three events the fixture draws without any overlap, so the image reader
     # can see them whole. Overlapping events in one column are a known limit.
-    for want in (("2026-08-18", "08:00", "08:30"),
-                 ("2026-08-19", "10:00", "12:00"),
-                 ("2026-08-19", "14:00", "16:00"),
-                 ("2026-08-20", "15:00", "17:00")):
-        expect(near(*want),
-               f"image missed or misread {want} within {slack}min: "
-               f"{sorted((s.strftime('%Y-%m-%d %H:%M'), e.strftime('%H:%M')) for s, e in seen)}")
+    for want in (("2026-08-18 08:00", "08:30"),
+                 ("2026-08-19 10:00", "12:00"),
+                 ("2026-08-19 14:00", "16:00"),
+                 ("2026-08-20 15:00", "17:00")):
+        expect(want in seen, f"image missed or misread {want}: {sorted(seen)}")
 
 
 def test_an_image_without_a_time_range_refuses_rather_than_guessing():
@@ -664,6 +650,7 @@ def test_the_grid_is_bounded_by_the_hour_rules_not_the_ink_around_them():
     pixels high at 150dpi. Twelve pixels is nothing to look at and a scale error
     to measure with -- a stated range mapped through it reads every block short.
     """
+    needs_opencv()
     from esd_scheduler.ingest_image import _load, find_grid
 
     grid = find_grid(_load(WEEK_PNG))
@@ -683,6 +670,7 @@ def test_a_stated_range_reads_the_same_times_as_the_hour_column():
     axis is also the route nobody developing on a machine with tesseract ever
     exercises, so it is forced here rather than left to the environment.
     """
+    needs_opencv()
     from esd_scheduler import ingest_image
 
     installed = ingest_image.ocr_available
