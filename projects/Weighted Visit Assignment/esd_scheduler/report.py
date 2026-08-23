@@ -186,7 +186,7 @@ def render_markdown(
     )
     a("")
     a(
-        f"Weights `{cfg.weight_vector_id}` (fingerprint `{cfg.fingerprint()}`), "
+        f"Weights `{cfg.vector_id()}` (fingerprint `{cfg.fingerprint()}`), "
         f"engine `{code_version}`, elicitation `{cfg.elicitation_method}`, "
         f"review band {cfg.epsilon_review_band:.3f} "
         f"({'calibrated' if cfg.epsilon_calibrated else 'NOT yet calibrated'})."

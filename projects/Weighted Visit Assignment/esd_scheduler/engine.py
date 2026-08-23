@@ -94,7 +94,7 @@ def score_visit(
         rejected=[],
         family_sigma=family.sigma,
         epsilon_used=cfg.epsilon_review_band,
-        weight_vector_id=cfg.weight_vector_id,
+        weight_vector_id=cfg.vector_id(),
         config_fingerprint=cfg.fingerprint(),
     )
 

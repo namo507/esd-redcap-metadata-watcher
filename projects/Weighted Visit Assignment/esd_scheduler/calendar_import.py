@@ -543,11 +543,31 @@ def import_pdf(
             label for label, hue in result.legend.items()
             if hue in result.unattributed_hues
         ]
-        result.notes.append(
-            "Not on the roster, so left unattributed: "
-            + ", ".join(unmatched or result.unattributed_hues)
-            + ". Their entries still count toward how loaded each day looks."
-        )
+        # A lab calendar and an unrecognised person both end up without a
+        # coordinator, for opposite reasons. The lab's own calendars are not
+        # people and are not supposed to become one: they were classified,
+        # they set when a visit may happen, and reporting them as a failure to
+        # attribute reads as the filters not working when they did. Only a
+        # calendar that looks like somebody the roster does not know is worth
+        # raising.
+        policy = [lbl for lbl in unmatched
+                  if result.roles.get(lbl) in (ROLE_OFFERED, ROLE_CLINICIAN,
+                                               ROLE_LAB)]
+        people = [lbl for lbl in unmatched if lbl not in policy]
+        if policy:
+            named = ", ".join(
+                f"{lbl} ({ROLE_LABEL.get(result.roles.get(lbl), 'lab calendar')})"
+                for lbl in policy)
+            result.notes.append(
+                "Read as lab calendars rather than people: " + named
+                + ". They say when a visit can happen, not who is busy."
+            )
+        if people or (not policy and result.unattributed_hues):
+            result.notes.append(
+                "Not on the roster, so left unattributed: "
+                + ", ".join(people or result.unattributed_hues)
+                + ". Their entries still count toward how loaded each day looks."
+            )
 
     if tier == TIER_MONTH_GRID:
         _rollup_month(parsed, result, attributed, coordinators)

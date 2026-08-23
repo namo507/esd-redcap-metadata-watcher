@@ -442,7 +442,7 @@ def main(argv=None) -> int:
     url = f"http://{'127.0.0.1' if shown_host == '0.0.0.0' else shown_host}:{args.port}/"
     print(f"ESD Visitboard  ->  {url}")
     print(f"  engine {SESSION.health()['engine_version']}   "
-          f"weights {SESSION.cfg.weight_vector_id}")
+          f"weights {SESSION.cfg.vector_id()}")
     print(f"  {len(SESSION.order)} open visits, {len(SESSION.roster())} coordinators")
     print("  free/busy only; the board never requests event titles")
     print("  ctrl-c to stop")

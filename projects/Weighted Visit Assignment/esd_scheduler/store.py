@@ -327,7 +327,7 @@ class AuditStore:
             """INSERT OR REPLACE INTO weight_vector VALUES
                (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                cfg.weight_vector_id,
+                cfg.vector_id(),
                 cfg.fingerprint(),
                 w.phi,
                 w.omega,

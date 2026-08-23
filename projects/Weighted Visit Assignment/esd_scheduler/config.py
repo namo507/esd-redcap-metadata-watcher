@@ -38,7 +38,13 @@ class WeightVector:
     def validate(self) -> None:
         total = self.phi + self.omega + self.psi + self.p
         if abs(total - 1.0) > 1e-9:
-            raise ValueError(f"weights must sum to 1.0, got {total!r}")
+            # Printed rounded and with the four values spelled out. This file
+            # is meant to be edited by hand, and "got 1.0999999999999999"
+            # reads as a bug in the checker rather than a typo in the file.
+            raise ValueError(
+                f"weights must sum to 1.0, got {total:.6g} "
+                f"(phi {self.phi:g}, omega {self.omega:g}, "
+                f"psi {self.psi:g}, p {self.p:g})")
         for name, value in asdict(self).items():
             if value < 0:
                 raise ValueError(f"weight {name} must be non-negative, got {value!r}")
@@ -211,6 +217,21 @@ class EngineConfig:
             cfg.weights = WeightVector(**weights)
         cfg.validate()
         return cfg
+
+    def vector_id(self) -> str:
+        """The weight label, qualified by the numbers it actually stands for.
+
+        ``weight_vector_id`` in the config file is a human label, and a human
+        editing four numbers will not reliably remember to change it. On its
+        own it therefore lies: two different weight sets end up filed under one
+        name, the stored row for the first is overwritten by the second, and an
+        old decision can no longer be traced to the numbers that produced it.
+
+        Appending the fingerprint makes the identity move with the weights
+        while keeping the label readable, so editing a weight files a new row
+        instead of replacing somebody else's.
+        """
+        return f"{self.weight_vector_id}+{self.fingerprint()[:6]}"
 
     def fingerprint(self) -> str:
         """Stable hash of the whole config, logged alongside every decision."""

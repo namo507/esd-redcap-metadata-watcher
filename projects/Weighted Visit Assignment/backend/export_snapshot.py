@@ -144,7 +144,7 @@ def main() -> int:
     payload = {
         "meta": {
             "engineVersion": ENGINE_VERSION,
-            "weightVectorId": session.cfg.weight_vector_id,
+            "weightVectorId": session.cfg.vector_id(),
             "configFingerprint": session.cfg.fingerprint(),
             "reviewBand": round(session.cfg.epsilon_review_band, 3),
             "weekOf": session.now.strftime("%Y-%m-%d"),

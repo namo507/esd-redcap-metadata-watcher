@@ -146,6 +146,67 @@ def test_seeded_history_credits_nobody_with_the_visit():
            "a seeded past visit named a coordinator who was never recorded")
 
 
+def test_the_weight_label_moves_with_the_weights():
+    """A label that stays put while the numbers change is a mislabel."""
+    from esd_scheduler.config import WeightVector, load_config
+    a = load_config()
+    b = load_config()
+    b.weights = WeightVector(phi=0.05, omega=0.80, psi=0.10, p=0.05)
+    expect(a.vector_id() != b.vector_id(),
+           f"both weight sets report the same id {a.vector_id()!r}")
+    expect(a.weight_vector_id in a.vector_id(),
+           "the human label should still be readable in the id")
+
+
+def test_changing_a_weight_does_not_overwrite_the_old_one():
+    """Past decisions have to stay traceable to the numbers that made them."""
+    from esd_scheduler.config import WeightVector, load_config
+    from esd_scheduler.store import AuditStore
+    store = AuditStore(os.path.join(TMP, "weights.db"))
+    first = load_config()
+    store.record_config(first)
+    second = load_config()
+    second.weights = WeightVector(phi=0.05, omega=0.80, psi=0.10, p=0.05)
+    store.record_config(second)
+    rows = store.query("SELECT weight_vector_id, w_phi FROM weight_vector")
+    expect(len(rows) == 2,
+           f"expected both weight sets on file, found {len(rows)}")
+    expect({round(r[1], 2) for r in rows} == {0.45, 0.05},
+           "the stored rows do not hold both sets of numbers")
+
+
+def test_a_bad_weight_set_says_what_is_wrong_in_readable_numbers():
+    from esd_scheduler.config import WeightVector
+    try:
+        WeightVector(phi=0.5, omega=0.2, psi=0.2, p=0.2).validate()
+    except ValueError as exc:
+        text = str(exc)
+        expect("1.0999" not in text,
+               f"the float noise is still printed: {text}")
+        expect("1.1" in text, f"the actual total is not shown: {text}")
+        return
+    raise AssertionError("a weight set summing to 1.1 was accepted")
+
+
+def test_a_lab_calendar_is_not_reported_as_an_unknown_person():
+    """The lab's own calendars were being listed as a failure to attribute."""
+    import fitz  # noqa: F401  -- the fixture needs it
+    from make_work_week_pdf import build
+    from esd_scheduler.calendar_import import import_pdf
+    from esd_scheduler.demo import build_lab
+
+    pdf = build(os.path.join(TMP, "roles.pdf"))
+    state, _ = build_lab(datetime(2026, 8, 17, 9, 0))
+    result = import_pdf(pdf, coordinators=state.coordinators, year_hint=2026)
+    notes = " ".join(result.notes)
+    for name in ("Offered Times ESD", "Clinician Shifts"):
+        expect(name not in notes.split("Not on the roster")[-1]
+               or "Read as lab calendars" in notes,
+               f"{name} is still reported as an unattributed person")
+    expect("Read as lab calendars" in notes,
+           f"the lab's own calendars are not explained at all: {notes[:200]}")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

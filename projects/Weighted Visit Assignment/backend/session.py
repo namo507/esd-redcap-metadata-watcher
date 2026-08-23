@@ -780,8 +780,7 @@ class LabSession:
             "review_band": round(self.cfg.epsilon_review_band, 3),
             "gamma_travel": round(self.cfg.gamma_travel, 3),
             "certifications": self.certifications(),
-            "weight_vector_id": self.cfg.weights_id
-            if hasattr(self.cfg, "weights_id") else None,
+            "weight_vector_id": self.cfg.vector_id(),
             "priority_tiers": list(self.PRIORITY_TIERS),
         }
 
@@ -954,7 +953,7 @@ class LabSession:
         return {
             "ok": True,
             "engine_version": ENGINE_VERSION,
-            "weight_vector_id": self.cfg.weight_vector_id,
+            "weight_vector_id": self.cfg.vector_id(),
             "config_fingerprint": self.cfg.fingerprint(),
             "review_band": round(self.cfg.epsilon_review_band, 3),
             "review_band_calibrated": self.cfg.epsilon_calibrated,
