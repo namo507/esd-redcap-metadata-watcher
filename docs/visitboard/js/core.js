@@ -5,7 +5,7 @@
 */
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
-            section: "week", assignments: {}, lastImport: null,
+            section: "team", assignments: {}, lastImport: null,
             syncTab: "availability", logicNode: null, dueOpen: null, batch: null };
 
 const $ = (id) => document.getElementById(id);
@@ -108,7 +108,7 @@ const SECTIONS = {
 const SECTION_NAMES = ["team", "assign", "sync", "logic"];
 
 /* ------------------------------------------------------------------ routing
-   The board is one page, but its five views are places. Reflecting them in the
+   The board is one page, but its four views are places. Reflecting them in the
    URL is what makes the back button, a bookmark and a pasted link behave the
    way anyone expects -- including a link straight to one visit, which is how
    coordinators actually pass work to each other. */
@@ -123,7 +123,7 @@ function parseRoute() {
   const raw = (location.hash || "").replace(/^#\/?/, "");
   const [section, visitId] = raw.split("/");
   return {
-    section: SECTION_NAMES.includes(section) ? section : "week",
+    section: SECTION_NAMES.includes(section) ? section : SECTION_NAMES[0],
     visitId: visitId ? decodeURIComponent(visitId) : null,
   };
 }
