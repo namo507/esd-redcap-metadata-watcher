@@ -730,3 +730,13 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) {
   .hourbar { animation: none; transform: none; }
 }
+
+/* ---------- add a visit ---------- */
+/* Folded away by default: entering a visit is a weekly act, and the queue is
+   what the page is for. */
+.addvisit { margin-top: .9rem; }
+.addvisit form { display: grid; gap: .6rem; margin-top: .8rem; }
+.addvisit label { display: grid; gap: .25rem; font-size: .78rem; font-weight: 700;
+  color: var(--muted); }
+.addvisit .note { font-weight: 500; }
+.addvisit button { justify-self: start; }
