@@ -40,7 +40,7 @@
     <h1 id="hero-title">Plan the week.</h1>
     <p class="hero-sub" id="hero-sub">Pick a visit. The board checks every calendar, rules out who cannot go,
       and explains who it would send.</p>
-    <p class="demo-note"><b>Demonstration.</b> Coordinator names are the real
+    <p class="demo-note" id="mode-note"><b>Demonstration.</b> Coordinator names are the real
       roster; every schedule, credential and workload figure on this page is
       synthetic sample data, not anyone's actual calendar.</p>
     <div class="kpis" id="kpis"></div>
@@ -92,6 +92,30 @@
             </div>
           </div>
           <ul class="queue" id="queue"></ul>
+          <details class="details-card addvisit" id="add-visit">
+            <summary>Add a visit</summary>
+            <form id="add-visit-form" autocomplete="off">
+              <label>Family <input class="input" name="family_id" placeholder="F5031" required></label>
+              <label>Protocol
+                <select class="input select" name="protocol">
+                  <option>NANO</option><option>NICO</option>
+                </select></label>
+              <label>Checkpoint <input class="input" name="checkpoint" placeholder="6m" required></label>
+              <label>Book from <input class="input" type="date" name="window_start" required></label>
+              <label>Book until <input class="input" type="date" name="window_end" required></label>
+              <label>Hours <input class="input" type="number" name="duration_hours" value="2" min="0.5" step="0.5"></label>
+              <label>Protocol clock starts
+                <input class="input" type="date" name="anchor_date">
+                <span class="note">Leave blank and the visit still schedules, with no due date rather than a guessed one.</span>
+              </label>
+              <label>Already done up to
+                <input class="input" name="completed_through" placeholder="3m">
+                <span class="note">The last checkpoint this family completed. Leave blank for a family that has had none, or the board will read their first visit as long overdue.</span>
+              </label>
+              <button class="btn" type="submit">Add it</button>
+              <p class="note" id="add-visit-msg"></p>
+            </form>
+          </details>
         </div>
       </aside>
       <section>

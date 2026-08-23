@@ -30,7 +30,7 @@ from urllib.parse import unquote, urlparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend import __version__  # noqa: E402
-from backend.session import LabSession  # noqa: E402
+from backend.session import LIVE, LabSession, board_mode  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -251,6 +251,31 @@ def r_unassign(params, body):
     return 200, {"visit": SESSION.visit_summary(visit_id)}
 
 
+@post("/api/visits")
+def r_add_visit(params, body):
+    """Enter a real visit.
+
+    Wanted: family_id, protocol, checkpoint, window_start, window_end. Optional:
+    visit_id, duration_hours, location, requires_clinician, anchor_date, zone,
+    drive_time_minutes, contact_method, notes. Without an anchor_date the visit
+    still schedules; it just has no protocol due date, which is the honest
+    result rather than a guessed one.
+    """
+    try:
+        return 200, {"visit": SESSION.add_visit(body or {}),
+                     "queue": SESSION.queue()}
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+
+
+@post("/api/visits/remove")
+def r_remove_visit(params, body):
+    visit_id = (body or {}).get("visit_id")
+    if not visit_id or not SESSION.remove_visit(visit_id):
+        return 404, {"error": f"No entered visit {visit_id!r}."}
+    return 200, {"ok": True, "queue": SESSION.queue()}
+
+
 @post("/api/reset")
 def r_reset(params, body):
     SESSION.reset()
@@ -382,7 +407,11 @@ def build_server(port: int = 8765, db_path: Optional[str] = None,
     global SESSION
     directory = data_dir()
     os.makedirs(directory, exist_ok=True)
-    SESSION = LabSession(db_path or os.path.join(directory, "visitboard.db"))
+    # Separate files per mode. A live board and a demo board sharing one
+    # database means an afternoon of demo uploads turns up as evidence on the
+    # real one, which is exactly the confusion the mode exists to remove.
+    default_db = "visitboard-live.db" if board_mode() == LIVE else "visitboard.db"
+    SESSION = LabSession(db_path or os.path.join(directory, default_db))
     # Loopback locally, every interface in a container. A container that binds
     # 127.0.0.1 accepts nothing from outside itself, so the platform's health
     # check fails and the deploy is rolled back with the app looking healthy

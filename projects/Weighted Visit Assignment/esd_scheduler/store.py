@@ -200,6 +200,26 @@ CREATE TABLE IF NOT EXISTS calendar_import_block (
     source_hash    TEXT
 );
 
+CREATE TABLE IF NOT EXISTS planned_visit (
+    visit_id           TEXT PRIMARY KEY,
+    family_id          TEXT NOT NULL,
+    protocol           TEXT NOT NULL,
+    checkpoint         TEXT NOT NULL,
+    window_start       TEXT NOT NULL,
+    window_end         TEXT NOT NULL,
+    duration_hours     REAL NOT NULL,
+    location           TEXT NOT NULL,
+    requires_clinician INTEGER NOT NULL DEFAULT 0,
+    anchor_date        TEXT,
+    zone               INTEGER NOT NULL DEFAULT 1,
+    drive_time_minutes REAL,
+    contact_method     TEXT,
+    notes              TEXT,
+    completed_through  TEXT,
+    created_at         TEXT NOT NULL,
+    removed            INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS optimizer_shadow (
     shadow_id        TEXT PRIMARY KEY,
     period_start     TEXT NOT NULL,
@@ -287,6 +307,7 @@ class AuditStore:
         """
         wanted = {
             "assignment_outcome": [("assigned_tech_id", "TEXT")],
+            "planned_visit": [("completed_through", "TEXT")],
         }
         with self._lock:
             for table, columns in wanted.items():
@@ -655,6 +676,46 @@ class AuditStore:
         return self.query(
             "SELECT * FROM calendar_import_block WHERE reviewed=1 AND confirmed=1 "
             "ORDER BY coordinator_id, start_ts")
+
+    def add_planned_visit(self, row: Dict[str, Any]) -> None:
+        """Record a real visit somebody entered on the board.
+
+        Family detail rides along on the visit row rather than in a table of
+        its own. A lab this size enters a handful of visits a week, and one
+        table that reads top to bottom is easier to follow than two joined by
+        a key. Where a family has several visits the most recent row wins,
+        which is also the one the person entering it just checked.
+        """
+        cols = ("visit_id", "family_id", "protocol", "checkpoint",
+                "window_start", "window_end", "duration_hours", "location",
+                "requires_clinician", "anchor_date", "zone",
+                "drive_time_minutes", "contact_method", "notes",
+                "completed_through", "created_at")
+        with self._lock:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO planned_visit (" + ", ".join(cols) +
+                ", removed) VALUES (" + ",".join("?" * len(cols)) + ",0)",
+                tuple(row.get(c) for c in cols),
+            )
+            self.conn.commit()
+
+    def planned_visits(self) -> List[sqlite3.Row]:
+        """Every entered visit still standing, oldest window first."""
+        return self.query(
+            "SELECT * FROM planned_visit WHERE removed=0 ORDER BY window_start, visit_id")
+
+    def remove_planned_visit(self, visit_id: str) -> bool:
+        """Mark one entered visit as gone.
+
+        Flagged rather than deleted: the audit trail should still show that the
+        visit existed and was taken off the board.
+        """
+        with self._lock:
+            cur = self.conn.execute(
+                "UPDATE planned_visit SET removed=1 WHERE visit_id=? AND removed=0",
+                (visit_id,))
+            self.conn.commit()
+            return cur.rowcount > 0
 
     def query(self, sql: str, params: Sequence[Any] = ()) -> List[sqlite3.Row]:
         with self._lock:

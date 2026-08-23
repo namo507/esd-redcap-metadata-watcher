@@ -40,7 +40,7 @@ function startAutoRefresh() {
 
 async function refresh() {
   S.board = await api("/api/board");
-  drawKpis(); drawQueue(); drawFooter(); drawSyncBadge();
+  drawKpis(); drawQueue(); drawFooter(); drawSyncBadge(); drawModeNote();
   if (S.section === "team") drawTeam();
 }
 
@@ -69,6 +69,11 @@ async function boot() {
     }));
   document.querySelectorAll(".navbtn").forEach((b) =>
     b.addEventListener("click", () => setSection(b.dataset.section)));
+  const addForm = $("add-visit-form");
+  if (addForm) addForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    addVisit(addForm);
+  });
   $("btn-reset").addEventListener("click", async () => {
     if (!confirm("Reset the board? This clears the assignments made in this session.")) return;
     await api("/api/reset", { method: "POST" });

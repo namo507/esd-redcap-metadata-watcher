@@ -55,25 +55,11 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     # The roster is config, not code: config/roster.json. Adding somebody is a
     # row, removing them is active:false, and neither is a code change. What is
     # real in that file and what is synthetic is documented there.
+    from .lab import populate_coordinators
     from .roster import Roster
 
+    populate_coordinators(state, now)
     roster = Roster.load()
-    for entry in roster.active:
-        state.coordinators[entry.id] = Coordinator(
-            coordinator_id=entry.id,
-            name=entry.name,
-            credentials=set(entry.credentials),
-            capacity_hours_week=entry.capacity_hours_week,
-            n_completed_visits=entry.completed_visits,
-            attributes=set(entry.attributes),
-            hire_date=(now - timedelta(
-                days=900 if entry.completed_visits else 9)).date(),
-            working_blocks=[(d, 9.0, 17.0) for d in range(5)],
-            tech_trained=entry.tech_trained,
-            van_trained=entry.van_trained,
-            in_lab_day=entry.in_lab_day,
-            out_of_hours_count=entry.out_of_hours_count,
-        )
 
     ids = sorted(state.coordinators)
 

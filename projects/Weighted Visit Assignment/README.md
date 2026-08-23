@@ -159,6 +159,48 @@ snapshot. The only thing the browser recomputes is the burden term, because
 assigning a visit changes a coordinator's committed hours;
 `tests/test_static_board.py` pins that against the engine.
 
+## Demo data, or your own
+
+The board ships in demo mode and stays there unless told otherwise. The demo
+builds twelve invented families, sixteen visits and a week of invented busy
+time, which is what makes the engine worth looking at before any real data
+exists. The names on the roster are real; everything attached to them there is
+not.
+
+Set `ESD_MODE=live` and none of that is built:
+
+```bash
+ESD_MODE=live make serve
+```
+
+A live board starts with the roster from `config/roster.json` and nothing else.
+No families, no visits, and no calendars, which matters more than it sounds:
+a coordinator with no calendar read is *unknown*, not free, so the board
+refuses to staff anybody until a calendar has actually been uploaded for them.
+The two modes keep separate databases (`data/visitboard.db` and
+`data/visitboard-live.db`) so an afternoon of demo uploads never turns up as
+evidence on the real board.
+
+The week then runs in two moves:
+
+1. **Enter the visits.** "Add a visit" under the queue, or `POST /api/visits`
+   with `family_id`, `protocol`, `checkpoint`, `window_start`, `window_end`.
+   `POST /api/visits/remove` takes one off again. Entered visits live in the
+   `planned_visit` table and come back after a restart.
+2. **Upload the week's calendar print.** The board reads it, applies it, and
+   every visit's ranked pairing updates from it.
+
+One field on that form is worth understanding. **Already done up to** records
+the last checkpoint a family completed. Without it the protocol clock sees a
+family with no history at all and reports their *first* checkpoint as months
+overdue, however recently they were really seen. The checkpoints it fills in
+are deliberately credited to nobody: continuity rewards whoever ran the last
+visit, and naming a coordinator the lab never recorded would hand somebody
+credit they did not earn.
+
+`/api/health` says which mode it is in and where the busy time came from:
+`calendar_source` reads `demo`, `none` until a calendar is read, then `upload`.
+
 ## The model in one screen
 
 **Layer 0** — calendar freshness. `fresh` auto-commits, `stale` makes the

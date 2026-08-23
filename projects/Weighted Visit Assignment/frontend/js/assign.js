@@ -16,7 +16,8 @@ function drawQueue() {
   const rows = visibleQueue();
   const total = S.board.queue.length;
   $("queue-count").textContent =
-    rows.length === total ? `${total} visits` : `${rows.length} of ${total} visits`;
+    rows.length === total ? `${total} ${total === 1 ? "visit" : "visits"}`
+                          : `${rows.length} of ${total} visits`;
 
   $("queue").innerHTML = rows.length ? rows.map((v) => {
     const done = v.status === "assigned";
@@ -308,4 +309,57 @@ async function selectVisit(visitId, opts) {
   }
   drawDetail();
   if (!silent && S.section === "assign") syncRoute(false);
+}
+
+/* ------------------------------------------------------------ adding a visit
+
+   A board running on real data has to get its visits from somewhere. This is
+   that somewhere: the smallest form that produces a schedulable visit, folded
+   away under the queue because entering one is a weekly act and reading the
+   queue is not. */
+
+function drawModeNote() {
+  const note = $("mode-note");
+  if (!note) return;
+  const live = S.board && S.board.health && S.board.health.mode === "live";
+  const add = $("add-visit");
+  if (add) add.hidden = false;
+  if (!live) return;
+  const src = (S.board.health.calendar_source || "none");
+  note.innerHTML = src === "upload"
+    ? `<b>Live.</b> Visits and availability on this page come from what you
+       entered and the calendars you uploaded.`
+    : `<b>Live.</b> No calendar has been read yet, so nobody counts as free.
+       Upload a work week print under Calendars to start.`;
+}
+
+async function addVisit(form) {
+  const msg = $("add-visit-msg");
+  const data = Object.fromEntries(new FormData(form).entries());
+  // A date input gives a bare day; the engine schedules against times, so the
+  // window runs from the start of the first day to the end of the last.
+  const body = {
+    family_id: data.family_id,
+    protocol: data.protocol,
+    checkpoint: data.checkpoint,
+    window_start: `${data.window_start}T09:00:00`,
+    window_end: `${data.window_end}T17:00:00`,
+    duration_hours: Number(data.duration_hours) || 2,
+  };
+  if (data.anchor_date) body.anchor_date = data.anchor_date;
+  if (data.completed_through) body.completed_through = data.completed_through.trim();
+  msg.textContent = "Adding…";
+  try {
+    const out = await api("/api/visits", {
+      method: "POST", body: JSON.stringify(body),
+    });
+    await refresh();
+    await selectVisit(out.visit.visit_id, { silent: true });
+    form.reset();
+    $("add-visit").open = false;
+    msg.textContent = "";
+    toast(`Visit ${out.visit.visit_id} added for ${out.visit.family_id}.`);
+  } catch (err) {
+    msg.textContent = err.message;
+  }
 }

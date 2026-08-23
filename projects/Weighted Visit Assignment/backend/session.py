@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional
 
 from esd_scheduler import __version__ as ENGINE_VERSION
@@ -26,6 +26,7 @@ from esd_scheduler.calendar_import import (
 from esd_scheduler.calendarsync import MockProvider
 from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
+from esd_scheduler.lab import build_live
 from esd_scheduler.drift import weekly_drift
 from esd_scheduler.calendar_roles import ROLE_LABEL, ROLE_MEANING, POLARITY
 from esd_scheduler.constraints import (
@@ -51,7 +52,8 @@ from esd_scheduler.engine import (
     plan_week,
     score_visit,
 )
-from esd_scheduler.models import BusyBlock
+from esd_scheduler.models import (
+    BusyBlock, CalendarSnapshot, CompletedVisit, Family, Visit)
 from esd_scheduler.store import OVERRIDE_REASON_CODES, AuditStore
 
 UPLOAD_DIR = os.path.join("data", "uploads")
@@ -148,6 +150,21 @@ def _loads(raw):
         return []
 
 
+DEMO = "demo"
+LIVE = "live"
+
+
+def board_mode() -> str:
+    """Which lab the board builds: the synthetic one, or the real roster only.
+
+    Demo stays the default so an existing install, a test and the published
+    offline snapshot all behave exactly as before. Set ESD_MODE=live to start
+    from the roster with no invented families, visits or busy time.
+    """
+    value = (os.environ.get("ESD_MODE") or DEMO).strip().lower()
+    return LIVE if value == LIVE else DEMO
+
+
 class LabSession:
     """Thread-safe wrapper around one LabState plus its audit store."""
 
@@ -173,7 +190,11 @@ class LabSession:
             self.epoch = datetime.now().replace(
                 hour=9, minute=0, second=0, microsecond=0)
             self.epoch -= timedelta(days=self.epoch.weekday())   # anchor on Monday
-            self.state, visits = build_lab(self.epoch)
+            self.mode = board_mode()
+            if self.mode == LIVE:
+                self.state, visits = build_live(self.epoch)
+            else:
+                self.state, visits = build_lab(self.epoch)
             self.visits: Dict[str, object] = {v.visit_id: v for v in visits}
             self.order: List[str] = [v.visit_id for v in visits]
             self.provider = MockProvider(
@@ -196,7 +217,17 @@ class LabSession:
                     pass
             self.store = AuditStore(self.db_path)
             self.store.record_config(self.cfg)
-            self._log("Board reset. Synthetic lab rebuilt from the roster.")
+            # Calendars already read in an earlier run are evidence now, not
+            # after the first screen refresh. Without this a fresh session
+            # reports no calendar source while holding a database full of them.
+            self._apply_confirmed_blocks()
+            if self.mode == LIVE:
+                restored = self._load_planned_visits()
+                self._log(
+                    f"Board reset. Live lab built from the roster; "
+                    f"{restored} entered visit(s) restored.")
+            else:
+                self._log("Board reset. Synthetic lab rebuilt from the roster.")
 
     # -- calendar uploads ----------------------------------------------------
 
@@ -331,6 +362,167 @@ class LabSession:
                 )
         return payload
 
+    # -- entered visits ------------------------------------------------------
+
+    def _install_visit(self, row: dict) -> object:
+        """Turn one stored row into a Family and a Visit on the live board."""
+        fam = self.state.families.get(row["family_id"])
+        if fam is None:
+            fam = Family(family_id=row["family_id"], protocol=row["protocol"])
+            self.state.families[row["family_id"]] = fam
+        fam.protocol = row["protocol"]
+        fam.zone = int(row.get("zone") or 1)
+        if row.get("anchor_date"):
+            fam.anchor_date = date.fromisoformat(row["anchor_date"])
+        if row.get("drive_time_minutes") is not None:
+            fam.drive_time_minutes = float(row["drive_time_minutes"])
+        if row.get("contact_method"):
+            fam.preferred_contact_method = row["contact_method"]
+        if row.get("notes"):
+            fam.scheduling_notes = row["notes"]
+
+        self._seed_history(fam, row.get("completed_through"))
+
+        visit = Visit(
+            visit_id=row["visit_id"],
+            family_id=row["family_id"],
+            protocol=row["protocol"],
+            checkpoint=row["checkpoint"],
+            window_start=datetime.fromisoformat(row["window_start"]),
+            window_end=datetime.fromisoformat(row["window_end"]),
+            duration_hours=float(row["duration_hours"]),
+            location=row.get("location") or "lab",
+            requires_clinician=bool(row.get("requires_clinician")),
+        )
+        self.visits[visit.visit_id] = visit
+        if visit.visit_id not in self.order:
+            self.order.append(visit.visit_id)
+        return visit
+
+    def _seed_history(self, fam, completed_through: Optional[str]) -> None:
+        """Record the checkpoints a family has already been through.
+
+        Without this the protocol clock sees a family with no history at all
+        and reports their very first checkpoint as months overdue, however
+        recently they were actually seen. Entering "we have done up to 3m" is
+        the smallest thing a scheduler can say that makes the clock right.
+
+        The coordinator on these rows is deliberately blank. Who ran a past
+        visit is what the continuity term rewards, and inventing a name there
+        would hand somebody credit for a visit nobody recorded. Blank means
+        the board knows the visit happened and not who did it, which is true.
+        """
+        if not completed_through:
+            return
+        checkpoints = ProtocolSchedule.load().for_protocol(fam.protocol)
+        names = [c.name for c in checkpoints]
+        if completed_through not in names:
+            return
+        cutoff = names.index(completed_through)
+        already = {h.checkpoint for h in self.state.history
+                   if h.family_id == fam.family_id}
+        for cp in checkpoints[:cutoff + 1]:
+            if cp.name in already:
+                continue
+            when = self.now
+            if fam.anchor_date:
+                when = datetime.combine(
+                    fam.anchor_date + timedelta(days=cp.offset_days), time(9, 0))
+            self.state.history.append(CompletedVisit(
+                visit_id=f"H-{fam.family_id}-{cp.name}",
+                family_id=fam.family_id,
+                coordinator_id="",
+                when=when,
+                protocol=fam.protocol,
+                checkpoint=cp.name,
+                duration_hours=cp.duration_hours,
+            ))
+
+    def _load_planned_visits(self) -> int:
+        """Put entered visits back after a restart."""
+        rows = [dict(r) for r in self.store.planned_visits()]
+        for row in rows:
+            try:
+                self._install_visit(row)
+            except (KeyError, TypeError, ValueError):
+                continue        # a row this build cannot read is skipped, not fatal
+        self._reorder_by_window()
+        return len(rows)
+
+    def _reorder_by_window(self) -> None:
+        """Soonest window first, which is the order a scheduler works in."""
+        self.order.sort(key=lambda vid: (
+            getattr(self.visits[vid], "window_start", self.now), vid))
+
+    def add_visit(self, payload: dict) -> dict:
+        """Enter a real visit. Returns the visit as the board now holds it."""
+        with self._lock:
+            required = ("family_id", "protocol", "checkpoint",
+                        "window_start", "window_end")
+            missing = [k for k in required if not str(payload.get(k) or "").strip()]
+            if missing:
+                raise ValueError("Missing: " + ", ".join(missing))
+            try:
+                start = datetime.fromisoformat(str(payload["window_start"]))
+                end = datetime.fromisoformat(str(payload["window_end"]))
+            except ValueError as exc:
+                raise ValueError(f"Could not read the window dates: {exc}") from exc
+            if end < start:
+                raise ValueError("The window ends before it starts.")
+
+            vid = str(payload.get("visit_id") or "").strip() or self._next_visit_id()
+            if vid in self.visits:
+                raise ValueError(f"Visit {vid} is already on the board.")
+            row = {
+                "visit_id": vid,
+                "family_id": str(payload["family_id"]).strip(),
+                "protocol": str(payload["protocol"]).strip().upper(),
+                "checkpoint": str(payload["checkpoint"]).strip(),
+                "window_start": start.isoformat(),
+                "window_end": end.isoformat(),
+                "duration_hours": float(payload.get("duration_hours") or 2.0),
+                "location": str(payload.get("location") or "lab"),
+                "requires_clinician": 1 if payload.get("requires_clinician") else 0,
+                "anchor_date": (str(payload["anchor_date"])
+                                if payload.get("anchor_date") else None),
+                "zone": int(payload.get("zone") or 1),
+                "drive_time_minutes": (float(payload["drive_time_minutes"])
+                                       if payload.get("drive_time_minutes") not in
+                                       (None, "") else None),
+                "contact_method": payload.get("contact_method") or None,
+                "notes": payload.get("notes") or None,
+                "completed_through": payload.get("completed_through") or None,
+                "created_at": self.now.isoformat(timespec="seconds"),
+            }
+            self.store.add_planned_visit(row)
+            visit = self._install_visit(row)
+            self._reorder_by_window()
+            self._log(f"Visit {vid} entered for family {row['family_id']}: "
+                      f"{row['protocol']} {row['checkpoint']}.")
+            return {"visit_id": visit.visit_id, "family_id": visit.family_id,
+                    "protocol": visit.protocol, "checkpoint": visit.checkpoint,
+                    "window_start": visit.window_start.isoformat(),
+                    "window_end": visit.window_end.isoformat()}
+
+    def remove_visit(self, visit_id: str) -> bool:
+        """Take an entered visit off the board."""
+        with self._lock:
+            gone = self.store.remove_planned_visit(visit_id)
+            self.visits.pop(visit_id, None)
+            if visit_id in self.order:
+                self.order.remove(visit_id)
+            self.assignments.pop(visit_id, None)
+            if gone:
+                self._log(f"Visit {visit_id} removed from the board.")
+            return gone
+
+    def _next_visit_id(self) -> str:
+        """V001, V002, ... skipping anything already taken."""
+        n = 1
+        while f"V{n:03d}" in self.visits:
+            n += 1
+        return f"V{n:03d}"
+
     def _apply_confirmed_blocks(self) -> int:
         """Push reviewed-and-confirmed blocks into the live snapshots.
 
@@ -352,7 +544,15 @@ class LabSession:
         for cid, blocks in by_coord.items():
             snap = self.state.calendars.get(cid)
             if snap is None:
-                continue
+                if cid not in self.state.coordinators:
+                    continue        # a block for somebody not on the roster
+                # A live board starts with no snapshots at all, because an
+                # absent one reads as expired and therefore as unknown rather
+                # than free. Reading somebody's calendar is exactly the moment
+                # they stop being unknown, so the snapshot is created here.
+                snap = CalendarSnapshot(
+                    coordinator_id=cid, provider="manual", fetched_at=self.now)
+                self.state.calendars[cid] = snap
             keep = [b for b in snap.blocks if getattr(b, "source", None) != "pdf_import"]
             snap.blocks = keep + blocks
             # Stamp with the board's own clock, not the wall clock. The demo lab
@@ -737,6 +937,19 @@ class LabSession:
 
     # -- reads ---------------------------------------------------------------
 
+    def calendar_source(self) -> str:
+        """Where the busy time on this board actually came from.
+
+        Reported rather than assumed, because "demo" printed next to real
+        uploaded calendars is the kind of label that gets believed. A live
+        board says ``none`` until a calendar has been read, and ``upload``
+        once one has.
+        """
+        if self.mode == DEMO:
+            return "demo"
+        read = any(c.blocks for c in self.state.calendars.values())
+        return "upload" if read else "none"
+
     def health(self) -> dict:
         return {
             "ok": True,
@@ -746,7 +959,8 @@ class LabSession:
             "review_band": round(self.cfg.epsilon_review_band, 3),
             "review_band_calibrated": self.cfg.epsilon_calibrated,
             "graph_auth_mode": self.cfg.graph_auth_mode,
-            "calendar_source": "demo",
+            "calendar_source": self.calendar_source(),
+            "mode": self.mode,
             "reads_titles": False,
             "weights": self.cfg.weights.as_dict(),
             "week_of": self.epoch.strftime("%Y-%m-%d"),
