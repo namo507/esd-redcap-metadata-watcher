@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESD Visitboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="assets/sunburst.png">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <img src="assets/esd-logo.png" alt="The Early Social Development Lab" class="logo-lab">
+      <img src="assets/uofsc.png" alt="University of South Carolina" class="logo-uofsc">
+    </div>
+    <div class="topbar-right">
+      <span class="sync-badge" id="sync-badge" title="How current the availability evidence is">&nbsp;</span>
+      <span class="privacy-badge" title="The board reads free/busy only. Event titles are never requested and never received.">
+        <span class="lock">&#128274;</span> Free/busy only<span class="long"> &middot; no meeting subjects</span>
+      </span>
+      <button id="btn-reset" class="btn btn-ghost" type="button">Reset board</button>
+    </div>
+  </div>
+  <nav class="nav" id="nav" aria-label="Sections">
+    <button class="navbtn is-on" data-section="team" type="button">The team</button>
+    <button class="navbtn" data-section="assign" type="button">Assign a visit</button>
+    <button class="navbtn" data-section="sync" type="button">Calendars</button>
+    <button class="navbtn" data-section="logic" type="button">How it decides</button>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="hero-in">
+    <p class="eyebrow" id="hero-eyebrow">The week</p>
+    <h1 id="hero-title">Plan the week.</h1>
+    <p class="hero-sub" id="hero-sub">Pick a visit. The board checks every calendar, rules out who cannot go,
+      and explains who it would send.</p>
+    <p class="demo-note"><b>Demonstration.</b> Coordinator names are the real
+      roster; every schedule, credential and workload figure on this page is
+      synthetic sample data, not anyone's actual calendar.</p>
+    <div class="kpis" id="kpis"></div>
+  </div>
+</section>
+
+<main class="wrap">
+
+  <!-- ============================================================ THE WEEK -->
+  <section id="sec-team">
+    <div class="card">
+      <div class="card-head"><div>
+        <p class="eyebrow">This week</p>
+        <h2 id="team-title">Who is free, and what they can run</h2>
+      </div>
+        <div id="team-key" class="cal-key"></div>
+      </div>
+      <div id="team-table"></div>
+    </div>
+
+    <div class="card" id="due-card" style="margin-top:1.3rem" hidden>
+      <div class="card-head"><div>
+        <p class="eyebrow">Protocol clock</p>
+        <h2>Who is owed a visit next</h2>
+      </div>
+        <div id="due-key" class="cal-key"></div>
+      </div>
+      <div id="due-list"></div>
+    </div>
+  </section>
+
+  <!-- ========================================================= ASSIGN -->
+  <section id="sec-assign" hidden>
+    <div class="layout">
+      <aside>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Visits</p>
+              <h2 id="queue-count">&nbsp;</h2>
+            </div>
+          </div>
+          <div class="filters">
+            <input id="filter-search" class="input" type="search" placeholder="Search a family" aria-label="Search visits">
+            <div class="chipbar" id="filter-status" role="group" aria-label="Filter by status">
+              <button class="chip is-on" data-status="all" type="button">All</button>
+              <button class="chip" data-status="needs_assignment" type="button">To assign</button>
+              <button class="chip" data-status="assigned" type="button">Assigned</button>
+            </div>
+          </div>
+          <ul class="queue" id="queue"></ul>
+        </div>
+      </aside>
+      <section>
+        <div id="detail"><div class="card empty">Loading the board&hellip;</div></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ======================================================= WORKLOAD -->
+  <!-- =========================================================== SYNC -->
+  <section id="sec-sync" hidden>
+    <div class="card">
+      <div class="card-head"><div>
+        <p class="eyebrow">Evidence</p>
+        <h2>Upload a calendar</h2>
+      </div></div>
+      <p class="note" style="max-width:74ch">
+        Print the Outlook calendar to PDF and drop it here. Nothing to set up.
+        <b>Work Week</b> or <b>Day</b> view gives times the board can schedule
+        against; a <b>Month</b> view shows who has room, but never claims anyone
+        is free at a particular hour.
+      </p>
+      <div id="sync-upload"></div>
+      <div id="sync-result"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem" id="sync-detail-card" hidden>
+      <div class="card-head"><div>
+        <p class="eyebrow">What the calendars say</p>
+        <h2 id="sync-detail-title">Availability</h2>
+      </div>
+        <div class="segmented" id="sync-tabs" role="tablist"></div>
+      </div>
+      <div id="sync-panel"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem">
+      <div class="card-head"><div>
+        <p class="eyebrow">Take it with you</p><h2>Exports</h2>
+      </div></div>
+      <div class="exports" id="exports"></div>
+      <div class="uploads" id="uploads" style="margin-top:1rem"></div>
+    </div>
+
+    <details class="card details-card" style="margin-top:1.3rem" id="sync-more">
+      <summary><b>Upload history and colour matching</b></summary>
+      <div id="sync-colors-card" hidden>
+        <p class="note" style="max-width:74ch;margin-top:1rem">
+          This export's header lost its calendar colours, so the board could not
+          tell who is who. Read the colours off Outlook and record them once.
+        </p>
+        <div id="sync-colors"></div>
+      </div>
+      <div id="sync-history"></div>
+    </details>
+  </section>
+
+  <!-- ========================================================== LOGIC -->
+  <section id="sec-logic" hidden>
+    <div class="card">
+      <div class="card-head"><div>
+        <p class="eyebrow">The whole picture</p>
+        <h2>From a calendar to a decision</h2>
+      </div>
+        <span class="note">Tap any step</span>
+      </div>
+      <div id="logic-map"></div>
+      <div id="logic-detail"></div>
+    </div>
+
+    <div class="card" style="margin-top:1.3rem">
+      <div class="card-head"><div>
+        <p class="eyebrow">Worked example</p>
+        <h2 id="logic-example-title">The sum behind the top choice</h2>
+      </div></div>
+      <div id="logic-example"></div>
+    </div>
+  </section>
+
+  <!-- =========================================================== DATA -->
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <img src="assets/esd-logo.png" alt="" class="logo-lab foot-logo">
+    <img src="assets/uofsc.png" alt="" class="logo-uofsc foot-logo">
+    <p id="foot-meta"></p>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- One file per section, loaded in order. core first because the rest
+     assume its helpers exist; boot last because it starts everything. -->
+<!-- Where the API lives. Loaded before everything so core.js can read it. -->
+<script src="config.js"></script>
+<script src="static-board.js"></script>
+<script src="js/core.js"></script>
+<script src="js/team.js"></script>
+<script src="js/assign.js"></script>
+<script src="js/calendars.js"></script>
+<script src="js/logic.js"></script>
+<script src="js/boot.js"></script>
+</body>
+</html>
