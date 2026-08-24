@@ -152,6 +152,28 @@ def test_demonstration_notice_is_visible_not_buried():
            "the demonstration notice must sit in the hero, not the footer")
 
 
+def test_the_snapshot_never_ships_evidence_from_the_future():
+    """A baked-in negative age vetoes the whole roster on the public board.
+
+    The published copy is a frozen moment. If it is frozen while the board's
+    week anchor is ahead of the clock, every calendar in it carries a future
+    timestamp, the freshness gate reads that as never synced, and the offline
+    board shows nobody as available. It cannot correct itself, because a
+    snapshot has no clock of its own.
+
+    This shipped once: a build at 00:33 UTC on a Monday published
+    last_synced_minutes of -467 and stayed live, because the workflow that
+    republishes was watching only the frontend directory.
+    """
+    health = board().get("meta", {}).get("health", {})
+    age = health.get("last_synced_minutes")
+    expect(age is not None, "the snapshot no longer records an evidence age")
+    expect(age >= 0,
+           f"the snapshot was built with evidence {abs(age)} minutes in the "
+           f"future (last_synced_minutes={age}). The week anchor was ahead of "
+           f"the clock when it was baked.")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

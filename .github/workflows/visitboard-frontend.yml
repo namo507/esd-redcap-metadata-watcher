@@ -24,6 +24,14 @@ on:
     branches: [main]
     paths:
       - 'projects/Weighted Visit Assignment/frontend/**'
+      # The published page ships board.json, and that snapshot is built by
+      # the engine rather than written by hand. Watching only frontend/ meant
+      # an engine, roster or weights change left the public board showing old
+      # numbers with nothing to indicate it. That is how a snapshot carrying a
+      # negative evidence age stayed live after the bug behind it was fixed.
+      - 'projects/Weighted Visit Assignment/esd_scheduler/**'
+      - 'projects/Weighted Visit Assignment/backend/**'
+      - 'projects/Weighted Visit Assignment/config/**'
       - '.github/workflows/visitboard-frontend.yml'
   workflow_dispatch:
 
