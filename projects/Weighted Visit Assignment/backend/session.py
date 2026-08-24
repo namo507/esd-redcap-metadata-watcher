@@ -165,6 +165,24 @@ def board_mode() -> str:
     return LIVE if value == LIVE else DEMO
 
 
+def week_epoch(now: datetime) -> datetime:
+    """The Monday 09:00 this week's board is anchored to, never in the future.
+
+    The synthetic lab is built against this so its visits land in the current
+    week. Anchoring on Monday 09:00 is fine for all but nine hours of the week:
+    between midnight and 09:00 on a Monday, that instant has not happened yet.
+
+    A lab anchored ahead of the clock stamps its calendar evidence in the
+    future, the freshness gate reads a negative age, and every coordinator
+    looks unsynced. That is a real veto of the whole roster caused by nothing
+    but the hour the board happened to start, and it is why this is clamped
+    rather than left to a comment. It bit CI on the first Monday-morning run.
+    """
+    epoch = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    epoch -= timedelta(days=epoch.weekday())        # back to Monday
+    return min(epoch, now)
+
+
 class LabSession:
     """Thread-safe wrapper around one LabState plus its audit store."""
 
@@ -187,9 +205,7 @@ class LabSession:
             #           it so the demo's visits always land in the current week.
             #   now   : the real wall clock, read fresh every time. Evidence
             #           ages, protocol windows and the header all read from it.
-            self.epoch = datetime.now().replace(
-                hour=9, minute=0, second=0, microsecond=0)
-            self.epoch -= timedelta(days=self.epoch.weekday())   # anchor on Monday
+            self.epoch = week_epoch(datetime.now())
             self.mode = board_mode()
             if self.mode == LIVE:
                 self.state, visits = build_live(self.epoch)

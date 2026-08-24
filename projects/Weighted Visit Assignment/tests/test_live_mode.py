@@ -207,6 +207,32 @@ def test_a_lab_calendar_is_not_reported_as_an_unknown_person():
            f"the lab's own calendars are not explained at all: {notes[:200]}")
 
 
+def test_the_week_anchor_is_never_in_the_future():
+    """Nine hours a week, the Monday 09:00 anchor had not happened yet.
+
+    The board stamps its calendar evidence against this anchor. Ahead of the
+    clock it produces evidence with a negative age, the freshness gate reads
+    that as never synced, and the entire roster is vetoed for no reason but
+    the hour the server started. CI ran at 00:33 UTC on a Monday and caught
+    it; every earlier run had happened later in the day.
+    """
+    from datetime import timedelta
+    from backend.session import week_epoch
+
+    start = datetime(2026, 8, 24, 0, 0)          # a Monday, midnight
+    ahead = []
+    for hour in range(24 * 14):                  # two full weeks, hour by hour
+        now = start + timedelta(hours=hour)
+        epoch = week_epoch(now)
+        if epoch > now:
+            ahead.append((now.isoformat(), epoch.isoformat()))
+    expect(not ahead, f"the anchor is ahead of the clock at: {ahead[:4]}")
+
+    # And it still anchors on Monday once Monday morning has actually arrived.
+    expect(week_epoch(datetime(2026, 8, 26, 15, 0)) == datetime(2026, 8, 24, 9, 0),
+           "mid-week no longer anchors to Monday 09:00")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
