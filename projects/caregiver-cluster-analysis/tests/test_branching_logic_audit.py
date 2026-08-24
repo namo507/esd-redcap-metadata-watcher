@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+import pytest
 
 from caregiver_analysis_pipeline import (
     engineer_behavioral_features_and_rules,
@@ -8,6 +11,21 @@ from caregiver_analysis_pipeline import (
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = PROJECT_DIR.parents[1]
+
+# Every test here goes through load_redcap_sources, which reads the repository
+# .env and pulls from REDCap unless a same-day cache is already on disk. That
+# makes them integration tests against a live, credentialed API, not unit
+# tests, and there is no honest way to run them on a machine without access.
+#
+# They were failing rather than skipping in CI, which reads as a broken build
+# instead of an absent credential, and hid a genuinely broken workflow behind
+# noise. Anyone with a .env still runs them exactly as before.
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("REDCAP_API_URL")
+    and not (REPOSITORY_ROOT / ".env").exists(),
+    reason="needs REDCap credentials: set REDCAP_API_URL or add a repository .env",
+)
 
 
 def _load_upgrade_state():
