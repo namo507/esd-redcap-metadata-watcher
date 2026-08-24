@@ -10,6 +10,7 @@ board does on the next start, and none of it is a code change.
 | `protocol-schedule.json` | Checkpoint offsets, windows and visit lengths | Only against the manual |
 | `reliability-matrix.json` | Who may run which assessment | Only against the manual |
 | `lab-resources.json` | Tech kits, closed days, working hours, vehicles | Yes, see below |
+| `visit-profiles.json` | Assessment catalog, visit profiles, pairing and special rules | Yes, see below |
 | `calendar-roles.json` | Which overlaid calendars are people and which are policy | Yes |
 | `calendar-colors.json` | Which Outlook colour belongs to whom | Through the board, not by hand |
 | `calendar-colors.example.json`, `calendar-map.example.json` | Templates to copy. Not read by anything | n/a |
@@ -146,6 +147,36 @@ scheduled (no exceptions to this)"* — but not the dates. Add them as
 `"2026-11-26"` strings. Until you do, the board cannot check the rule and says
 so rather than quietly scheduling through a holiday. Unlike a Friday, a holiday
 cannot be overridden, because the manual says it cannot.
+
+## Visit profiles and who may staff them
+
+`visit-profiles.json` holds four things, all data, none of it in any Python
+conditional:
+
+**The assessment catalog.** Every assessment with a stable code, its protocol,
+its time point and its version. The point of the version field is that
+`CSBS_MODIFIED_6M` and `CSBS_9_12M` are separate rows: being signed off on one
+never grants the other. That is the single most dangerous thing to get wrong
+here, and it is prevented by the shape of the data rather than by anyone
+remembering.
+
+**Visit profiles.** One per protocol, time point and setting, carrying the
+duration, how many clinicians and techs, whether a Friday is allowed and
+whether a vehicle is needed. `NANO_24M_REMOTE` asks for nobody at all.
+
+**Requirements**, with three types. `required` must be held individually.
+`alternative` members sharing an `alternative_group` are satisfied by any one
+of them, which is how the sibling evaluation's "ADOS plus Mullen or DAS" is
+expressed. `conditional` is reported but never blocks, because the manual
+makes those a clinical judgement rather than a scheduling rule.
+
+**Pairing constraints and special rules.** Prohibited pairs, partner
+requirements, and protocol or population rules. Every one carries an `active`
+flag and an `approval_owner`, and the two seeded from discussion ship
+**inactive**: the Sofia and Maggie restriction, because nobody has confirmed
+its scope, and the preterm NNNS preference, because neither Axie nor Bryson is
+on the roster yet. An inactive rule changes nothing until somebody who knows
+the case turns it on.
 
 ## Two files that are transcriptions, not opinions
 

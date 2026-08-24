@@ -29,6 +29,7 @@ from esd_scheduler.config import EngineConfig, load_config
 from esd_scheduler.demo import build_lab
 from esd_scheduler.lab import build_live
 from esd_scheduler.drift import weekly_drift
+from esd_scheduler import eligibility
 from esd_scheduler.calendar_roles import ROLE_LABEL, ROLE_MEANING, POLARITY
 from esd_scheduler.constraints import (
     ROUTE_MANUAL,
@@ -1263,6 +1264,39 @@ class LabSession:
              if c.name == visit.checkpoint), None)
         return bool(planned and planned.remote)
 
+    def _profile_config(self):
+        """Visit profiles and eligibility rules, read once per board."""
+        if getattr(self, "_profiles", None) is None:
+            self._profiles = eligibility.ProfileConfig.load()
+        return self._profiles
+
+    def eligible_for(self, visit):
+        """Who may staff this visit at all, before anybody is scored.
+
+        Being free, being owed a visit, or having seen the family before
+        cannot make somebody able to run an assessment they are not signed off
+        on. So this decides the pool and the weighted score only orders what
+        survives it.
+        """
+        return eligibility.evaluate(
+            visit, list(self.state.coordinators), self.roster_config,
+            self.matrix, self.now, self._profile_config())
+
+    def _eligible_pool(self, visit, pool):
+        """Drop anyone the eligibility layer refuses, before ranking.
+
+        Shared by the screen and the assignment path on purpose. When only one
+        of them filtered, the board showed a person as ineligible and then
+        accepted an assignment to them, which is the same class of bug the
+        Layer 1 gates had before they were given one implementation.
+        """
+        elig = self.eligible_for(visit)
+        if elig.profile_id and not elig.remote:
+            allowed = set(elig.eligible_ids)
+            pool.candidates = [c for c in pool.candidates
+                               if c.coordinator_id in allowed]
+        return pool, elig
+
     def candidates(self, visit_id: str) -> dict:
         """The full ranked pool for one visit, in the words the screen needs."""
         with self._lock:
@@ -1293,6 +1327,7 @@ class LabSession:
                 }
 
             pool = score_visit(visit, self.state, self.cfg, self.now)
+            pool, elig = self._eligible_pool(visit, pool)
 
             # Layer 1 gates, run over the scored pool. These were written to the
             # Master spec and covered by their own tests, but nothing in the
@@ -1412,6 +1447,9 @@ class LabSession:
                 "excluded": excluded,
                 "review_band": round(pool.epsilon_used, 3),
                 "close_call": bool(ranked and ranked[0]["review_band"]),
+                # Rule by rule, for everybody weighed. A recommendation nobody
+                # can interrogate is a recommendation nobody should act on.
+                "eligibility": elig.to_dict(),
                 "notices": self._notices(pool, ranked),
                 "assigned": self.assignments.get(visit_id),
             }
@@ -1486,6 +1524,7 @@ class LabSession:
             visit = self.visits[visit_id]
             family = self.state.families[visit.family_id]
             pool = score_visit(visit, self.state, self.cfg, self.now)
+            pool, _ = self._eligible_pool(visit, pool)
             survivors, gated = self._apply_gates(visit, family, pool)
             if not survivors:
                 raise ValueError("Nobody is eligible for this visit.")

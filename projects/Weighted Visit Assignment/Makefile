@@ -52,6 +52,7 @@ test:
 	$(PY) tests/test_live_mode.py
 	$(PY) tests/test_docs.py
 	$(PY) tests/test_resources.py
+	$(PY) tests/test_eligibility.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 

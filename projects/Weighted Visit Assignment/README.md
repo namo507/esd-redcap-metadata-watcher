@@ -124,6 +124,7 @@ view means opening `team.js`.
     test_frontend.py        the page's routing and stylesheet invariants
     test_docs.py            these maps still matching the tree
     test_resources.py       tech kits, closed days, hours, vehicles
+    test_eligibility.py     who may staff a visit, before any scoring
     test_deployment.py      the container, the ports, the paths
     test_static_board.py    the offline snapshot matching the live engine
     test_schedule.py        when each checkpoint is due

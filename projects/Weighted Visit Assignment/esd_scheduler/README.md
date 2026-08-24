@@ -37,6 +37,7 @@ rule underneath all of it: an absent calendar means *unknown*, never free.
 
     engine.py       orchestration: score one visit, plan a week, commit
     feasibility.py  Layer 1 hard eligibility
+    eligibility.py  who may staff a visit at all, decided before scoring
     constraints.py  the individual gates, in the order they fire
     scoring.py      Layer 2, the weighted sum
     ranking.py      Layer 3, the review band, ties, surprise detection
