@@ -293,6 +293,20 @@ def test_a_participant_id_that_is_not_a_nano_id_is_refused():
         raise AssertionError(f"{bad!r} was accepted as a NANO participant ID")
 
 
+def test_the_family_label_shows_the_whole_participant_id():
+    """"Family 031" is a different participant from family 5031.
+
+    The label used to drop the first character, which was right while ids
+    were written F5031 and wrong the moment the lab's own four-digit form
+    arrived. A scheduler reading a truncated id looks up the wrong child.
+    """
+    s = live_session("labels.db")
+    s.add_visit(dict(A_VISIT, family_id="5031"))
+    summary = s.visit_summary(s.order[0])
+    expect("5031" in summary["family_label"],
+           f"the label is {summary['family_label']!r}, which is not family 5031")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
