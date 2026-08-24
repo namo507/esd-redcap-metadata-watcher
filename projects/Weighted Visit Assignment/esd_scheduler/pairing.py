@@ -67,17 +67,36 @@ class Pair:
         }
 
 
-def clinicians_for(visit, matrix, ids: Sequence[str]) -> Tuple[List[str], bool]:
+def clinicians_for(visit, matrix, ids: Sequence[str],
+                   roster=None) -> Tuple[List[str], bool]:
     """Who may run this visit's assessments, and whether the chart covered it.
 
     Returns ``(ids, verified)``. ``verified`` is False when the chart lists no
     requirements for the visit, which means the answer is "the chart does not
     say" rather than "anyone will do".
+
+    Two separate questions, both from the manual, and passing one is not
+    passing the other:
+
+    * **Can they run the assessments?** The reliability chart answers that,
+      assessment by assessment.
+    * **Can they run the visit at all?** The chart's first column is headed
+      "Visits Can Do Solo" and prints an age range beside some names and
+      nothing beside others. Ramiro is reliable in Bayley 9-12m and still has
+      no range, so he is a tech on a 9m visit and never its clinician.
+
+    The roster is optional so existing callers keep working; when it is given,
+    the second question is asked too.
     """
     required = matrix.required_for(visit.protocol, visit.checkpoint)
-    if not required:
-        return list(ids), False
-    return [c for c in ids if all(matrix.is_reliable(c, a) for a in required)], True
+    if required:
+        ids = [c for c in ids if all(matrix.is_reliable(c, a) for a in required)]
+    if roster is not None:
+        by_id = roster.by_id()
+        ids = [c for c in ids
+               if c in by_id
+               and roster.can_be_clinician_for(by_id[c], visit.checkpoint)]
+    return list(ids), bool(required)
 
 
 def _combine(clin_components, tech_components, weights) -> Tuple[dict, dict, float]:
@@ -148,11 +167,23 @@ def rank_pairs(
     ids = list(by_id)
     problems: List[str] = []
 
-    clinician_ids, verified = clinicians_for(visit, matrix, ids)
+    clinician_ids, verified = clinicians_for(visit, matrix, ids, roster=roster)
     if not clinician_ids:
-        problems.append(
-            "Nobody eligible is signed off on every assessment this visit needs, "
-            "so it cannot be staffed as the manual requires.")
+        # Two different ways to have nobody, and a scheduler needs to know
+        # which: an assessment gap is closed by training, a missing solo range
+        # is closed by asking whoever keeps the chart.
+        signed_off, _ = clinicians_for(visit, matrix, ids)
+        if signed_off and roster is not None:
+            problems.append(
+                f"{len(signed_off)} eligible person(s) are signed off on this "
+                f"visit's assessments, but none of them can run a "
+                f"{visit.checkpoint} visit on their own. The manual's "
+                f"'Visits Can Do Solo' column decides that, not the "
+                f"assessment list.")
+        else:
+            problems.append(
+                "Nobody eligible is signed off on every assessment this visit "
+                "needs, so it cannot be staffed as the manual requires.")
         return [], problems
     if not verified:
         problems.append(

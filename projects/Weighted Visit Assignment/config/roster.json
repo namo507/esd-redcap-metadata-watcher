@@ -23,7 +23,28 @@
     "'can_tech' says someone can run the tech side of a visit. The manual does",
     "not publish a tech certification list, so everyone active carries it until",
     "'credentials' are practical requirements for getting a visit done -- consent-taking, driving, kit handling. They are NOT clinical reliability, which lives in reliability-matrix.json. Everyone active holds CONSENT and DRIVING; the rest are synthetic until the lab records them.",
-    "the lab says otherwise; set it false to exclude somebody."
+    "the lab says otherwise; set it false to exclude somebody.",
+    "",
+    "ROLES AND WHAT THEY ALLOW. 'roles' is what the board asks about a person,",
+    "never their name. coordinator schedules and has an in-lab day; clinician",
+    "can be THE clinician on a visit; tech can be the tech; grad_student goes",
+    "on visits on their own calendar's time and the manual says to check with",
+    "them before offering one, so the board flags that rather than assuming.",
+    "",
+    "solo_from / solo_to are the manual's 'Visits Can Do Solo' column, which",
+    "is REAL and transcribed: Lauren and Sanjana 1m-12m, Makenzie 6m-12m.",
+    "Maggie, Ramiro, Sofia and Morgan have no range printed beside their name,",
+    "so they cannot be the clinician however many assessments they are signed",
+    "off on. Being reliable in one assessment is not being able to run a visit.",
+    "",
+    "only_checkpoints overrides the range for a row like Emma's, which reads",
+    "'*only schedule for 36m visits*'. She is not a coordinator so she is not",
+    "in this file; the field exists for when somebody like her is.",
+    "",
+    "TO ADD A GRADUATE STUDENT: copy any row, give them roles",
+    "[\"grad_student\", \"tech\"], set confirm_before_offering true, and leave",
+    "solo_from/solo_to unset unless they can run a visit alone. Nothing else",
+    "changes; no code knows their name."
   ],
   "confirmed": false,
   "coordinators": [
@@ -47,7 +68,13 @@
         "CONSENT",
         "DRIVING",
         "EEG"
-      ]
+      ],
+      "roles": [
+        "coordinator",
+        "tech"
+      ],
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C02",
@@ -67,7 +94,16 @@
         "CONSENT",
         "DRIVING",
         "EEG"
-      ]
+      ],
+      "roles": [
+        "coordinator",
+        "clinician",
+        "tech"
+      ],
+      "solo_from": "1m",
+      "solo_to": "12m",
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C03",
@@ -86,7 +122,16 @@
       "credentials": [
         "CONSENT",
         "DRIVING"
-      ]
+      ],
+      "roles": [
+        "coordinator",
+        "clinician",
+        "tech"
+      ],
+      "solo_from": "1m",
+      "solo_to": "12m",
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C04",
@@ -106,7 +151,12 @@
         "CONSENT",
         "DRIVING",
         "PHLEBOTOMY"
-      ]
+      ],
+      "roles": [
+        "coordinator"
+      ],
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C05",
@@ -127,7 +177,12 @@
       "credentials": [
         "CONSENT",
         "DRIVING"
-      ]
+      ],
+      "roles": [
+        "coordinator"
+      ],
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C06",
@@ -147,7 +202,13 @@
         "CONSENT",
         "DRIVING",
         "EEG"
-      ]
+      ],
+      "roles": [
+        "coordinator",
+        "tech"
+      ],
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     },
     {
       "id": "C07",
@@ -167,7 +228,16 @@
         "CONSENT",
         "DRIVING",
         "EEG"
-      ]
+      ],
+      "roles": [
+        "coordinator",
+        "clinician",
+        "tech"
+      ],
+      "solo_from": "6m",
+      "solo_to": "12m",
+      "only_checkpoints": [],
+      "confirm_before_offering": false
     }
   ]
 }

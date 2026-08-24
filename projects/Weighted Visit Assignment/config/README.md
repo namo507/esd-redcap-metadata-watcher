@@ -36,6 +36,43 @@ Raising one weight means lowering another. `esd_scheduler/sensitivity.py` will
 perturb one at a time and report how much the ranking moves, which is the
 honest way to see whether a change matters before adopting it.
 
+## Roles, and adding a person
+
+`roster.json` is the single source for who the board schedules, and `roles`
+is what the board asks about them. Never their name.
+
+| Role | What it allows |
+|---|---|
+| `coordinator` | Schedules visits, has an in-lab day |
+| `clinician` | Can be *the* clinician on a visit, within their solo range |
+| `tech` | Can be the tech on a visit |
+| `grad_student` | Goes on visits on their own calendar's time. The manual says to check with them before offering one, so the board flags it |
+
+`solo_from` and `solo_to` are the manual's **"Visits Can Do Solo"** column,
+transcribed: Lauren and Sanjana 1m–12m, Makenzie 6m–12m. Maggie, Ramiro, Sofia
+and Morgan have no range printed beside their name, so they cannot be the
+clinician however many assessments they are signed off on. Ramiro is reliable
+in Bayley 9-12m and still techs a 9m visit rather than running it. Being
+signed off on an assessment is not the same as being able to run the visit,
+and the board asks both questions separately.
+
+`only_checkpoints` overrides the range, for a row like Emma's which reads
+*"only schedule for 36m visits"*.
+
+**To add a graduate student**, copy a row and set:
+
+```json
+{
+  "id": "G01",
+  "name": "...",
+  "roles": ["grad_student", "tech"],
+  "confirm_before_offering": true
+}
+```
+
+Leave `solo_from`/`solo_to` unset unless they can run a visit alone. No code
+knows anyone's name, so nothing else changes.
+
 ## The roster
 
 `roster.json` is the single source for who the board schedules. Both the demo
