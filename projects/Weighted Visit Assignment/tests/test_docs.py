@@ -61,6 +61,34 @@ def test_every_config_file_is_explained():
                "Say what it decides and whether it is safe to edit by hand.")
 
 
+def test_every_endpoint_is_documented():
+    """An undocumented route is one nobody outside this file knows exists."""
+    import re
+    server = read("backend", "server.py")
+    routes = set(re.findall(r'@(?:get|post)\("([^"]+)"\)', server))
+    expect(routes, "no routes could be read out of backend/server.py")
+    all_listed(routes, read("backend", "README.md"), "backend/README.md",
+               "Add it to the table for reads, changes or calendars.")
+
+
+def test_every_backend_module_is_documented():
+    modules = {
+        f for f in os.listdir(os.path.join(ROOT, "backend"))
+        if f.endswith(".py") and not f.startswith("__")
+    }
+    all_listed(modules, read("backend", "README.md"), "backend/README.md",
+               "Add a row saying what it is for.")
+
+
+def test_every_frontend_file_is_documented():
+    """The README described one app.js long after it became six files."""
+    root = os.path.join(ROOT, "frontend")
+    names = {f for f in os.listdir(root) if f.endswith((".js", ".css", ".html"))}
+    names |= {f for f in os.listdir(os.path.join(root, "js")) if f.endswith(".js")}
+    all_listed(names, read("frontend", "README.md"), "frontend/README.md",
+               "Add it to the file list with one line on what it draws.")
+
+
 def test_every_test_file_runs_in_make_test():
     """A test nobody runs is not a test."""
     makefile = read("Makefile")

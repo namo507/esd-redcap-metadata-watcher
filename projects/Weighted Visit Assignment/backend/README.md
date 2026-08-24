@@ -15,22 +15,51 @@ python3 backend/tests/test_api.py    # 12 end-to-end tests
 |---|---|
 | `server.py` | Routing, JSON responses, static file serving, path-traversal guard |
 | `session.py` | One `LabState` plus its audit store; translates engine output into what a screen needs |
+| `build_static.py` | Freezes the board into `dist-static/` so the page works with no API |
+| `export_snapshot.py` | Writes the board out for the exports the queue offers |
 | `tests/test_api.py` | Boots a real server on an ephemeral port and talks HTTP to it |
 
 ## Endpoints
 
+Reading the board:
+
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/api/health` | Version, weight vector, auth mode, privacy posture |
+| GET | `/api/health` | Mode, weight vector, calendar source, privacy posture |
 | GET | `/api/board` | Everything the page needs in one round trip |
 | GET | `/api/roster` | Coordinators with current load |
+| GET | `/api/coordinators` | The team table: free hours, sign-offs, day by day |
 | GET | `/api/visits` | The visit queue |
-| GET | `/api/visit?id=V001` | One visit: ranked pool, exclusions with reasons, notices |
+| GET | `/api/visit?id=V001` | One visit: ranked pairs, exclusions with reasons, notices |
+| GET | `/api/availability` | Who is free, slot by slot, across the week |
+| GET | `/api/schedule` | Which family is owed a visit next, and when |
 | GET | `/api/fairness` | Weekly spread, CV, shuffle-test p-value |
 | GET | `/api/week` | Greedy vs optimiser regret |
+| GET | `/api/logic` | The decision map the "How it decides" section draws |
+
+Changing it:
+
+| Method | Path | Purpose |
+|---|---|---|
 | POST | `/api/assign` | `{visit_id, coordinator_id, reason_code?, reason_text?}` |
 | POST | `/api/unassign` | `{visit_id}` |
-| POST | `/api/reset` | Rebuild the synthetic lab |
+| POST | `/api/visits` | Enter a real visit. See `config/README.md` on live mode |
+| POST | `/api/visits/remove` | `{visit_id}`, for a visit that was entered |
+| POST | `/api/reset` | Rebuild the board from scratch |
+
+Calendars:
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/calendar/imports` | Every upload on file, newest first |
+| POST | `/api/calendar/upload` | `{filename, data}` with the file base64-encoded |
+| POST | `/api/calendar/review` | Confirm or reject one block read from an image |
+| POST | `/api/calendar/review-all` | Settle every pending block at once |
+| GET | `/api/calendar/colors` | The stored colour-to-person map |
+| POST | `/api/calendar/colors` | Save it, with who confirmed it |
+
+`tests/test_docs.py` checks this list against the routes the server actually
+registers, so an endpoint added without a line here fails the suite.
 
 ## Rules this layer enforces
 

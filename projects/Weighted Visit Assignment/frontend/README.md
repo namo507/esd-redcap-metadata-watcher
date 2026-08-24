@@ -1,15 +1,27 @@
 # Frontend
 
-One HTML file, one stylesheet, one script. No framework, no bundler, no
-`node_modules`. The backend serves it from the same origin, so there is no CORS
-config and no second process.
+One HTML file, one stylesheet, and one small script per section. No framework,
+no bundler, no `node_modules`. The backend serves it from the same origin when
+run locally, and the published copy talks to the API cross-origin or falls back
+to a frozen snapshot.
 
 ```
-index.html    structure
-styles.css    ESD design tokens and components
-app.js        fetch, render, assign
-assets/       lab and UofSC logos
+index.html          structure, and the markup for all four sections
+styles.css          ESD design tokens and components
+config.js           API_BASE. Empty means same origin
+static-board.js     the frozen snapshot, used when no API answers
+js/core.js          state, fetch, routing, page chrome
+js/team.js          the team table and the protocol clock
+js/assign.js        the queue, the pair, entering a visit
+js/calendars.js     uploads, what came back, exports
+js/logic.js         the decision map
+js/boot.js          start-up and the once-a-minute refresh
+assets/             lab and UofSC logos, section icons
 ```
+
+Loaded in that order. `core.js` first because everything else uses its
+helpers, `boot.js` last because it starts everything. One file per section, so
+a change to the team view means opening `team.js` and nothing else.
 
 Open it by running the backend: `python3 -m backend.server`.
 
@@ -23,6 +35,14 @@ throughout, 20px card radius, pill buttons. The drifted blues `#005CBE` and
 
 Lab logo sits left of the UofSC logo at equal height, in the header and the
 footer.
+
+Every colour on the page is a token declared at the top of `styles.css`,
+including the state colours for free, busy, warning and blocked. The brand
+palette has no green or amber, so those are declared together with a note
+saying they are borrowed for state only and stay out of the chrome. The one
+deliberate exception is the seven Outlook category swatches: they are the
+hues a coordinator is looking at in Outlook while matching a colour to a
+person, so they are hardcoded and must not become brand tokens.
 
 ## Design rules this page follows
 
