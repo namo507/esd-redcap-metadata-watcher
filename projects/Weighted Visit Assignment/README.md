@@ -123,6 +123,7 @@ view means opening `team.js`.
     test_live_mode.py       running on real data instead of the demo
     test_frontend.py        the page's routing and stylesheet invariants
     test_docs.py            these maps still matching the tree
+    test_resources.py       tech kits, closed days, hours, vehicles
     test_deployment.py      the container, the ports, the paths
     test_static_board.py    the offline snapshot matching the live engine
     test_schedule.py        when each checkpoint is due

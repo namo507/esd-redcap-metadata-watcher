@@ -9,9 +9,11 @@ board does on the next start, and none of it is a code change.
 | `roster.json` | Who exists, what they are signed off on, capacity | Yes |
 | `protocol-schedule.json` | Checkpoint offsets, windows and visit lengths | Only against the manual |
 | `reliability-matrix.json` | Who may run which assessment | Only against the manual |
+| `lab-resources.json` | Tech kits, closed days, working hours, vehicles | Yes, see below |
 | `calendar-roles.json` | Which overlaid calendars are people and which are policy | Yes |
 | `calendar-colors.json` | Which Outlook colour belongs to whom | Through the board, not by hand |
 | `calendar-colors.example.json`, `calendar-map.example.json` | Templates to copy. Not read by anything | n/a |
+| `PowerBI-Theme-ESD.json` | A Power BI theme. Untracked, and nothing here reads it | n/a, see below |
 
 ## The weights
 
@@ -101,12 +103,51 @@ is refused when the visit is entered instead of turning up on a calendar
 invite. A protocol with no entry accepts anything, which is the right default
 for a study still settling its conventions.
 
+## The lab's physical limits
+
+`lab-resources.json` holds the rules that stop a visit happening whatever the
+scores say. All transcribed from the manual except one:
+
+- **`tech_kits`** — `{"NANO": 2}`. *"No more than 2 NANO visits can happen at
+  one time - we only have 2 NANO tech kits."* Buying a third kit is a number
+  here, not a release.
+- **`closed_weekdays`** — `[4]`, Friday. *"Fridays are designated lab meeting
+  days."* A Friday can be taken with a logged override.
+- **`working_hours`** — 9 to 5, Monday to Friday, with 30 minutes' grace.
+  *"anything that is scheduled to go beyond 30 minutes outside of 9am-5pm"* is
+  an out-of-hours visit. The grace is what stops a visit running ten minutes
+  late from counting as an evening shift.
+- **`vehicles`** — the Assigning a Vehicle rules. Two van-trained staff take
+  the van outright; one is enough to take it; nobody trained, or a home marked
+  van inaccessible, means the rental.
+
+**`holidays` ships empty and that is not the same as "there are none."** The
+manual gives the rule — *"On designated USC staff holidays, no visits should be
+scheduled (no exceptions to this)"* — but not the dates. Add them as
+`"2026-11-26"` strings. Until you do, the board cannot check the rule and says
+so rather than quietly scheduling through a holiday. Unlike a Friday, a holiday
+cannot be overridden, because the manual says it cannot.
+
 ## Two files that are transcriptions, not opinions
 
 `protocol-schedule.json` and `reliability-matrix.json` are copied from the ESD
 Lab Scheduling Manual and carry `confirmed: true` with the date they were
 transcribed. They are not defaults anyone invented, and changing a number in
 them means the board no longer matches the manual. Change the manual first.
+
+## The Power BI theme
+
+`PowerBI-Theme-ESD.json` turned up in this folder and is **not tracked by
+git**, so it is on one machine only. **Nothing in this project reads it** —
+the board's colours are tokens at the top of `frontend/styles.css`. It is
+described here because a file sitting in `config/` should say what it is
+rather than leave the next person guessing.
+
+One thing to know before it is used on anything carrying the lab's name: its
+palette is not the ESD one. It opens `#2C3E50`, `#27AE60`, `#E74C3C`, none of
+which are canon. The lab's signature is discovery blue `#3366FF` with science
+blue `#91BAF4` and cool blue `#E6EEFC`, and orange, yellow, red and pink as
+accents that never dominate.
 
 ## Never commit
 

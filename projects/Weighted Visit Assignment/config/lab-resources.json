@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "The lab's physical limits, as data. These are the things that stop a",
+    "visit happening no matter how well anyone scores: there is no third tech",
+    "kit, the university is shut, nobody is trained to drive the van.",
+    "",
+    "Everything here is editable by hand and takes effect on the next start.",
+    "",
+    "WHAT IS TRANSCRIBED FROM THE MANUAL:",
+    "  tech_kits.NANO = 2      'No more than 2 NANO visits can happen at one",
+    "                           time - we only have 2 NANO tech kits.'",
+    "  closed_weekdays = [4]   'Fridays are designated lab meeting days. No",
+    "                           visits should be scheduled on Fridays.'",
+    "  working_hours           'anything scheduled to go beyond 30 minutes",
+    "                           outside of 9am-5pm on Monday-Friday' is an",
+    "                           out-of-hours visit.",
+    "  vehicles                the Assigning a Vehicle section.",
+    "",
+    "WHAT THE LAB STILL HAS TO FILL IN:",
+    "  holidays                'On designated USC staff holidays, no visits",
+    "                           should be scheduled (no exceptions to this).'",
+    "                          The manual does not list the dates, so this",
+    "                          ships empty. An empty list means the board does",
+    "                          not know the holidays rather than that there are",
+    "                          none, and it says so on screen rather than",
+    "                          quietly scheduling through them."
+  ],
+  "confirmed": false,
+
+  "tech_kits": {
+    "NANO": 2
+  },
+
+  "closed_weekdays": [4],
+
+  "holidays": [],
+
+  "working_hours": {
+    "start_hour": 9.0,
+    "end_hour": 17.0,
+    "weekdays": [0, 1, 2, 3, 4],
+    "grace_minutes": 30
+  },
+
+  "vehicles": [
+    {
+      "name": "van",
+      "requires_trained_driver": true,
+      "prefers": "shorter_drive",
+      "note": "At least one staff member must be van-approved, ideally both. Where two visits run at once the shorter drive takes the van, and a visit with two van-trained staff takes it outright."
+    },
+    {
+      "name": "rental",
+      "requires_trained_driver": false,
+      "prefers": "longer_drive",
+      "note": "No training or approval needed. Where two visits run at once the longer drive takes the rental."
+    }
+  ]
+}

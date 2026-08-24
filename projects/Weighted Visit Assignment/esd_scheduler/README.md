@@ -52,6 +52,7 @@ rule underneath all of it: an absent calendar means *unknown*, never free.
 ## The lab itself
 
     models.py       the domain objects everything else passes around
+    resources.py    the lab's physical limits: kits, closed days, vehicles
     roster.py       the people, read from config/roster.json
     lab.py          building a lab state from the roster, inventing nothing
     demo.py         the synthetic lab: invented families, visits and busy time

@@ -35,3 +35,10 @@ data/inbox/*.pdf
 # worktrees are whole checkouts of this repo, so a plain `git add .` on the
 # project directory would otherwise commit a copy of it into itself.
 .claude/
+
+# Spreadsheets in this project mirror the board: roster, protocol schedule,
+# visit queue and history. A queue sheet carries participant IDs and anchor
+# dates, which are birth or expected-due dates, and this repository is public
+# and serves GitHub Pages from itself. No .xlsx has ever been tracked here, so
+# ignoring them keeps a `git add -A` from making one the first.
+*.xlsx

@@ -46,6 +46,13 @@ class Pair:
     slot_start: Optional[datetime] = None
     slot_end: Optional[datetime] = None
     van_capable: bool = False
+    # How many of the two are approved to drive the van. The manual wants at
+    # least one and prefers both, and a visit with two takes the van outright,
+    # so the count matters rather than just whether anybody can.
+    van_trained_count: int = 0
+    vehicle: Optional[str] = None
+    vehicle_reason: str = ""
+    out_of_hours: bool = False
     clinician_verified: bool = True
     notes: List[str] = field(default_factory=list)
 
@@ -62,6 +69,10 @@ class Pair:
                      if self.slot_start else None),
             "slot_start": self.slot_start.isoformat() if self.slot_start else None,
             "van_capable": self.van_capable,
+            "van_trained_count": self.van_trained_count,
+            "vehicle": self.vehicle,
+            "vehicle_reason": self.vehicle_reason,
+            "out_of_hours": self.out_of_hours,
             "clinician_verified": self.clinician_verified,
             "notes": list(self.notes),
         }
@@ -167,6 +178,13 @@ def rank_pairs(
     ids = list(by_id)
     problems: List[str] = []
 
+    # The lab's physical limits, and the family this visit belongs to. Both
+    # are needed to say which vehicle the pair should take: the van wants a
+    # trained driver, and some homes it cannot reach at all.
+    from .resources import LabResources
+    res = LabResources.load()
+    family = (state.families or {}).get(visit.family_id)
+
     clinician_ids, verified = clinicians_for(visit, matrix, ids, roster=roster)
     if not clinician_ids:
         # Two different ways to have nobody, and a scheduler needs to know
@@ -213,6 +231,14 @@ def rank_pairs(
                 by_id[clinician].components, by_id[tech].components, weights)
             coord_c = state.coordinators.get(clinician)
             coord_t = state.coordinators.get(tech)
+            trained = sum(
+                1 for c in (coord_c, coord_t)
+                if getattr(c, "van_trained", False))
+            vehicle, vehicle_reason = res.vehicle_for(
+                drive_minutes=getattr(family, "drive_time_minutes", 0.0) or 0.0,
+                van_trained_on_visit=trained,
+                van_inaccessible=bool(getattr(family, "van_inaccessible", False)),
+            )
             pairs.append(Pair(
                 clinician_id=clinician,
                 clinician_name=by_id[clinician].coordinator_name,
@@ -225,6 +251,10 @@ def rank_pairs(
                 slot_end=end,
                 van_capable=bool(getattr(coord_c, "van_trained", False)
                                  or getattr(coord_t, "van_trained", False)),
+                van_trained_count=trained,
+                vehicle=vehicle,
+                vehicle_reason=vehicle_reason,
+                out_of_hours=bool(start and end and res.is_out_of_hours(start, end)),
                 clinician_verified=verified,
             ))
 

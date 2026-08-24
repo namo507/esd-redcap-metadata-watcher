@@ -78,7 +78,24 @@ def visit_window(protocol: str, checkpoint: str) -> Optional[Tuple[int, int]]:
 
 NDD_ASSESSMENT = "NDD_cross_collab"
 NDD_EXTRA_MINUTES = 60          # Master §6
-NANO_KIT_CEILING = 2            # Master §2 rule 7
+NANO_KIT_CEILING = 2            # Master §2 rule 7, and the fallback if the
+                                # resources config is missing entirely
+
+
+def _resources():
+    """The lab's physical limits, loaded once per process.
+
+    Cached because check_candidate runs per candidate per visit, and re-reading
+    a JSON file inside that loop would be the slowest thing the gate does.
+    """
+    global _RESOURCES
+    if _RESOURCES is None:
+        from .resources import LabResources
+        _RESOURCES = LabResources.load()
+    return _RESOURCES
+
+
+_RESOURCES = None
 ROUTE_MANUAL = "manual_36_month"
 ROUTE_REMOTE = "remote_24_month"
 
@@ -352,12 +369,24 @@ def check_candidate(
                 "This is their in-lab day; they cannot be off-site.",
             )
 
-    # --- 5. Friday prohibition ----------------------------------------------
-    if slot and slot[0].weekday() == 4 and not allow_friday:
-        return GateResult(
-            False, "friday",
-            "Fridays are held for lab meetings. Needs a logged override.",
-        )
+    # --- 5. Days the lab is shut --------------------------------------------
+    # Fridays and university holidays, both read from lab-resources.json so
+    # the lab can add a holiday without a release. The manual treats the two
+    # differently and so does this: a Friday "needs a logged override", while
+    # of holidays it says "no exceptions to this". An override can take a
+    # Friday and cannot take a holiday.
+    if slot:
+        shut = _resources().closed_on(slot[0])
+        if shut:
+            holiday = "holiday" in shut
+            if holiday:
+                return GateResult(
+                    False, "holiday",
+                    f"{slot[0]:%a %d %b} is {shut}.")
+            if not allow_friday:
+                return GateResult(
+                    False, "friday",
+                    f"{slot[0]:%a %d %b} is {shut}. Needs a logged override.")
 
     # --- 6. Calendar evidence, three states ---------------------------------
     if slot:
@@ -375,11 +404,12 @@ def check_candidate(
     # --- 7. NANO kit ceiling -------------------------------------------------
     if visit.protocol == "NANO" and slot:
         overlapping = _overlapping_nano(state, visit, slot)
-        if overlapping >= NANO_KIT_CEILING:
+        ceiling = _resources().kit_ceiling(visit.protocol) or NANO_KIT_CEILING
+        if overlapping >= ceiling:
             return GateResult(
                 False, "kit_ceiling",
-                f"Both NANO tech kits are already out in this window "
-                f"({overlapping} visits overlap).",
+                f"All {ceiling} {visit.protocol} tech kits are already out in "
+                f"this window ({overlapping} visits overlap).",
             )
 
     return GateResult(True)
