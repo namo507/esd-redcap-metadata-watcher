@@ -39,8 +39,14 @@ def demo_session(name="demo.db"):
     return LabSession(db_path=os.path.join(TMP, name))
 
 
+def _week_pdf() -> bytes:
+    """The synthetic work-week print, as bytes, for upload tests."""
+    from make_work_week_pdf import build
+    return open(build(os.path.join(TMP, "week.pdf")), "rb").read()
+
+
 A_VISIT = {
-    "family_id": "F9100",
+    "family_id": "5031",
     "protocol": "NANO",
     "checkpoint": "6m",
     "window_start": "2026-08-20T09:00:00",
@@ -93,7 +99,7 @@ def test_an_entered_visit_survives_a_restart():
     again = live_session("persist.db")
     expect(vid in again.visits,
            f"visit {vid} did not come back after a restart")
-    expect(again.state.families.get("F9100") is not None,
+    expect(again.state.families.get("5031") is not None,
            "the family did not come back with it")
 
 
@@ -125,22 +131,22 @@ def test_a_visit_the_engine_cannot_use_is_refused():
 def test_the_protocol_clock_believes_what_the_lab_says_was_done():
     """A family seen up to 3m is not overdue for their first visit."""
     s = live_session("history.db")
-    s.add_visit(dict(A_VISIT, family_id="F9100"))
-    s.add_visit(dict(A_VISIT, family_id="F9200", completed_through="3m"))
+    s.add_visit(dict(A_VISIT, family_id="5031"))
+    s.add_visit(dict(A_VISIT, family_id="5042", completed_through="3m"))
     rows = {r["family_id"]: r for r in s.schedule_rows()["rows"]}
-    expect(rows["F9100"]["checkpoint"] == "1m",
+    expect(rows["5031"]["checkpoint"] == "1m",
            "a family with no history should owe their first checkpoint")
-    expect(rows["F9200"]["checkpoint"] == "6m",
-           f"a family seen to 3m should owe 6m, not {rows['F9200']['checkpoint']}")
-    expect(rows["F9200"]["completed"] == 3,
-           f"expected 3 completed, got {rows['F9200']['completed']}")
+    expect(rows["5042"]["checkpoint"] == "6m",
+           f"a family seen to 3m should owe 6m, not {rows['5042']['checkpoint']}")
+    expect(rows["5042"]["completed"] == 3,
+           f"expected 3 completed, got {rows['5042']['completed']}")
 
 
 def test_seeded_history_credits_nobody_with_the_visit():
     """Continuity rewards whoever ran the last visit, so it cannot be guessed."""
     s = live_session("credit.db")
     s.add_visit(dict(A_VISIT, completed_through="3m"))
-    seeded = [h for h in s.state.history if h.family_id == "F9100"]
+    seeded = [h for h in s.state.history if h.family_id == "5031"]
     expect(seeded, "no history was seeded")
     expect(all(h.coordinator_id == "" for h in seeded),
            "a seeded past visit named a coordinator who was never recorded")
@@ -231,6 +237,60 @@ def test_the_week_anchor_is_never_in_the_future():
     # And it still anchors on Monday once Monday morning has actually arrived.
     expect(week_epoch(datetime(2026, 8, 26, 15, 0)) == datetime(2026, 8, 24, 9, 0),
            "mid-week no longer anchors to Monday 09:00")
+
+
+def test_a_nano_24m_timepoint_is_never_staffed():
+    """The manual: "we do not see participants for an in-person visit"."""
+    s = live_session("remote.db")
+    s.add_visit(dict(A_VISIT, checkpoint="24m"))
+    detail = s.candidates(s.order[0])
+    expect(not detail.get("pairs"),
+           f"24m offered {len(detail['pairs'])} staffed pairings")
+    expect(detail.get("remote") is True, "24m is not reported as remote")
+    codes = [n.get("code") for n in detail.get("notices", [])]
+    expect("REMOTE_CHECKPOINT" in codes,
+           f"nothing explains why there is no one to send: {codes}")
+
+
+def test_an_in_person_timepoint_is_still_staffed():
+    """The remote rule must not quietly empty the rest of the board."""
+    s = live_session("inperson.db")
+    s.upload_calendar_pdf("week.pdf", _week_pdf())
+    s.add_visit(dict(A_VISIT, checkpoint="9m"))
+    detail = s.candidates(s.order[0])
+    expect(detail.get("pairs"), "a 9m visit offered nobody at all")
+
+
+def test_visit_length_comes_from_the_manual_not_a_default():
+    """Entering a visit without a length should use the protocol's own."""
+    s = live_session("lengths.db")
+    want = {"1m": 1.0, "3m": 1.5, "9m": 2.0, "24m": 1.0, "36m": 3.0}
+    for checkpoint in want:
+        s.add_visit(dict(A_VISIT, checkpoint=checkpoint))
+    got = {q["checkpoint"]: q["duration_hours"] for q in s.queue()}
+    for checkpoint, hours in want.items():
+        expect(got.get(checkpoint) == hours,
+               f"{checkpoint} came out {got.get(checkpoint)}h, manual says {hours}h")
+
+
+def test_a_participant_id_that_is_not_a_nano_id_is_refused():
+    """The manual: "the child's 4 digit NANO ID that starts with 5".
+
+    An ID is how Access, the calendar invite and the visit folder all refer to
+    the same child. A typo caught here costs a second; the same typo caught on
+    the doorstep costs a visit.
+    """
+    s = live_session("ids.db")
+    for good, expected in (("5031", "5031"), ("F5031", "5031"), (" 5042 ", "5042")):
+        out = s.add_visit(dict(A_VISIT, family_id=good, visit_id=f"V{good.strip()}"))
+        expect(out["family_id"] == expected,
+               f"{good!r} was stored as {out['family_id']!r}")
+    for bad in ("6031", "50311", "503", "abc", ""):
+        try:
+            s.add_visit(dict(A_VISIT, family_id=bad))
+        except ValueError:
+            continue
+        raise AssertionError(f"{bad!r} was accepted as a NANO participant ID")
 
 
 if __name__ == "__main__":

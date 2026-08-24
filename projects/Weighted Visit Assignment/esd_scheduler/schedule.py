@@ -59,6 +59,11 @@ class Checkpoint:
     window_after: int = 30
     # How long the visit itself runs, from the manual's visit-length table.
     duration_hours: Optional[float] = None
+    # Some checkpoints are never seen in person. NANO 24m is questionnaires and
+    # a clinical phone call only, so staffing one sends two people to a visit
+    # that does not happen. Recorded here rather than special-cased in the
+    # engine, because whether a checkpoint is in person is a protocol fact.
+    remote: bool = False
 
     def target(self, anchor: date) -> date:
         return anchor + timedelta(days=self.offset_days)
@@ -81,6 +86,21 @@ class ProtocolSchedule:
     confirmed: bool = False
     confirmed_by: str = ""
     source: str = "provisional defaults"
+    # Per-protocol participant ID conventions, read straight from config so a
+    # study can state its own without a code change.
+    family_id_format: Dict[str, dict] = field(default_factory=dict)
+
+    def family_id_rule(self, protocol: str):
+        """The (pattern, description) a participant ID must match, or None.
+
+        Kept as data so a study can state its own convention without a code
+        change, and so the message a coordinator sees names the format in the
+        manual's words rather than showing them a regular expression.
+        """
+        rule = (self.family_id_format or {}).get((protocol or "").upper())
+        if not isinstance(rule, dict) or not rule.get("pattern"):
+            return None
+        return rule["pattern"], rule.get("describe", rule["pattern"])
 
     @classmethod
     def load(cls, path: Optional[str] = None) -> "ProtocolSchedule":
@@ -101,6 +121,7 @@ class ProtocolSchedule:
                         window_after=int(row.get("window_after", 30)),
                         duration_hours=(float(row["duration_hours"])
                                         if row.get("duration_hours") else None),
+                        remote=bool(row.get("remote", False)),
                     ))
                 except (KeyError, TypeError, ValueError):
                     continue
@@ -108,6 +129,10 @@ class ProtocolSchedule:
                 out[protocol] = sorted(parsed, key=lambda c: c.offset_days)
         return cls(
             checkpoints=out or default_checkpoints(),
+            family_id_format={
+                k: v for k, v in (raw.get("family_id_format") or {}).items()
+                if isinstance(v, dict)
+            },
             confirmed=bool(raw.get("confirmed")),
             confirmed_by=raw.get("confirmed_by", ""),
             source=raw.get("source", "config/protocol-schedule.json"),

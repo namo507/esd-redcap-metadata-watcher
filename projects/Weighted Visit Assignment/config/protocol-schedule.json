@@ -17,7 +17,8 @@
     "",
     "Offsets use 30-day months, which is how the checkpoint names read. If the",
     "study computes ideal dates from calendar months, replace these with the",
-    "figures Access produces."
+    "figures Access produces.",
+    "NANO 24m is marked remote: the manual's NANO 24m Visits section says \"we do not see participants for an in-person visit\" -- questionnaires and a clinical phone call only if the child flags. A remote checkpoint is never staffed, needs no vehicle and takes no room."
   ],
   "source": "ESD Lab Scheduling Manual, Visit Windows + Visit Lengths tables",
   "source_updated": "2026-07-07",
@@ -72,7 +73,8 @@
         "offset_days": 720,
         "window_before": 14,
         "window_after": 42,
-        "duration_hours": 1.0
+        "duration_hours": 1.0,
+        "remote": true
       },
       {
         "name": "36m",
@@ -98,5 +100,21 @@
         "duration_hours": 3.0
       }
     ]
+  },
+  "family_id_format": {
+    "_comment": [
+      "What a participant ID looks like, per protocol, so a typo is caught",
+      "when the visit is entered rather than discovered on the doorstep.",
+      "NANO is the manual's own wording: 'the child's 4 digit NANO ID that",
+      "starts with 5'. The board writes them exactly as the lab does, which",
+      "is what makes a calendar invite title like '5001 9m Visit Offered'",
+      "match the Outlook entry a coordinator is looking at.",
+      "Add a protocol here to give it a format; one with no entry accepts",
+      "anything, which is the right default for a study still settling."
+    ],
+    "NANO": {
+      "pattern": "^5[0-9]{3}$",
+      "describe": "four digits starting with 5, for example 5031"
+    }
   }
 }

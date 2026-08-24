@@ -45,6 +45,25 @@ Adding somebody is a new row. Removing somebody is `"active": false`, not a
 deletion, so past decisions still name a person who exists. What is real in
 that file and what is synthetic is documented at the top of it.
 
+## What the protocol schedule decides
+
+`protocol-schedule.json` carries three things per checkpoint, all from the
+manual:
+
+- **when it is due** — `offset_days` from the family's anchor, with the
+  window either side
+- **how long it runs** — the Visit Lengths table. A visit entered without a
+  length takes this one rather than a flat two hours
+- **whether anyone attends** — `remote: true`. NANO 24m is the only one:
+  the manual says "we do not see participants for an in-person visit", so the
+  board offers no staff for it, uses no vehicle and consumes no tech kit
+
+`family_id_format` states what a participant ID looks like per protocol. NANO
+is the manual's own wording, "four digits starting with 5", so a mistyped ID
+is refused when the visit is entered instead of turning up on a calendar
+invite. A protocol with no entry accepts anything, which is the right default
+for a study still settling its conventions.
+
 ## Two files that are transcriptions, not opinions
 
 `protocol-schedule.json` and `reliability-matrix.json` are copied from the ESD

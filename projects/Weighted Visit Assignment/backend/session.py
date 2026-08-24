@@ -11,6 +11,7 @@ Nothing here invents scheduling logic. Every judgement comes from
 from __future__ import annotations
 
 import os
+import re
 import threading
 from datetime import date, datetime, time, timedelta
 from typing import Dict, List, Optional
@@ -486,17 +487,41 @@ class LabSession:
             if end < start:
                 raise ValueError("The window ends before it starts.")
 
+            protocol = str(payload["protocol"]).strip().upper()
+            checkpoint = str(payload["checkpoint"]).strip()
+            # The manual's visit-length table is already in the protocol
+            # schedule, so a visit entered without a length takes the one the
+            # protocol states rather than a flat two hours.
+            planned = next(
+                (c for c in ProtocolSchedule.load().for_protocol(protocol)
+                 if c.name == checkpoint), None)
+            default_hours = (planned.duration_hours
+                             if planned and planned.duration_hours else 2.0)
+
+            # A participant ID is how every other system in the lab refers to
+            # this child -- Access, the calendar invite title, the visit folder.
+            # Catching a typo here costs a second; catching it on the doorstep
+            # costs a visit. The F prefix is tolerated because the board's own
+            # demo writes them that way, and normalised to the manual's form.
+            family_id = str(payload["family_id"]).strip().lstrip("Ff#").strip()
+            rule = ProtocolSchedule.load().family_id_rule(protocol)
+            if rule and not re.fullmatch(rule[0], family_id):
+                raise ValueError(
+                    f"{family_id!r} is not a {protocol} participant ID. "
+                    f"Expected {rule[1]}.")
+
             vid = str(payload.get("visit_id") or "").strip() or self._next_visit_id()
             if vid in self.visits:
                 raise ValueError(f"Visit {vid} is already on the board.")
             row = {
                 "visit_id": vid,
-                "family_id": str(payload["family_id"]).strip(),
-                "protocol": str(payload["protocol"]).strip().upper(),
-                "checkpoint": str(payload["checkpoint"]).strip(),
+                "family_id": family_id,
+                "protocol": protocol,
+                "checkpoint": checkpoint,
                 "window_start": start.isoformat(),
                 "window_end": end.isoformat(),
-                "duration_hours": float(payload.get("duration_hours") or 2.0),
+                "duration_hours": float(payload.get("duration_hours")
+                                        or default_hours),
                 "location": str(payload.get("location") or "lab"),
                 "requires_clinician": 1 if payload.get("requires_clinician") else 0,
                 "anchor_date": (str(payload["anchor_date"])
@@ -1191,12 +1216,50 @@ class LabSession:
                 })
         return survivors, gated
 
+    def is_remote(self, visit) -> bool:
+        """Whether this checkpoint is ever seen in person.
+
+        The manual is explicit for NANO 24m: "we do not see participants for an
+        in-person visit". It is questionnaires and, only if the child flags, a
+        clinical phone call. Ranking staff for one is not a small cosmetic
+        error -- it puts two people and a vehicle against a visit that nobody
+        attends, and it consumes one of the two NANO tech kits on the board.
+        """
+        planned = next(
+            (c for c in ProtocolSchedule.load().for_protocol(visit.protocol)
+             if c.name == visit.checkpoint), None)
+        return bool(planned and planned.remote)
+
     def candidates(self, visit_id: str) -> dict:
         """The full ranked pool for one visit, in the words the screen needs."""
         with self._lock:
             visit = self.visits[visit_id]
-            pool = score_visit(visit, self.state, self.cfg, self.now)
             family = self.state.families[visit.family_id]
+
+            if self.is_remote(visit):
+                return {
+                    "visit": self.visit_summary(visit_id),
+                    "pairs": [], "pair_problems": [], "candidates": [],
+                    "excluded": [], "recommended_id": None,
+                    "top_rank_blocked": False,
+                    "review_band": round(self.cfg.epsilon_review_band, 3),
+                    "close_call": False,
+                    "family_preference": None, "named_preference": None,
+                    "required_attributes": [],
+                    "remote": True,
+                    "notices": [{
+                        "tone": "info",
+                        "code": "REMOTE_CHECKPOINT",
+                        "message": (
+                            f"No staff needed. A {visit.checkpoint} "
+                            f"{visit.protocol} timepoint is questionnaires and, "
+                            "only if the child flags, a clinical phone call. "
+                            "Nobody travels and no kit is used."),
+                    }],
+                    "assigned": self.assignments.get(visit_id),
+                }
+
+            pool = score_visit(visit, self.state, self.cfg, self.now)
 
             # Layer 1 gates, run over the scored pool. These were written to the
             # Master spec and covered by their own tests, but nothing in the
