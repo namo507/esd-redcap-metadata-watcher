@@ -112,7 +112,9 @@ function pairSection(d, assigned) {
         </div>
         <div class="pairmeta">
           <span data-tip="Earliest slot both are free">${esc(p.slot || "none")}</span>
-          ${p.van_capable ? '<span class="statchip is-pass" data-tip="Someone on this pair can drive the van">van</span>' : ""}
+          ${p.vehicle ? `<span class="statchip ${p.vehicle === "van" ? "is-pass" : ""}"
+             data-tip="${esc(p.vehicle_reason || "")}">${esc(p.vehicle)}</span>` : ""}
+          ${p.out_of_hours ? '<span class="statchip is-fail" data-tip="Runs more than 30 minutes outside 9 to 5, so it is an out-of-hours visit and the rotation applies">out of hours</span>' : ""}
           <span class="statchip is-skip" data-tip="Combined score across the four criteria">${p.score.toFixed(3)}</span>
         </div>
         ${assigned ? "" : `<button class="btn ${i === 0 ? "btn-primary" : "btn-ghost"}"
@@ -348,6 +350,11 @@ async function addVisit(form) {
   };
   if (data.anchor_date) body.anchor_date = data.anchor_date;
   if (data.completed_through) body.completed_through = data.completed_through.trim();
+  if (data.participant_status) body.participant_status = data.participant_status;
+  if (data.birth_date) body.birth_date = data.birth_date;
+  // Only meaningful for a preterm baby; sending it otherwise would
+  // suggest an adjustment the protocol does not make.
+  if (data.due_date && data.participant_status === "PT") body.due_date = data.due_date;
   msg.textContent = "Adding…";
   try {
     const out = await api("/api/visits", {

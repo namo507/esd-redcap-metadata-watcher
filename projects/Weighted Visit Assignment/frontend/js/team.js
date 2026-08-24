@@ -40,8 +40,11 @@ function drawTeam() {
             <span>
               <b>${esc(r.name)}</b>
               <span class="teamtags">
-                ${r.is_clinician ? '<span class="statchip is-pass">clinician</span>'
-                                 : '<span class="statchip is-skip">tech</span>'}
+                ${(r.roles || []).map((role) => `<span class="statchip ${
+                    role === "clinician" ? "is-pass" : "is-skip"}">${esc(role)}</span>`).join(" ")}
+                ${r.solo_range ? `<span class="statchip is-pass"
+                   data-tip="The visit ages this person can run on their own, from the manual's Visits Can Do Solo column">${esc(r.solo_range)}</span>` : ""}
+                ${r.confirm_first ? '<span class="statchip" data-tip="Check with them before offering a visit on their time">ask first</span>' : ""}
                 ${r.van_trained ? '<span class="statchip is-skip" data-tip="Can drive the van">van</span>' : ""}
                 ${r.calendar_ok ? "" : '<span class="statchip is-fail" data-tip="No calendar uploaded yet">no calendar</span>'}
               </span>

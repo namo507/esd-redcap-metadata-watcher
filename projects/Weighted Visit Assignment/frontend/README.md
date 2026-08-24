@@ -44,6 +44,19 @@ deliberate exception is the seven Outlook category swatches: they are the
 hues a coordinator is looking at in Outlook while matching a colour to a
 person, so they are hardcoded and must not become brand tokens.
 
+## What a row tells you about a person
+
+The team table shows **roles**, not a guess from their certifications. Someone
+signed off on one assessment is not thereby able to run a visit, and the page
+used to say "clinician" on the strength of the first. A row now carries the
+roles from `config/roster.json` and, where the manual gives one, the visit ages
+that person can run alone: *Lauren Puttock — coordinator, clinician, tech,
+1m-12m, van*. Maggie and Ramiro read *coordinator, tech* because the manual
+prints no solo range beside their names.
+
+A pairing shows which **vehicle** it should take and why, and flags a visit
+that runs **out of hours**, because that puts the pair into the rotation.
+
 ## Design rules this page follows
 
 **No bare codes.** `V002 · NANO` is an eyebrow; the heading is

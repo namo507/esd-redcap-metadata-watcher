@@ -713,6 +713,7 @@ class LabSession:
         """
         now = self.now
         monday = self.epoch.date()
+        by_id = self.roster_config.by_id()
         grid = week_grid(self.state, monday, now, slot_minutes=60)
         certs = {r["coordinator_id"]: r for r in self.certifications()["rows"]}
 
@@ -737,6 +738,7 @@ class LabSession:
 
             snapshot = self.state.calendars.get(cid)
             cert = certs.get(cid, {})
+            entry = by_id.get(cid)
             rows.append({
                 "id": cid,
                 "name": coord.name,
@@ -750,6 +752,15 @@ class LabSession:
                 "learning": cert.get("training", []),
                 "is_clinician": bool(cert.get("reliable")),
                 "calendar_ok": bool(snapshot and snapshot.sync_ok),
+                # What the roster says this person is, and the visit ages they
+                # can run alone. Shown because "signed off on CSBS" and "can be
+                # the clinician on a 9m visit" are different facts and the
+                # board was only ever showing the first.
+                "roles": list(getattr(entry, "roles", []) or []),
+                "solo_range": (f"{entry.solo_from}-{entry.solo_to}"
+                               if getattr(entry, "solo_from", None)
+                               and getattr(entry, "solo_to", None) else None),
+                "confirm_first": bool(getattr(entry, "confirm_before_offering", False)),
             })
         return {
             "rows": rows,
