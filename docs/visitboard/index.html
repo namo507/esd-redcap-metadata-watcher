@@ -112,6 +112,17 @@
                 <input class="input" name="completed_through" placeholder="3m">
                 <span class="note">The last checkpoint this family completed. Leave blank for a family that has had none, or the board will read their first visit as long overdue.</span>
               </label>
+              <label>Status
+                <select class="input select" name="participant_status">
+                  <option value="TD">TD, term</option>
+                  <option value="PT">PT, preterm</option>
+                  <option value="ASIB">ASIB</option>
+                </select></label>
+              <label>Birthday <input class="input" type="date" name="birth_date"></label>
+              <label>Expected due date
+                <input class="input" type="date" name="due_date">
+                <span class="note">Preterm only. Ideal dates up to 24m count from this; the 36m visit counts from the birthday whatever the status.</span>
+              </label>
               <button class="btn" type="submit">Add it</button>
               <p class="note" id="add-visit-msg"></p>
             </form>
