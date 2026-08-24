@@ -87,9 +87,26 @@ under How it decides.
 
 ## Where the code lives
 
+Every folder below has its own README with the detail. This is the map.
+
+    esd_scheduler/   the engine: gates, scoring, ranking, calendar reading
+    backend/         the HTTP server and the session that holds one board
+    frontend/        the page, in plain HTML, CSS and JavaScript
+    config/          the weights, the roster, the manual's tables
+    automation/      the scheduled jobs and the launchd agents
+    tests/           one file per area, run by `make test`
+    data/            everything generated, plus data/inbox to drop prints in
+    archive/         superseded decks and specs, kept for reference
+    dashboard/       an earlier Next.js port, several features behind
+
+The engine imports nothing from the backend, so the same decisions come out of
+the board, the command line and the scheduled jobs.
+
+### The page
+
     frontend/js/core.js        state, fetch, routing, page chrome
     frontend/js/team.js        the team table and the protocol clock
-    frontend/js/assign.js      the queue, the pair, the assignment
+    frontend/js/assign.js      the queue, the pair, entering a visit
     frontend/js/calendars.js   uploads, what came back, exports
     frontend/js/logic.js       the decision map
     frontend/js/boot.js        start-up and the once-a-minute refresh
@@ -97,6 +114,23 @@ under How it decides.
 Loaded in that order: core first because the rest use its helpers, boot last
 because it starts everything. One file per section, so a change to the team
 view means opening `team.js`.
+
+### The tests
+
+    test_engine.py          scoring, ranking, the whole decision
+    test_constraints.py     every hard gate, and the order they fire in
+    test_calendar_import.py reading PDFs and screenshots
+    test_live_mode.py       running on real data instead of the demo
+    test_frontend.py        the page's routing and stylesheet invariants
+    test_docs.py            these maps still matching the tree
+    test_deployment.py      the container, the ports, the paths
+    test_static_board.py    the offline snapshot matching the live engine
+    test_schedule.py        when each checkpoint is due
+    test_availability.py    who is free, once calendars are in
+    test_pairing.py         one clinician and one tech
+    test_roster.py          the roster as data
+    test_automation.py      the scheduled jobs
+    test_graph_privacy.py   free/busy only, never event titles
 
 ## The board
 

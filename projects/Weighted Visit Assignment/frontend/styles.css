@@ -26,6 +26,32 @@
   --r-sm:   12px;
   --shadow: 0 1px 2px rgba(20,20,26,.05), 0 8px 24px rgba(51,102,255,.06);
   --font: 'Libre Franklin', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* State colours, and the ink that stays readable on each.
+     These are NOT brand colours. The ESD palette has no green and no amber,
+     but free/busy/blocked has to be legible at a glance in a grid, so the
+     board borrows a conventional traffic reading for state only. They stay
+     out of the chrome: headings, buttons and structure are canon blue.
+     Every one of them is declared here so the whole set can be checked in
+     one place rather than hunted through the sheet. */
+  --state-ok-bg: #DFF3E7;
+  --state-free-bg: #CDEBD9;
+  --state-free-ink: #14532B;
+  --state-warn-bg: #FFF3D6;
+  --state-warn-ink: #7A5B00;
+  --state-note-bg: #FFF8DC;
+  --state-closing-bg: #FFF3C4;
+  --state-note-ink: #4A3B00;
+  --state-bad-bg: #FDE7E1;
+  --state-bad-ink: #8C2F16;
+  --state-prov-bg: #FDE7D5;
+  --state-prov-ink: #8A4300;
+  --state-unknown-bg: #E4E4EA;
+  --drop-active-bg: #DCE8FF;
+  --ink-on-tint: #1F49C4;
+  --ink-on-pink: #7A1F1B;
+  --ink-on-pink-deep: #6B1F1E;
+  --ink-on-yellow: #3A3000;
 }
 
 * { box-sizing: border-box; }
@@ -60,7 +86,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar-right { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
 .privacy-badge {
   display: inline-flex; align-items: center; gap: .45rem;
-  background: var(--tint); color: #1F49C4; border-radius: var(--r-pill);
+  background: var(--tint); color: var(--ink-on-tint); border-radius: var(--r-pill);
   padding: .38rem .85rem; font-size: .78rem; font-weight: 700; white-space: nowrap;
 }
 .lock { font-size: .85em; }
@@ -130,9 +156,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .qitem-who { font-size: .8rem; font-weight: 600; color: var(--ok); }
 
 .tag { display: inline-block; border-radius: var(--r-pill); padding: .12rem .6rem; font-size: .7rem; font-weight: 700; }
-.tag-todo { background: var(--esd-optimal-yellow); color: #4A3B00; }
-.tag-done { background: #DFF3E7; color: var(--ok); }
-.tag-prov { background: #FDE7D5; color: #8A4300; }
+.tag-todo { background: var(--esd-optimal-yellow); color: var(--state-note-ink); }
+.tag-done { background: var(--state-ok-bg); color: var(--ok); }
+.tag-prov { background: var(--state-prov-bg); color: var(--state-prov-ink); }
 
 /* ------------------------------------------------------------ detail */
 .visit-head { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
@@ -142,8 +168,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .fact-v { font-weight: 700; margin-top: .15rem; }
 
 .notice { display: flex; gap: .6rem; border-radius: var(--r-sm); padding: .7rem .85rem; margin-top: .7rem; font-size: .88rem; }
-.notice-warn  { background: #FFF8DC; color: #4A3B00; }
-.notice-alert { background: #FDE7E1; color: #8C2F16; }
+.notice-warn  { background: var(--state-note-bg); color: var(--state-note-ink); }
+.notice-alert { background: var(--state-bad-bg); color: var(--state-bad-ink); }
 .notice b { font-weight: 800; }
 
 /* candidate cards */
@@ -205,7 +231,7 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .btn-quiet:hover { color: var(--esd-firetruck-red); }
 .select { padding: .55rem .8rem; border: 1px solid var(--line); border-radius: var(--r-pill); background: #fff; }
 .blocker { font-size: .86rem; color: var(--esd-confident-orange); font-weight: 700; }
-.assigned-banner { background: #DFF3E7; color: var(--ok); border-radius: var(--r-sm); padding: .8rem .95rem; font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.assigned-banner { background: var(--state-ok-bg); color: var(--ok); border-radius: var(--r-sm); padding: .8rem .95rem; font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
 /* ------------------------------------------------------------ calendar */
 .viewbar { display: flex; gap: .35rem; background: var(--surface); padding: .3rem;
@@ -252,8 +278,8 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 
 /* ------------------------------------------------------------ fairness */
 .pill { border-radius: var(--r-pill); padding: .3rem .85rem; font-size: .76rem; font-weight: 800; background: var(--tint); color: var(--accent); white-space: nowrap; }
-.pill.warn { background: #FFF3D6; color: #7A5B00; }
-.pill.bad  { background: #FDE7E1; color: #8C2F16; }
+.pill.warn { background: var(--state-warn-bg); color: var(--state-warn-ink); }
+.pill.bad  { background: var(--state-bad-bg); color: var(--state-bad-ink); }
 .fairness { display: grid; gap: .6rem; }
 .frow { display: grid; grid-template-columns: minmax(120px, 1.4fr) 3fr auto; gap: .8rem; align-items: center; }
 .frow-name { font-weight: 600; font-size: .9rem; }
@@ -327,11 +353,11 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   border-radius: var(--r-pill); padding: .34rem .8rem; font-size: .76rem; font-weight: 700;
   background: var(--surface); color: var(--muted); white-space: nowrap; }
 .sync-badge i { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.sync-badge.is-fresh { background: #DFF3E7; color: var(--ok); }
+.sync-badge.is-fresh { background: var(--state-ok-bg); color: var(--ok); }
 .sync-badge.is-fresh i { background: var(--ok); }
-.sync-badge.is-stale { background: #FFF3D6; color: #7A5B00; }
+.sync-badge.is-stale { background: var(--state-warn-bg); color: var(--state-warn-ink); }
 .sync-badge.is-stale i { background: var(--esd-confident-orange); }
-.sync-badge.is-old { background: #FDE7E1; color: #8C2F16; }
+.sync-badge.is-old { background: var(--state-bad-bg); color: var(--state-bad-ink); }
 .sync-badge.is-old i { background: var(--esd-firetruck-red); }
 
 .dot-route { background: var(--esd-science-blue); }
@@ -340,8 +366,8 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 
 .reason { margin-top: .7rem; font-size: .88rem; font-weight: 600; color: var(--accent); }
 .notes { margin-top: 1rem; padding: .7rem .9rem; border-radius: var(--r-sm);
-  background: #FFF8DC; color: #4A3B00; font-size: .88rem; }
-.tag-ndd { background: var(--esd-baby-pink); color: #7A1F1B; margin-left: .35rem; }
+  background: var(--state-note-bg); color: var(--state-note-ink); font-size: .88rem; }
+.tag-ndd { background: var(--esd-baby-pink); color: var(--ink-on-pink); margin-left: .35rem; }
 
 .tablewrap { overflow-x: auto; }
 .tbl { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 34rem; }
@@ -375,7 +401,7 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   border-radius: var(--r-card); background: var(--tint);
   padding: 1.6rem 1rem; text-align: center; transition: background .15s, border-color .15s;
 }
-.uploadzone.is-over { background: #DCE8FF; border-color: var(--accent); }
+.uploadzone.is-over { background: var(--drop-active-bg); border-color: var(--accent); }
 .uploadzone.is-busy { opacity: .6; pointer-events: none; }
 .uploadzone-inner { display: grid; gap: .5rem; justify-items: center; }
 .uploadzone-title { font-weight: 800; font-size: 1.05rem; }
@@ -397,7 +423,7 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 }
 .tierbadge.is-t1 { background: var(--ok); color: #fff; }
 .tierbadge.is-t2 { background: var(--accent); color: #fff; }
-.tierbadge.is-t3 { background: var(--esd-optimal-yellow); color: #3A3000; }
+.tierbadge.is-t3 { background: var(--esd-optimal-yellow); color: var(--ink-on-yellow); }
 .importstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: .6rem; margin-top: .9rem; }
 .importstats div { background: var(--surface); border-radius: var(--r-sm); padding: .6rem .7rem; }
@@ -406,13 +432,18 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .importverdict { margin-top: .9rem; font-size: .9rem; }
 .importlist { margin: .7rem 0 0; padding-left: 1.1rem; font-size: .84rem; color: var(--muted); }
 .importlist li { margin-bottom: .35rem; }
-.importlist li.is-blocker { color: #8C2F16; }
+.importlist li.is-blocker { color: var(--state-bad-ink); }
 
 .colorlist { display: grid; gap: .55rem; margin-top: 1rem; }
 .colorrow { display: grid; grid-template-columns: auto 1fr auto; gap: .7rem;
   align-items: center; border: 1px solid var(--line); border-radius: var(--r-sm); padding: .55rem .7rem; }
 .colorname { font-weight: 700; text-transform: capitalize; }
 .colorname .cand-sub { display: block; text-transform: none; font-weight: 500; }
+/* The seven swatches below are Outlook's own category colours, hardcoded on
+   purpose. They are the colours a coordinator is looking at in Outlook while
+   they match a colour to a person, so they have to be those exact hues and
+   must never be replaced with brand tokens. Every other colour on this page
+   is a token. */
 .swatch { width: 20px; height: 20px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
 .swatch-grey   { background: #69797E; }
 .swatch-blue   { background: #0078D4; }
@@ -443,11 +474,11 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .availcell {
   width: 17px; height: 22px; border-radius: 4px; background: var(--surface);
 }
-.availcell.is-open    { background: #CDEBD9; }
+.availcell.is-open    { background: var(--state-free-bg); }
 .availcell.is-light   { background: var(--esd-optimal-yellow); }
 .availcell.is-busy    { background: var(--esd-confident-orange); }
 .availcell.is-unknown {
-  background: repeating-linear-gradient(45deg, #E4E4EA 0 3px, #F4F4F6 3px 6px);
+  background: repeating-linear-gradient(45deg, var(--state-unknown-bg) 0 3px, var(--esd-cool-white) 3px 6px);
 }
 .availcell.is-weekend { opacity: .35; }
 .availcount { font-size: .8rem; text-align: center; padding-left: .6rem !important;
@@ -457,10 +488,10 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   font-size: .78rem; color: var(--muted); }
 .availlegend span { display: inline-flex; align-items: center; gap: .35rem; }
 .availkey { width: 13px; height: 13px; border-radius: 4px; display: inline-block; }
-.availkey.is-open    { background: #CDEBD9; }
+.availkey.is-open    { background: var(--state-free-bg); }
 .availkey.is-light   { background: var(--esd-optimal-yellow); }
 .availkey.is-busy    { background: var(--esd-confident-orange); }
-.availkey.is-unknown { background: repeating-linear-gradient(45deg, #E4E4EA 0 3px, #F4F4F6 3px 6px); }
+.availkey.is-unknown { background: repeating-linear-gradient(45deg, var(--state-unknown-bg) 0 3px, var(--esd-cool-white) 3px 6px); }
 .inforce { font-size: .7rem; font-weight: 700; color: var(--ok); text-transform: uppercase;
   letter-spacing: .05em; align-self: center; }
 
@@ -483,8 +514,8 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .statchip { font-size: .74rem; font-weight: 700; border-radius: var(--r-pill);
   padding: .22rem .6rem; background: var(--surface); color: var(--muted);
   white-space: nowrap; }
-.statchip.is-pass { background: #CDEBD9; color: #14532B; }
-.statchip.is-fail { background: #FDE7E1; color: #8C2F16; }
+.statchip.is-pass { background: var(--state-free-bg); color: var(--state-free-ink); }
+.statchip.is-fail { background: var(--state-bad-bg); color: var(--state-bad-ink); }
 .statchip.is-skip { background: var(--surface); color: var(--muted); }
 
 /* ---------- whole-day absences ---------- */
@@ -556,8 +587,8 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 
 .qitem-due { float: right; font-size: .7rem; font-weight: 800; border-radius: var(--r-pill);
   padding: .1rem .45rem; }
-.qitem-due.is-overdue { background: #FDE7E1; color: #8C2F16; }
-.qitem-due.is-closing { background: #FFF3C4; color: #4A3B00; }
+.qitem-due.is-overdue { background: var(--state-bad-bg); color: var(--state-bad-ink); }
+.qitem-due.is-closing { background: var(--state-closing-bg); color: var(--state-note-ink); }
 
 /* ---------- decision map ---------- */
 .logicwrap { margin-top: 1rem; overflow-x: auto; }
@@ -658,7 +689,7 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .tile-detail .facts { margin-top: .8rem; }
 .tile-detail .fact { background: #fff; }
 .tile-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .9rem; }
-.tierbadge.is-t4 { background: var(--esd-baby-pink); color: #6B1F1E; }
+.tierbadge.is-t4 { background: var(--esd-baby-pink); color: var(--ink-on-pink-deep); }
 
 /* ---------- free-slot heat strip ---------- */
 .slotwrap { display: grid; gap: .55rem; margin-top: 1rem; }
@@ -669,10 +700,10 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .slot { position: relative; height: 26px; border-radius: 5px; display: grid;
   place-items: center; background: var(--surface); }
 .slot i { font-style: normal; font-size: .66rem; font-weight: 800; color: var(--muted); }
-.slot.is-many { background: #CDEBD9; } .slot.is-many i { color: #14532B; }
-.slot.is-some { background: var(--esd-optimal-yellow); } .slot.is-some i { color: #3A3000; }
+.slot.is-many { background: var(--state-free-bg); } .slot.is-many i { color: var(--state-free-ink); }
+.slot.is-some { background: var(--esd-optimal-yellow); } .slot.is-some i { color: var(--ink-on-yellow); }
 .slot.is-few  { background: var(--esd-confident-orange); } .slot.is-few i { color: #fff; }
-.slot.is-none { background: #E4E4EA; } .slot.is-none i { color: var(--muted); }
+.slot.is-none { background: var(--state-unknown-bg); } .slot.is-none i { color: var(--muted); }
 
 /* ---------- staffing pairs ---------- */
 .pairlist { display: grid; gap: .55rem; margin-top: 1rem; }
@@ -724,7 +755,7 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
   transform: scaleY(.25); transform-origin: bottom;
   animation: hourbarIn .32s cubic-bezier(.2,.8,.3,1) forwards;
   animation-delay: var(--delay, 0ms); }
-.hourbar.is-free { background: #CDEBD9; }
+.hourbar.is-free { background: var(--state-free-bg); }
 .hourbar.is-busy { background: var(--esd-science-blue); opacity: .55; }
 @keyframes hourbarIn { to { transform: scaleY(1); } }
 @media (prefers-reduced-motion: reduce) {

@@ -1,13 +1,26 @@
 #!/bin/bash
-# Rebuild the public copy and push it live.
+# Rebuild the frozen public copy of the board and check it over.
 #
-# Called on its own, or by the inbox job after it imports something, so a
-# calendar dropped in data/inbox reaches the published site without anyone
-# running a command.
+# WHAT PUBLISHING MEANS NOW
 #
-# Deploying is deliberately opt-in. It publishes to a public URL, so it only
-# runs when the operator has said it should: set ESD_AUTO_PUBLISH=1, or pass
-# --force. Without that this builds and stops, which is still useful.
+# Nothing here uploads anything. The board is published by GitHub Actions: a
+# push to main runs .github/workflows/visitboard-frontend.yml, which builds the
+# same snapshot this script builds and commits it to docs/visitboard/, where
+# GitHub Pages serves it. Publishing is therefore `git push`, and there is no
+# second, hidden way to put a different build live.
+#
+# This script used to run `netlify deploy --prod`. That host is gone, and a
+# script that still tried it would either fail or, worse, succeed against a
+# stale site nobody reads. It builds and inspects instead.
+#
+# WHAT IT IS STILL FOR
+#
+#   ./automation/publish.sh          build the snapshot and report on it
+#   ./automation/publish.sh --check  the same, and fail if the build looks wrong
+#
+# The inbox job calls it after importing a calendar, so a print dropped in
+# data/inbox is proved to still produce a valid snapshot without waiting for
+# CI to say so.
 
 set -euo pipefail
 
@@ -15,24 +28,34 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 PYTHON="${ESD_PYTHON:-python3}"
-FORCE=0
-[ "${1:-}" = "--force" ] && FORCE=1
+CHECK=0
+[ "${1:-}" = "--check" ] && CHECK=1
 
 echo "  building the public copy ..."
 "$PYTHON" -m backend.build_static
 
-if [ "$FORCE" != "1" ] && [ "${ESD_AUTO_PUBLISH:-0}" != "1" ]; then
-  echo "  built into dist-static/."
-  echo "  not deploying: set ESD_AUTO_PUBLISH=1 or pass --force."
-  echo "  the site is public, so publishing is never automatic by default."
-  exit 0
-fi
+OUT="dist-static"
+BOARD="$OUT/board.json"
 
-if ! command -v netlify >/dev/null 2>&1; then
-  echo "  netlify CLI is not installed, so there is nothing to deploy with."
-  echo "  npm install -g netlify-cli"
+if [ ! -s "$BOARD" ]; then
+  echo "  BUILD FAILED: $BOARD is missing or empty."
   exit 1
 fi
 
-echo "  deploying ..."
-netlify deploy --prod --dir dist-static
+# The snapshot is what a visitor gets when the API cannot be reached, so an
+# empty one is a blank board rather than an obvious error. Worth one look.
+VISITS=$("$PYTHON" - <<'PY'
+import json
+with open("dist-static/board.json", encoding="utf-8") as fh:
+    print(len(json.load(fh).get("visits", [])))
+PY
+)
+echo "  built into $OUT/ with $VISITS visit(s) in the snapshot."
+
+if [ "$CHECK" = "1" ] && [ "$VISITS" = "0" ]; then
+  echo "  CHECK FAILED: the snapshot has no visits, so the offline board is blank."
+  exit 1
+fi
+
+echo "  to publish: commit and push to main. The frontend workflow rebuilds"
+echo "  this snapshot and serves it from docs/visitboard/ on GitHub Pages."

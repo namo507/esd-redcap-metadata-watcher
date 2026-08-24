@@ -1,13 +1,24 @@
 #!/bin/bash
 # ESD visit scheduling: single entry point for every scheduled job.
 #
-#   run.sh calsync      every 5 minutes   delta pull of Outlook / Google
+# Installed on a schedule by install.sh:
+#
+#   run.sh calsync      every 5 minutes   delta pull of Outlook / Google,
+#                                         then sweep data/inbox
 #   run.sh reconcile    nightly 02:00     full calendar reconcile + integrity check
-#   run.sh debrief      Monday 07:00      weekly drift + debrief report
 #   run.sh shadow       Monday 06:45      shadow optimiser, records regret
+#   run.sh debrief      Monday 07:00      weekly drift + debrief report
+#
+# Run by hand, or by another job, and not on a schedule of their own:
+#
+#   run.sh calendars    sweep data/inbox and file every print found there
+#   run.sh publish      rebuild the frozen public copy and check it
+#   run.sh audit        write today's audit summary into reports/
 #
 # Every job is idempotent and safe to re-run. Logs go to logs/<job>.log so
-# launchd's own stdout capture stays clean.
+# launchd's own stdout capture stays clean. All seven exit 0 on a machine with
+# no calendar credentials: a job that cannot reach a calendar says so and stops
+# rather than treating silence as an empty diary.
 
 set -euo pipefail
 

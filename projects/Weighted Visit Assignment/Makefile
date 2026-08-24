@@ -13,7 +13,7 @@ help:
 	@echo "  make test                 run every test suite (engine, privacy, API)"
 	@echo "  make serve                start the Visitboard on http://127.0.0.1:8765"
 	@echo "  make static               build the public, backend-free copy into dist-static/"
-	@echo "  make publish              legacy: frozen copy to Netlify (CI deploys the real board)"
+	@echo "  make publish              build the frozen copy and check it (push to main to publish)"
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
@@ -49,6 +49,7 @@ test:
 	$(PY) tests/test_deployment.py
 	$(PY) tests/test_frontend.py
 	$(PY) tests/test_live_mode.py
+	$(PY) tests/test_docs.py
 	$(PY) backend/tests/test_api.py
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
@@ -59,12 +60,11 @@ static:
 	$(PY) -m backend.build_static
 	$(PY) tests/test_static_board.py
 
-# Legacy escape hatch. The board is deployed by GitHub Actions now: the API to
-# Fly.io or Render, the page to GitHub Pages. This target still builds and
-# pushes a frozen copy to Netlify for anyone who wants one, and nothing in the
-# automation calls it any more.
+# Builds the frozen copy and checks it is not blank. It does not upload
+# anything: the board is published by pushing to main, which runs the frontend
+# workflow and serves the same snapshot from docs/visitboard/ on GitHub Pages.
 publish: static
-	./automation/publish.sh --force
+	./automation/publish.sh --check
 
 serve-quiet:
 	$(PY) -m backend.server --no-browser
