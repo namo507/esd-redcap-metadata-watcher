@@ -248,6 +248,77 @@ def test_policy_calendars_never_pass_on_absence():
                    "the lab gate fired on a visit not held in the lab")
 
 
+def test_a_preterm_baby_counts_from_the_due_date_until_36m():
+    """The manual's own worked example, and the sentence that follows it.
+
+    "if a participant is born on 6/1/26, and they are 1 month premature
+    (expected due date of 7/1/26), their ideal date for their 1m visit will be
+    on 8/1/26" -- and then "This will change at the 36m visit, where all
+    participants (regardless of status) will be scheduled on their 3rd
+    birthday."
+
+    One stored anchor cannot say both. Adjusting the anchor once puts the
+    early visits right and the 36m visit early by exactly how premature the
+    baby was.
+    """
+    from datetime import date
+    from esd_scheduler.models import Family
+    from esd_scheduler.schedule import ProtocolSchedule, anchor_for
+
+    pt = Family(family_id="5001", protocol="NANO", participant_status="PT",
+                birth_date=date(2026, 6, 1), due_date=date(2026, 7, 1))
+    td = Family(family_id="5002", protocol="NANO", participant_status="TD",
+                birth_date=date(2026, 6, 1))
+    cps = {c.name: c for c in ProtocolSchedule.load().for_protocol("NANO")}
+
+    expect(cps["1m"].target(anchor_for(pt, "1m")) == date(2026, 8, 1),
+           f"the manual's example gives 2026-08-01, got "
+           f"{cps['1m'].target(anchor_for(pt, '1m'))}")
+    expect(cps["1m"].target(anchor_for(td, "1m")) == date(2026, 7, 1),
+           "a term baby's 1m visit should count from their birthday")
+    for family in (pt, td):
+        expect(cps["36m"].target(anchor_for(family, "36m")) == date(2029, 6, 1),
+               f"36m should be the 3rd birthday for {family.participant_status}, "
+               f"got {cps['36m'].target(anchor_for(family, '36m'))}")
+
+
+def test_checkpoints_land_on_the_calendar_not_a_day_count():
+    """The manual's table is in months and the lab schedules on a calendar.
+
+    Thirty days after 1 July is 31 July; the manual puts that visit on
+    1 August. At the far end 1080 days is sixteen days short of a third
+    birthday, and the manual sees every participant on theirs.
+    """
+    from datetime import date
+    from esd_scheduler.schedule import ProtocolSchedule, _add_months
+
+    cps = {c.name: c for c in ProtocolSchedule.load().for_protocol("NANO")}
+    anchor = date(2026, 7, 1)
+    expect(cps["1m"].target(anchor) == date(2026, 8, 1),
+           f"1m landed on {cps['1m'].target(anchor)}, not a calendar month later")
+    expect(cps["36m"].target(date(2026, 6, 1)) == date(2029, 6, 1),
+           "36m did not land on the third birthday")
+    # A day that does not exist in the target month is clamped, not rolled.
+    expect(_add_months(date(2026, 1, 31), 1) == date(2026, 2, 28),
+           "31 January plus a month should clamp into February, not reach March")
+
+
+def test_the_visit_statuses_are_the_ones_access_offers():
+    """A status the lab cannot pick in Access is one nobody can act on."""
+    from esd_scheduler.schedule import CLOSED_STATUSES, VISIT_STATUSES, is_open
+
+    for wanted in ("Future", "In Progress", "Scheduled", "Completed",
+                   "Needs to be Rescheduled", "Unreachable", "Skipped",
+                   "Ineligible", "Withdrew"):
+        expect(wanted in VISIT_STATUSES,
+               f"{wanted!r} is in the manual's drop-down but not the vocabulary")
+    expect(is_open("Future") and is_open("Needs to be Rescheduled"),
+           "a visit still owed was treated as closed")
+    for closed in CLOSED_STATUSES:
+        expect(not is_open(closed),
+               f"{closed} should take the visit off the queue")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

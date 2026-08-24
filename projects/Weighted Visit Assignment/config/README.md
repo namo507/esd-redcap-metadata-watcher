@@ -89,13 +89,32 @@ that file and what is synthetic is documented at the top of it.
 `protocol-schedule.json` carries three things per checkpoint, all from the
 manual:
 
-- **when it is due** — `offset_days` from the family's anchor, with the
-  window either side
+- **when it is due** — `offset_months` from the family's anchor, with the
+  window either side. Months rather than days because the lab schedules on a
+  calendar: thirty days after 1 July is 31 July, but the manual's own example
+  puts that visit on 1 August, and 1080 days is sixteen days short of a third
+  birthday. `offset_days` remains as a fallback for a protocol that has not
+  been given months
 - **how long it runs** — the Visit Lengths table. A visit entered without a
   length takes this one rather than a flat two hours
 - **whether anyone attends** — `remote: true`. NANO 24m is the only one:
   the manual says "we do not see participants for an in-person visit", so the
   board offers no staff for it, uses no vehicle and consumes no tech kit
+
+### Which date a checkpoint counts from
+
+Not one date per family. The manual gives three cases:
+
+- **PT, 1m–24m** — counts from the **expected due date**. Its example: born
+  1 June, one month premature, due 1 July, so the 1m ideal date is 1 August.
+- **TD and ASIB** — counts from the **birthday**.
+- **36m, everyone** — counts from the birthday, because the manual puts every
+  participant on their third birthday *"regardless of status"*.
+
+So a family records `participant_status`, `birth_date` and `due_date`, and the
+checkpoint decides which applies. Storing a single pre-adjusted anchor would
+put a preterm baby's early visits right and their 36m visit early by exactly
+how premature they were.
 
 `family_id_format` states what a participant ID looks like per protocol. NANO
 is the manual's own wording, "four digits starting with 5", so a mistyped ID

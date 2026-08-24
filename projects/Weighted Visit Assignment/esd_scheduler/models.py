@@ -103,6 +103,26 @@ class Family:
     # it, so a family without one gets no due date rather than a guessed one.
     anchor_date: Optional[date] = None
 
+    # A preterm baby's clock does not run from the same date all the way
+    # through, so one anchor cannot express it. The manual: for PT
+    # participants the 1m-12m ideal dates are adjusted to the expected due
+    # date, and "This will change at the 36m visit, where all participants
+    # (regardless of status) will be scheduled on their 3rd birthday."
+    #
+    # Both dates are kept and the checkpoint decides which one counts. Storing
+    # a single pre-adjusted anchor would be right for the early visits and
+    # silently wrong for the 36m one, by however premature the baby was.
+    participant_status: str = ""        # PT | TD | ASIB
+    birth_date: Optional[date] = None
+    due_date: Optional[date] = None     # expected due date, PT only
+
+    # Retention Support. Once a family is passed to Megan they stay with her
+    # until a visit actually completes, so this is a state the family carries
+    # rather than a note on one visit: "if a participant is passed to R&O for
+    # their 3m visit and they are also unresponsive to Megan, once their 6m
+    # visit time point comes around they will still be in R&O".
+    passed_to_retention: bool = False
+
     # --- Master prompt §7 participant fields --------------------------------
     # NDD cross-collaboration visits may only be taken by staff certified on
     # NDD measures, and they run 60 minutes longer than the base visit length.

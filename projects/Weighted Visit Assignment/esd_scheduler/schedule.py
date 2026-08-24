@@ -17,6 +17,7 @@ Two rules keep it honest:
 
 from __future__ import annotations
 
+import calendar as _calendar
 import json
 import os
 from dataclasses import dataclass, field
@@ -49,6 +50,20 @@ def _config_path() -> str:
     return os.environ.get("ESD_PROTOCOL_SCHEDULE_PATH", CONFIG_PATH)
 
 
+def _add_months(start: date, months: int) -> date:
+    """Same day of the month, ``months`` later, clamped to a real date.
+
+    A baby born on the 31st has no 31st in February, so their ideal date lands
+    on the 28th or 29th. Clamping is what the lab does by hand; rolling into
+    March would move the visit into the wrong month entirely.
+    """
+    total = start.month - 1 + months
+    year = start.year + total // 12
+    month = total % 12 + 1
+    last = _calendar.monthrange(year, month)[1]
+    return date(year, month, min(start.day, last))
+
+
 @dataclass(frozen=True)
 class Checkpoint:
     """One scheduled visit in a protocol, as an offset from the family anchor."""
@@ -57,6 +72,13 @@ class Checkpoint:
     offset_days: int
     window_before: int = 30
     window_after: int = 30
+    # The manual's table is in months -- "1 Month", "36 Months" -- and the lab
+    # schedules on the calendar, not on a day count. Thirty days after 1 July
+    # is 31 July, but the manual's own worked example puts that visit on
+    # 1 August. Worse at the far end: 1080 days is sixteen days short of a
+    # third birthday, and the manual says every participant is seen on theirs.
+    # Months are used when given; offset_days remains the fallback.
+    offset_months: Optional[int] = None
     # How long the visit itself runs, from the manual's visit-length table.
     duration_hours: Optional[float] = None
     # Some checkpoints are never seen in person. NANO 24m is questionnaires and
@@ -66,7 +88,10 @@ class Checkpoint:
     remote: bool = False
 
     def target(self, anchor: date) -> date:
-        return anchor + timedelta(days=self.offset_days)
+        """The ideal date for this checkpoint, counted from the anchor."""
+        if self.offset_months is None:
+            return anchor + timedelta(days=self.offset_days)
+        return _add_months(anchor, self.offset_months)
 
     def window(self, anchor: date):
         target = self.target(anchor)
@@ -119,6 +144,9 @@ class ProtocolSchedule:
                         offset_days=int(row["offset_days"]),
                         window_before=int(row.get("window_before", 30)),
                         window_after=int(row.get("window_after", 30)),
+                        offset_months=(int(row["offset_months"])
+                                       if row.get("offset_months") is not None
+                                       else None),
                         duration_hours=(float(row["duration_hours"])
                                         if row.get("duration_hours") else None),
                         remote=bool(row.get("remote", False)),
@@ -240,6 +268,75 @@ def urgency_of(status: str, days_remaining: Optional[int], window_days: int) -> 
     return max(0.0, min(1.0, 1.0 - (days_remaining / span)))
 
 
+# The Visit Status values from the manual's Access section, in the order it
+# lists them. This is a closed vocabulary: Access offers a drop-down, and a
+# status the lab cannot pick is a status nobody can act on. Kept here beside
+# the protocol clock because what a visit is owed depends on which of these it
+# is -- a Skipped or Withdrew visit is not owed at all.
+VISIT_STATUSES = (
+    "Future",                  # not yet contacted
+    "In Progress",             # first contact made, not yet scheduled
+    "Scheduled",               # on the calendar
+    "Questionnaires In Progress",   # 24m only: sent, not yet returned
+    "Completed",               # done and the data collected
+    "Needs to be Rescheduled",
+    "Unreachable",             # three attempts, passed to Retention, still nothing
+    "Skipped",                 # family asked, or the window closed
+    "Ineligible",
+    "Withdrew",
+)
+
+# Statuses that take a visit out of the queue rather than leaving it owed.
+# The manual says each of these "will remove the row from the participant
+# queue", which is the same thing said in Access's words.
+CLOSED_STATUSES = frozenset({
+    "Completed", "Unreachable", "Skipped", "Ineligible", "Withdrew",
+})
+
+
+def is_open(status: str) -> bool:
+    """Whether a visit in this status is still owed."""
+    return (status or "Future") not in CLOSED_STATUSES
+
+
+# Checkpoints whose ideal date is adjusted for prematurity. The manual adjusts
+# 1m through 12m and stops: "This will change at the 36m visit, where all
+# participants (regardless of status) will be scheduled on their 3rd birthday."
+ADJUSTED_FOR_PREMATURITY = ("1m", "2m", "3m", "6m", "9m", "12m", "24m")
+
+
+def anchor_for(family, checkpoint: str):
+    """Which date this checkpoint counts from, for this family.
+
+    The manual gives three cases and they do not reduce to one stored date:
+
+    * **PT, 1m-12m.** Counts from the expected due date. Its example: born
+      1 June, due 1 July, so the 1m ideal date is 1 August rather than 1 July.
+    * **TD and ASIB.** Counts from the birthday.
+    * **36m, everyone.** Counts from the birthday, because the manual puts
+      every participant on their third birthday whatever their status.
+
+    Anchoring a preterm baby on one pre-adjusted date would put the early
+    visits right and the 36m visit late by exactly how premature they were.
+    Falls back to ``anchor_date`` so a family recorded before these fields
+    existed still has a clock.
+    """
+    status = (getattr(family, "participant_status", "") or "").upper()
+    birth = getattr(family, "birth_date", None)
+    due = getattr(family, "due_date", None)
+
+    if status == "PT" and due and checkpoint in ADJUSTED_FOR_PREMATURITY:
+        chosen = due
+    else:
+        chosen = birth or getattr(family, "anchor_date", None)
+
+    if chosen is None:
+        chosen = getattr(family, "anchor_date", None)
+    if isinstance(chosen, datetime):
+        chosen = chosen.date()
+    return chosen
+
+
 def next_visit_for(
     family,
     history: Sequence,
@@ -277,6 +374,11 @@ def next_visit_for(
 
     nxt = remaining[0]
     base.checkpoint = nxt.name
+    # The anchor is per checkpoint, not per family: a preterm baby's early
+    # visits count from the expected due date and their 36m one from their
+    # actual birthday. Resolved here, once the checkpoint is known.
+    anchor = anchor_for(family, nxt.name) or anchor
+    base.anchor = anchor
     if anchor is None:
         # No anchor means no arithmetic. Reporting "overdue" here would invent
         # lateness out of a missing field.

@@ -45,7 +45,8 @@ from esd_scheduler.constraints import (
 from esd_scheduler.availability import coverage_report, week_grid
 from esd_scheduler.pairing import rank_pairs
 from esd_scheduler.roster import Roster
-from esd_scheduler.schedule import STATUS_LABEL, ProtocolSchedule, upcoming
+from esd_scheduler.schedule import (
+    STATUS_LABEL, VISIT_STATUSES, ProtocolSchedule, upcoming)
 from esd_scheduler.scoring import ramped_capacity
 from esd_scheduler.engine import (
     commit_assignment,
@@ -389,6 +390,15 @@ class LabSession:
             self.state.families[row["family_id"]] = fam
         fam.protocol = row["protocol"]
         fam.zone = int(row.get("zone") or 1)
+        if row.get("participant_status"):
+            fam.participant_status = row["participant_status"]
+        for field_name in ("birth_date", "due_date"):
+            if row.get(field_name):
+                try:
+                    setattr(fam, field_name, date.fromisoformat(row[field_name]))
+                except ValueError:
+                    pass          # an unreadable date is no date, not a crash
+        fam.passed_to_retention = bool(row.get("passed_to_retention"))
         if row.get("anchor_date"):
             fam.anchor_date = date.fromisoformat(row["anchor_date"])
         if row.get("drive_time_minutes") is not None:
@@ -503,6 +513,12 @@ class LabSession:
             # Catching a typo here costs a second; catching it on the doorstep
             # costs a visit. The F prefix is tolerated because the board's own
             # demo writes them that way, and normalised to the manual's form.
+            status = str(payload.get("visit_status") or "Future").strip()
+            if status not in VISIT_STATUSES:
+                raise ValueError(
+                    f"{status!r} is not a visit status. Access offers: "
+                    + ", ".join(VISIT_STATUSES))
+
             family_id = str(payload["family_id"]).strip().lstrip("Ff#").strip()
             rule = ProtocolSchedule.load().family_id_rule(protocol)
             if rule and not re.fullmatch(rule[0], family_id):
@@ -533,6 +549,12 @@ class LabSession:
                 "contact_method": payload.get("contact_method") or None,
                 "notes": payload.get("notes") or None,
                 "completed_through": payload.get("completed_through") or None,
+                "visit_status": status,
+                "participant_status": (str(payload.get("participant_status") or "")
+                                       .strip().upper() or None),
+                "birth_date": str(payload["birth_date"]) if payload.get("birth_date") else None,
+                "due_date": str(payload["due_date"]) if payload.get("due_date") else None,
+                "passed_to_retention": 1 if payload.get("passed_to_retention") else 0,
                 "created_at": self.now.isoformat(timespec="seconds"),
             }
             self.store.add_planned_visit(row)

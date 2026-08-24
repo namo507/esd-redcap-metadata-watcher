@@ -216,6 +216,11 @@ CREATE TABLE IF NOT EXISTS planned_visit (
     contact_method     TEXT,
     notes              TEXT,
     completed_through  TEXT,
+    visit_status       TEXT NOT NULL DEFAULT 'Future',
+    participant_status TEXT,
+    birth_date         TEXT,
+    due_date           TEXT,
+    passed_to_retention INTEGER NOT NULL DEFAULT 0,
     created_at         TEXT NOT NULL,
     removed            INTEGER NOT NULL DEFAULT 0
 );
@@ -307,7 +312,14 @@ class AuditStore:
         """
         wanted = {
             "assignment_outcome": [("assigned_tech_id", "TEXT")],
-            "planned_visit": [("completed_through", "TEXT")],
+            "planned_visit": [
+                ("completed_through", "TEXT"),
+                ("visit_status", "TEXT"),
+                ("participant_status", "TEXT"),
+                ("birth_date", "TEXT"),
+                ("due_date", "TEXT"),
+                ("passed_to_retention", "INTEGER"),
+            ],
         }
         with self._lock:
             for table, columns in wanted.items():
@@ -690,7 +702,8 @@ class AuditStore:
                 "window_start", "window_end", "duration_hours", "location",
                 "requires_clinician", "anchor_date", "zone",
                 "drive_time_minutes", "contact_method", "notes",
-                "completed_through", "created_at")
+                "completed_through", "visit_status", "participant_status",
+                "birth_date", "due_date", "passed_to_retention", "created_at")
         with self._lock:
             self.conn.execute(
                 "INSERT OR REPLACE INTO planned_visit (" + ", ".join(cols) +
