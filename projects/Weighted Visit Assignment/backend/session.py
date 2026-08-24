@@ -587,6 +587,36 @@ class LabSession:
             n += 1
         return f"V{n:03d}"
 
+    def _covered_ranges(self):
+        """The dates each coordinator's uploads claim to describe.
+
+        Read from the printed range on each import rather than from the blocks
+        themselves. A week with meetings only on Monday still covers Friday,
+        and inferring coverage from where the blocks happen to fall would call
+        an empty Friday "not covered" and hold somebody back for no reason.
+        """
+        from datetime import date as _date
+        spans = {}
+        rows = self.store.query(
+            "SELECT b.coordinator_id, i.date_range "
+            "FROM calendar_import_block b "
+            "JOIN calendar_import i ON i.import_id = b.import_id "
+            "WHERE b.reviewed=1 AND b.confirmed=1")
+        for cid, printed in rows:
+            if not printed or " to " not in printed:
+                continue
+            try:
+                lo, hi = [_date.fromisoformat(p.strip())
+                          for p in printed.split(" to ")]
+            except ValueError:
+                continue
+            if cid in spans:
+                have_lo, have_hi = spans[cid]
+                spans[cid] = (min(have_lo, lo), max(have_hi, hi))
+            else:
+                spans[cid] = (lo, hi)
+        return spans
+
     def _apply_confirmed_blocks(self) -> int:
         """Push reviewed-and-confirmed blocks into the live snapshots.
 
@@ -594,6 +624,9 @@ class LabSession:
         must not narrow anybody's availability while it waits for a human.
         """
         rows = [dict(r) for r in self.store.confirmed_blocks()]
+        # The dates each coordinator's uploads actually printed, so a snapshot
+        # can say what it does and does not cover.
+        covered = self._covered_ranges()
         by_coord: Dict[str, List[BusyBlock]] = {}
         for row in rows:
             try:
@@ -623,6 +656,14 @@ class LabSession:
             # is anchored to the start of the week, so a wall-clock stamp reads
             # as evidence from the future and the freshness gate goes negative.
             snap.fetched_at = self.now
+            # Narrow the snapshot to the dates the print covered, but only when
+            # the print is the whole story. A demo board also holds mock blocks
+            # that do describe the current week, and clipping those to an
+            # uploaded fixture's dates would make the demo unstaffable for a
+            # week the provider knows perfectly well.
+            span = covered.get(cid)
+            if span and not keep:
+                snap.covers_from, snap.covers_to = span
             applied += len(blocks)
         return applied
 

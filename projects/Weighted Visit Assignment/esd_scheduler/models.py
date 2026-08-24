@@ -333,6 +333,25 @@ class CalendarSnapshot:
     blocks: List[BusyBlock] = field(default_factory=list)
     sync_ok: bool = True
     error_code: Optional[str] = None
+    # The dates this snapshot actually says anything about, read off the print
+    # itself. Freshness and coverage are different questions: a calendar
+    # uploaded a minute ago is fresh, and if it prints last week it still says
+    # nothing whatever about this one. Without this, last week's export made
+    # every coordinator read as free for a week nobody had looked at.
+    covers_from: Optional[date] = None
+    covers_to: Optional[date] = None
+
+    def covers(self, moment) -> bool:
+        """Whether this snapshot claims to describe that day at all.
+
+        A snapshot with no recorded range is treated as covering everything,
+        which is what the mock provider and the demo rely on. Only a real
+        upload narrows it.
+        """
+        if self.covers_from is None or self.covers_to is None:
+            return True
+        day = moment.date() if hasattr(moment, "date") else moment
+        return self.covers_from <= day <= self.covers_to
     working_hours: Optional[WorkingHours] = None
 
     def age_seconds(self, now: datetime) -> float:

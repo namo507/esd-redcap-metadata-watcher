@@ -121,6 +121,53 @@ def test_the_week_grid_covers_five_working_days():
                "more people free than exist")
 
 
+def test_a_calendar_covers_the_dates_it_printed_and_no_others():
+    """Freshness and coverage are different questions.
+
+    This was found on real prints. Three coordinators' work weeks for
+    17-21 August were uploaded while the board was showing 24-28 August. Every
+    snapshot was stamped fresh, the staleness gate was satisfied, and the board
+    reported all seven coordinators fifty hours free for a week nobody had
+    looked at. Reading "no busy block" off a calendar that never covered the
+    day is the same mistake as reading it off no calendar at all.
+    """
+    from datetime import date, datetime
+    from esd_scheduler.constraints import EVIDENCE_INSUFFICIENT, evidence_state
+    from esd_scheduler.models import CalendarSnapshot, LabState
+
+    now = datetime(2026, 8, 24, 9, 0)
+    snap = CalendarSnapshot(coordinator_id="C01", provider="manual",
+                            fetched_at=now)
+    snap.covers_from, snap.covers_to = date(2026, 8, 17), date(2026, 8, 21)
+    state = LabState()
+    state.calendars["C01"] = snap
+
+    outside = evidence_state("C01", state,
+                             datetime(2026, 8, 25, 10), datetime(2026, 8, 25, 12), now)
+    expect(outside == EVIDENCE_INSUFFICIENT,
+           f"a day the print never covered read as {outside}, not insufficient")
+
+    inside = evidence_state("C01", state,
+                            datetime(2026, 8, 19, 10), datetime(2026, 8, 19, 12), now)
+    expect(inside != EVIDENCE_INSUFFICIENT,
+           "a day the print did cover was treated as unknown")
+
+
+def test_a_snapshot_with_no_stated_range_still_covers_everything():
+    """The mock provider and the demo do not print a date range.
+
+    Narrowing those would make the demo unstaffable, so an unset range means
+    "no claim either way" rather than "covers nothing".
+    """
+    from datetime import date, datetime
+    from esd_scheduler.models import CalendarSnapshot
+
+    snap = CalendarSnapshot(coordinator_id="C01", provider="mock",
+                            fetched_at=datetime(2026, 8, 24, 9, 0))
+    expect(snap.covers(date(2030, 1, 1)),
+           "a snapshot with no stated range refused a date")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

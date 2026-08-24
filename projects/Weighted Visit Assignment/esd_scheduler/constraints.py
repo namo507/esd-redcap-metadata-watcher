@@ -304,8 +304,14 @@ def evidence_state(
     for block in snapshot.hard_blocks():
         if block.overlaps(start, end):
             return EVIDENCE_CONFLICT
-    # Evidence must actually cover the window we are asking about.
+    # Evidence must actually cover the window we are asking about, in both
+    # senses. The hours of the day it describes, and the dates.
     if snapshot.working_hours is not None and not snapshot.working_hours.covers(start, end):
+        return EVIDENCE_INSUFFICIENT
+    # A print of last week is fresh and says nothing about this one. Reading
+    # "no busy block" off a calendar that never covered the day is the same
+    # mistake as reading it off no calendar at all.
+    if not (snapshot.covers(start) and snapshot.covers(end)):
         return EVIDENCE_INSUFFICIENT
     return EVIDENCE_CLEAR
 
