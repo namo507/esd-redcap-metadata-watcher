@@ -42,3 +42,8 @@ data/inbox/*.pdf
 # and serves GitHub Pages from itself. No .xlsx has ever been tracked here, so
 # ignoring them keeps a `git add -A` from making one the first.
 *.xlsx
+
+# A Power BI theme that appeared in config/. Nothing here reads it, and it is
+# not the ESD palette. Ignored because a plain `git add -A` kept sweeping it
+# into commits it did not belong in. Delete this line if you want it tracked.
+config/PowerBI-Theme-ESD.json

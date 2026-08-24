@@ -70,6 +70,7 @@ somebody to the roster shows up in both and they cannot drift apart.
     calendarsync.py Layer 0 freshness, and the Graph client the CLI can use
     graphcheck.py   the automated "try to break it" probes
     cli.py          the command line entry point
+    simulate.py     a narrated run of the whole workflow, for reading
 
 ## Two things worth knowing before changing anything
 

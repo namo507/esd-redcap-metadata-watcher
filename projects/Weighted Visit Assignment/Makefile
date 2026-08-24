@@ -2,7 +2,7 @@ PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
         import-calendar inbox audit doctor deps \
-        serve serve-quiet static publish \
+        serve serve-quiet static publish simulate \
         install-automation uninstall-automation deck clean
 
 help:
@@ -14,6 +14,7 @@ help:
 	@echo "  make serve                start the Visitboard on http://127.0.0.1:8765"
 	@echo "  make static               build the public, backend-free copy into dist-static/"
 	@echo "  make publish              build the frozen copy and check it (push to main to publish)"
+	@echo "  make simulate             walk the whole workflow on invented data"
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
@@ -66,6 +67,12 @@ static:
 # workflow and serves the same snapshot from docs/visitboard/ on GitHub Pages.
 publish: static
 	./automation/publish.sh --check
+
+# A narrated run of the full pipeline on invented families. Every number it
+# prints is computed by the real engine, so it goes stale only if the engine
+# changes, which is the point.
+simulate:
+	$(PY) -m esd_scheduler.simulate
 
 serve-quiet:
 	$(PY) -m backend.server --no-browser

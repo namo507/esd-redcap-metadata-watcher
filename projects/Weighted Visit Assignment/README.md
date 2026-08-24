@@ -194,6 +194,22 @@ snapshot. The only thing the browser recomputes is the burden term, because
 assigning a visit changes a coordinator's committed hours;
 `tests/test_static_board.py` pins that against the engine.
 
+## Seeing it work
+
+```bash
+make simulate
+```
+
+Walks the whole path on invented families and prints what happened at each
+step: an empty board, the protocol clock, a calendar being read, who each hard
+gate rules out and why, the four weighted criteria adding up to the score the
+board reports, the tie band, the clinician-and-tech rule, the vehicle, the
+physical limits, and the assignment landing in the audit log.
+
+Every figure it prints is computed by the real engine rather than written into
+the script, so it cannot describe an engine that no longer exists. A test runs
+it and checks the substance is still there.
+
 ## Demo data, or your own
 
 The board ships in demo mode and stays there unless told otherwise. The demo

@@ -117,6 +117,43 @@ def test_the_scheduled_jobs_are_documented():
                "Say when it runs and what it does.")
 
 
+def test_the_simulation_still_runs_and_still_teaches():
+    """A walkthrough nobody runs rots into a description of an older engine.
+
+    This runs it and checks the substance is present, not the wording: the
+    manual's preterm example, the tie band, the staffing rule and the remote
+    checkpoint. Any of those disappearing means the walk stopped covering
+    something it claims to cover.
+    """
+    import contextlib
+    import io
+    import sys
+
+    sys.path.insert(0, ROOT)
+    from esd_scheduler import simulate
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        code = simulate.run()
+    out = buffer.getvalue()
+    expect(code == 0, f"the simulation exited {code}")
+
+    for required, why in (
+        ("2026-08-01", "the manual's preterm example: 1m lands on 1 August"),
+        ("2029-06-01", "36m landing on the third birthday"),
+        ("clinician", "the one clinician, one tech rule"),
+        ("no solo range", "somebody who is signed off but cannot run a visit"),
+        ("out of hours", "the out-of-hours definition"),
+        ("van", "the vehicle decision"),
+        ("pairings offered", "the remote 24m checkpoint"),
+    ):
+        expect(required in out, f"the walkthrough no longer shows {why}")
+
+    # The scored total has to be the board's own, not a number typed in here.
+    expect("the board says" in out,
+           "the score breakdown no longer checks itself against the board")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
