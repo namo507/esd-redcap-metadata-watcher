@@ -23,17 +23,33 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # Two files, because the suites need different things. requirements-dev
+      # covers the shared modules and both REDCap projects; the caregiver
+      # analysis brings its own scientific stack (scikit-learn, statsmodels,
+      # shap, umap-learn) and its tests cannot even be collected without it.
+      # Installing only the first is why a caregiver test failed here for
+      # weeks with ModuleNotFoundError while passing on every laptop that had
+      # run the notebooks.
       - name: Install development dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -r projects/caregiver-cluster-analysis/requirements.txt
 
+      # Source moved into shared/ and projects/<name>/ when the workspace was
+      # reorganised. The old flat list named files that no longer exist here,
+      # so this step could never have compiled anything.
       - name: Compile Python sources
         run: >-
           python -m compileall -q
-          app.py charts.py exports.py redcap_client.py recruitment_reports.py
-          watcher_core.py tests
+          shared
+          projects/nano-nico-recruitment
+          projects/redcap-metadata-watcher
+          projects/caregiver-cluster-analysis
 
       - name: Check secret hygiene
-        run: python -m pytest -q tests/test_secret_hygiene.py
+        run: python -m pytest -q shared/tests/test_secret_hygiene.py
 
+      # testpaths and pythonpath come from pyproject.toml, which already knows
+      # where the suites live. Naming paths here again is how they drifted.
       - name: Run test suite
-        run: python -m pytest -q --ignore=tests/test_secret_hygiene.py
+        run: python -m pytest -q --ignore=shared/tests/test_secret_hygiene.py

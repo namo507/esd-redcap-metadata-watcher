@@ -39,8 +39,13 @@ jobs:
         if: ${{ vars.REDCAP_API_URL != '' }}
         run: echo "REDCAP_API_URL=${{ vars.REDCAP_API_URL }}" >> "$GITHUB_ENV"
 
+      # Scoped to the suites this job depends on. A bare `pytest` runs every
+      # suite in the repository, including the caregiver analysis, whose
+      # scientific stack this job does not install and does not need. That is
+      # what stopped the recruitment tables refreshing: an unrelated test
+      # could not be collected, and the gate failed before REDCap was reached.
       - name: Run automated checks
-        run: python -m pytest
+        run: python -m pytest -q shared/tests projects/nano-nico-recruitment/tests
 
       # docs/data.json is generated from REDCap field metadata and legitimately
       # contains REDCap doc_id_hash values in embedded image URLs. The site
