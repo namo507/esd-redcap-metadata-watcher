@@ -154,6 +154,34 @@ def test_the_simulation_still_runs_and_still_teaches():
            "the score breakdown no longer checks itself against the board")
 
 
+def test_the_pipeline_check_still_holds_every_seam():
+    """The end-to-end run, executed rather than described.
+
+    Unit tests prove each piece alone. This is the one that proves an upload
+    changes what the board reports, that the recommendation and the assign
+    route agree, and that undoing puts it back. Those seams have parted in
+    this codebase before, so the check runs in CI rather than by hand.
+    """
+    import contextlib
+    import io
+    import sys
+
+    sys.path.insert(0, ROOT)
+    sys.path.insert(0, os.path.join(ROOT, "automation"))
+    import smoke_pipeline
+
+    smoke_pipeline.FAILURES.clear()
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        code = smoke_pipeline.run()
+    out = buffer.getvalue()
+    expect(code == 0,
+           "the pipeline check reported parted seams:\n"
+           + "\n".join(smoke_pipeline.FAILURES)
+           + "\n" + out[-800:])
+    expect("every seam held" in out, "the run did not reach its own conclusion")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

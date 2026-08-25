@@ -195,6 +195,24 @@ snapshot. The only thing the browser recomputes is the burden term, because
 assigning a visit changes a coordinator's committed hours;
 `tests/test_static_board.py` pins that against the engine.
 
+## Checking it end to end
+
+```bash
+make smoke                              an invented print
+make smoke FILES="Maggie.pdf Lauren.pdf"   your own
+```
+
+Boots the real server on an ephemeral port and drives every endpoint the page
+calls, in order: health, the page and its assets, an empty board, a runtime
+upload decoded and parsed in-process, the board changing because of it,
+entering a visit, the decision with its reasons, committing, undoing, and the
+timepoint that needs nobody. Thirty-one checks, each printing what it asked
+for and what came back, so a failure names the seam that parted.
+
+No external service is contacted and nothing is stubbed. It is the same HTTP
+the browser speaks, which is what makes it a test of the seams rather than of
+the pieces. `make test` runs it too.
+
 ## Seeing it work
 
 ```bash

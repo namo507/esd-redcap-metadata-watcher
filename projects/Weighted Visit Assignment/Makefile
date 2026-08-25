@@ -2,7 +2,7 @@ PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
         import-calendar inbox audit doctor deps \
-        serve serve-quiet static publish simulate \
+        serve serve-quiet static publish simulate smoke \
         install-automation uninstall-automation deck clean
 
 help:
@@ -15,6 +15,7 @@ help:
 	@echo "  make static               build the public, backend-free copy into dist-static/"
 	@echo "  make publish              build the frozen copy and check it (push to main to publish)"
 	@echo "  make simulate             walk the whole workflow on invented data"
+	@echo "  make smoke                drive the whole pipeline over HTTP, end to end"
 	@echo "  make week                 greedy vs optimiser with measured regret"
 	@echo "  make sync                 pull calendars, record the SLO"
 	@echo "  make import-calendar FILE=cal.pdf   read an Outlook PDF print"
@@ -72,6 +73,12 @@ publish: static
 # A narrated run of the full pipeline on invented families. Every number it
 # prints is computed by the real engine, so it goes stale only if the engine
 # changes, which is the point.
+# Boots the real server and drives every endpoint the page calls, in order,
+# asserting the seams hold. FILES= runs it against your own prints instead of
+# an invented one: make smoke FILES="a.pdf b.pdf"
+smoke:
+	$(PY) automation/smoke_pipeline.py $(FILES)
+
 simulate:
 	$(PY) -m esd_scheduler.simulate
 
