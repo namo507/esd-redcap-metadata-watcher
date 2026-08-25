@@ -552,18 +552,49 @@ def test_an_image_is_a_lower_tier_than_the_same_calendar_as_a_pdf():
     expect(img.tier == TIER_IMAGE, f"image tier wrong: {img.tier}")
 
 
-def test_nothing_read_from_an_image_commits_without_review():
+def test_whether_a_screenshot_waits_for_review_is_the_labs_call():
+    """Both settings, because the lab chose the riskier one deliberately.
+
+    A PDF is vector extraction and its times are exact. A screenshot is
+    measured off pixels, and the reader can miss a block at the edge of a
+    grid. With auto-commit on, a block it never saw is simply absent, and
+    absent time reads as free, so the board can offer a slot somebody is
+    busy in. The lab has accepted that in exchange for no confirmation step.
+
+    What must hold either way is that the tier still records the read came
+    off an image, so the provenance survives even when the review does not.
+    """
     needs_opencv()
-    from esd_scheduler.calendar_import import ColorMap
+    from esd_scheduler.calendar_import import TIER_IMAGE, ColorMap
+    from esd_scheduler import resources as res_mod
 
     cmap = ColorMap(mapping={"cranberry": "C03", "brown": "C02", "yellow": "C05"},
                     confirmed=True, confirmed_by="test")
-    result = import_pdf(WEEK_PNG, coordinators=ROSTER, color_map=cmap,
-                        image_hours=(8.0, 17.0), image_start=date(2026, 8, 17))
-    expect(result.blocks, "the image produced no blocks at all")
-    for block in result.blocks:
-        expect(not block.reviewed,
-               "a block measured off pixels committed without review")
+    original = res_mod.LabResources.load
+
+    def _with(auto: bool):
+        loaded = original()
+        loaded.auto_confirm_screenshots = auto
+        res_mod.LabResources.load = staticmethod(lambda *a, **k: loaded)
+        try:
+            return import_pdf(WEEK_PNG, coordinators=ROSTER, color_map=cmap,
+                              image_hours=(8.0, 17.0),
+                              image_start=date(2026, 8, 17))
+        finally:
+            res_mod.LabResources.load = original
+
+    committed = _with(True)
+    expect(committed.blocks, "the image produced no blocks at all")
+    expect(all(b.reviewed for b in committed.blocks),
+           "auto_confirm is on, so a screenshot should count on arrival")
+    expect(committed.tier == TIER_IMAGE,
+           "the tier stopped recording that this came off a screenshot")
+
+    held = _with(False)
+    expect(held.blocks, "the image produced no blocks at all")
+    expect(not any(b.reviewed for b in held.blocks),
+           "auto_confirm is off, so blocks should wait to be settled")
+    expect(held.tier == TIER_IMAGE, "the tier changed with the setting")
 
 
 def test_image_times_match_the_pdf_they_were_rendered_from():

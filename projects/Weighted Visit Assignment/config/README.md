@@ -141,6 +141,23 @@ scores say. All transcribed from the manual except one:
   the van outright; one is enough to take it; nobody trained, or a home marked
   van inaccessible, means the rental.
 
+### Screenshot uploads
+
+`screenshot_uploads.auto_confirm` decides whether a calendar read off a
+screenshot counts immediately or waits to be settled. It is **on**: a
+screenshot applies the moment it is uploaded, with no confirmation step.
+
+Worth knowing what that trades. A PDF print is vector extraction and its times
+are read from the file exactly. A screenshot is measured off pixels, and the
+reader can miss a block at the edge of a grid or misread an hour by a row.
+With auto-commit on, a block it never saw is simply absent, and absent time
+reads as free, so the board can offer a slot somebody is actually busy in.
+Set it to `false` to hold pixel reads in the "To confirm" tab instead.
+
+Either way the evidence tier still records that the read came off a
+screenshot, so the provenance survives. Upload a PDF print where the timing
+matters.
+
 **`holidays` ships empty and that is not the same as "there are none."** The
 manual gives the rule — *"On designated USC staff holidays, no visits should be
 scheduled (no exceptions to this)"* — but not the dates. Add them as

@@ -51,6 +51,9 @@ class LabResources:
     grace_minutes: int = 30
     vehicles: List[Vehicle] = field(default_factory=list)
     holidays_known: bool = False
+    # Whether a screenshot read applies immediately or waits to be confirmed.
+    # A PDF is exact and always applies; this is only about pixel reads.
+    auto_confirm_screenshots: bool = True
     confirmed: bool = False
 
     # -- what stops a visit happening ---------------------------------------
@@ -178,5 +181,7 @@ class LabResources:
                 for v in (raw.get("vehicles") or []) if v.get("name")
             ],
             holidays_known=bool(holidays),
+            auto_confirm_screenshots=bool(
+                (raw.get("screenshot_uploads") or {}).get("auto_confirm", True)),
             confirmed=bool(raw.get("confirmed")),
         )

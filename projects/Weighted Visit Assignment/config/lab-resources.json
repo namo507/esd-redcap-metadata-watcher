@@ -26,22 +26,25 @@
     "                          quietly scheduling through them."
   ],
   "confirmed": false,
-
   "tech_kits": {
     "NANO": 2
   },
-
-  "closed_weekdays": [4],
-
+  "closed_weekdays": [
+    4
+  ],
   "holidays": [],
-
   "working_hours": {
     "start_hour": 9.0,
     "end_hour": 17.0,
-    "weekdays": [0, 1, 2, 3, 4],
+    "weekdays": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
     "grace_minutes": 30
   },
-
   "vehicles": [
     {
       "name": "van",
@@ -55,5 +58,29 @@
       "prefers": "longer_drive",
       "note": "No training or approval needed. Where two visits run at once the longer drive takes the rental."
     }
-  ]
+  ],
+  "screenshot_uploads": {
+    "_comment": [
+      "Whether a calendar read off a screenshot counts immediately, or waits",
+      "for somebody to confirm it.",
+      "",
+      "true  (the current setting): a screenshot applies the moment it is",
+      "      uploaded, exactly like a PDF. No confirmation step.",
+      "false: blocks read off pixels are held until a human settles them in",
+      "      the 'To confirm' tab, and until then they are neither free nor",
+      "      busy.",
+      "",
+      "WHAT THE SETTING COSTS. A PDF is vector extraction: the times are read",
+      "from the file and are exact. A screenshot is measured off pixels, and",
+      "the reader can miss a block at the edge of a grid or misread an hour",
+      "by one row. With auto-commit on, a block it failed to see is simply",
+      "absent, and absent time reads as free. The board will offer a slot",
+      "somebody is actually busy in.",
+      "",
+      "The evidence tier still records that it was a screenshot, so the",
+      "provenance is never lost even when the review step is skipped.",
+      "Upload a PDF print where the timing matters."
+    ],
+    "auto_confirm": true
+  }
 }

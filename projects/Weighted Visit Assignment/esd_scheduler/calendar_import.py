@@ -462,9 +462,15 @@ def import_pdf(
         parsed = extract_image(path, day_start=start, n_days=image_days,
                                hours=image_hours)
         tier = TIER_IMAGE
-        # Never auto-commit an image. The PDF path is exact measurement and has
-        # earned committing on import; this is inference off pixels and has not.
-        auto_confirm = False
+        # Whether a pixel read counts straight away is the lab's call, and it
+        # lives in config rather than here. A PDF is vector extraction and its
+        # times are exact; this is measurement off an image, and the reader can
+        # miss a block at the edge of a grid. With auto-commit on, a block it
+        # did not see is simply absent, and absent time reads as free -- so the
+        # board can offer a slot somebody is actually busy in. The tier still
+        # records that it came from a screenshot either way.
+        from .resources import LabResources
+        auto_confirm = LabResources.load().auto_confirm_screenshots
     else:
         parsed = load(path, year_hint=year_hint)
         tier = (
