@@ -15,6 +15,7 @@ js/team.js          the team table and the protocol clock
 js/assign.js        the queue, the pair, entering a visit
 js/calendars.js     uploads, what came back, exports
 js/logic.js         the decision map
+js/settings.js      the tuning dropdowns
 js/boot.js          start-up and the once-a-minute refresh
 assets/             lab and UofSC logos, section icons
 ```
@@ -57,6 +58,16 @@ prints no solo range beside their names.
 Where the export and the manual use different names for the same person, both
 are shown together &mdash; *Morgan Soto (Makenzie)* &mdash; so one member of
 staff never reads as two.
+
+**Tuning.** Every number the board uses that is a judgement rather than a rule
+from the manual is a dropdown under *How it decides* &mdash; the four weights,
+the tie band, the lab's kits and hours, and each person's capacity. The
+controls are built from `/api/settings`, so `settings.js` knows no setting's
+name and a knob added on the server appears here with no frontend change.
+Groups start closed: somebody after one number should meet three headings, not
+forty controls. Changing one applies at once and redraws every section, and
+because setting a weight rescales the other three, the page redraws from the
+board's answer rather than patching the control that was touched.
 
 A pairing shows which **vehicle** it should take and why, and flags a visit
 that runs **out of hours**, because that puts the pair into the rotation.

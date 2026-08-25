@@ -248,9 +248,22 @@ class EngineConfig:
 DEFAULT_CONFIG_PATH = os.path.join("config", "engine.json")
 
 
+def config_path() -> str:
+    """Where the engine config lives, honouring ``ESD_ENGINE_PATH``.
+
+    The roster and the lab's limits have had an env override since they were
+    written; this one did not, and that asymmetry was a real bug rather than
+    an untidiness. A caller that wrote to the overridden path and then reloaded
+    got the *original* file back, so a change appeared to save and then do
+    nothing -- which is precisely how a settings control looks when it is
+    broken.
+    """
+    return os.environ.get("ESD_ENGINE_PATH", DEFAULT_CONFIG_PATH)
+
+
 def load_config(path: Optional[str] = None) -> EngineConfig:
     """Load config from JSON, falling back to the built-in defaults."""
-    path = path or DEFAULT_CONFIG_PATH
+    path = path or config_path()
     if not os.path.exists(path):
         cfg = EngineConfig()
         cfg.validate()

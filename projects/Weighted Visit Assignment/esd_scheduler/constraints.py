@@ -82,6 +82,18 @@ NANO_KIT_CEILING = 2            # Master §2 rule 7, and the fallback if the
                                 # resources config is missing entirely
 
 
+def clear_resource_cache() -> None:
+    """Drop the cached limits so the next gate re-reads the file.
+
+    Called when the lab changes a setting through the board. Without this a
+    tech-kit count or a working-hours change would sit in the file and have no
+    effect until the process restarted, which reads as the control being
+    broken.
+    """
+    global _RESOURCES
+    _RESOURCES = None
+
+
 def _resources():
     """The lab's physical limits, loaded once per process.
 

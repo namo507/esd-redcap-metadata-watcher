@@ -15,6 +15,7 @@ python3 backend/tests/test_api.py    # 12 end-to-end tests
 |---|---|
 | `server.py` | Routing, JSON responses, static file serving, path-traversal guard |
 | `session.py` | One `LabState` plus its audit store; translates engine output into what a screen needs |
+| `settings.py` | The tunables, their allowed values, and what applying one does |
 | `build_static.py` | Freezes the board into `dist-static/` so the page works with no API |
 | `export_snapshot.py` | Writes the board out for the exports the queue offers |
 | `tests/test_api.py` | Boots a real server on an ephemeral port and talks HTTP to it |
@@ -51,6 +52,8 @@ Calendars:
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/settings` | Every knob the lab may turn, with its value and its allowed choices |
+| POST | `/api/settings` | `{key, value}` — set one, applied at once. Returns what moved plus the whole catalogue |
 | GET | `/api/calendar/read-table` | What the last upload read, one row per calendar, ready to correct |
 | GET | `/api/calendar/imports` | Every upload on file, newest first |
 | POST | `/api/calendar/upload` | `{filename, data}` with the file base64-encoded |
@@ -61,6 +64,38 @@ Calendars:
 
 `tests/test_docs.py` checks this list against the routes the server actually
 registers, so an endpoint added without a line here fails the suite.
+
+### Turning a knob
+
+`settings.py` holds the catalogue: every tunable, its current value and the
+list of values it accepts. Three things follow from that shape.
+
+**A knob is data.** Adding one is a row in `KNOBS`, or a row the roster
+generates — per-person capacity works that way, so somebody joining the lab
+gets a control with no code change. No route and no frontend edit.
+
+**Only offered values are accepted.** The dropdown sends a value, the server
+checks it against the same option list it published, and refuses anything
+else. A typo cannot reach the engine, and a number cannot arrive as a string.
+
+**Applying does not reset the board.** `LabSession.reload_settings()` re-reads
+the config files and pushes the per-person values onto the coordinators
+already in play; the uploaded calendar, the assignments and the activity log
+survive. A scheduler nudging a weight is not asking to lose the week's work,
+and if tweaking cost them the upload they would stop tweaking.
+
+A change is written to the file in `config/`, not to a database. That is
+deliberate: the config files stay the single source of what the board is
+doing, a tweak shows up in `git diff` like any other change to them, and a
+setting turned on a whim can be read back or reverted by whoever comes next.
+It also means the comments in those files are preserved through an edit,
+which a test checks.
+
+The weights are the one knob with a consequence worth stating: they must sum
+to 1, so setting one rescales the other three in proportion and the response
+reports where all four landed. `weight_vector_id` carries a fingerprint of the
+config, so a decision recorded earlier still points at the numbers that
+produced it.
 
 ### What a read-table row says
 

@@ -792,6 +792,26 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .readtable tr.is-offroster td { opacity: 0.55; }
 /* The second name one person goes by. Quiet, beside their name, never on its
    own line -- two lines is how a reader starts counting two people. */
+/* --- tuning controls -----------------------------------------------------
+   Groups closed by default. Somebody opening this to change one number should
+   meet three headings, not every control the board has. */
+.tweakgroup { border-top: 1px solid var(--line); padding: 0.15rem 0; }
+.tweakgroup summary {
+  cursor: pointer; padding: 0.85rem 0.2rem; display: flex;
+  align-items: baseline; gap: 0.6rem; flex-wrap: wrap;
+}
+.tweakgroup summary::marker { color: var(--muted); }
+.tweakgroup summary .note { flex: 1 1 16rem; }
+.tweakrows { padding: 0.2rem 0 1rem; display: grid; gap: 0.7rem; }
+.tweakrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1.2rem; flex-wrap: wrap;
+}
+.tweaklabel { display: block; flex: 1 1 20rem; }
+.tweaklabel .note { display: block; margin-top: 1px; }
+.tweakrow select { flex: 0 0 auto; min-width: 13rem; }
+.tweakrow select:disabled { opacity: 0.5; }
+
 .alias { margin-left: 6px; font-weight: 400; color: var(--muted); }
 .alias::before { content: "("; }
 .alias::after { content: ")"; }

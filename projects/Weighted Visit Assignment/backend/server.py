@@ -30,6 +30,7 @@ from urllib.parse import unquote, urlparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend import __version__  # noqa: E402
+from backend import settings  # noqa: E402
 from backend.session import LIVE, LabSession, board_mode  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -197,6 +198,33 @@ def r_board(params, body):
         "availability": SESSION.availability_grid(),
         "coordinators": SESSION.coordinator_table(),
     }
+
+
+@get("/api/settings")
+def r_settings(params, body):
+    """Every knob the lab may turn, with its current value and its choices."""
+    return 200, settings.catalogue(SESSION)
+
+
+@post("/api/settings")
+def r_set_setting(params, body):
+    """Turn one knob. Takes effect on the next question the board is asked.
+
+    Returns the whole catalogue alongside what changed, so the page can redraw
+    from the board's own answer rather than patching its own controls -- a
+    weight change moves three other controls, and a page that updated only the
+    one that was touched would show a set of numbers that never existed.
+    """
+    key = (body or {}).get("key")
+    if not key:
+        return 400, {"error": "which setting? send {key, value}"}
+    try:
+        changed = settings.apply(SESSION, key, (body or {}).get("value"))
+    except settings.SettingError as exc:
+        return 400, {"error": str(exc)}
+    except (ValueError, KeyError) as exc:
+        return 400, {"error": f"that setting was refused: {exc}"}
+    return 200, {"changed": changed, "settings": settings.catalogue(SESSION)}
 
 
 @get("/api/roster")

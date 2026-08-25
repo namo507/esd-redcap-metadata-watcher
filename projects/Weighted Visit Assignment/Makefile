@@ -48,6 +48,7 @@ test:
 	$(PY) tests/test_availability.py
 	$(PY) tests/test_pairing.py
 	$(PY) tests/test_roster.py
+	$(PY) tests/test_settings.py
 	$(PY) tests/test_deployment.py
 	$(PY) tests/test_frontend.py
 	$(PY) tests/test_live_mode.py

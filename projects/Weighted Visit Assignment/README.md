@@ -131,6 +131,8 @@ view means opening `team.js`.
     test_availability.py    who is free, once calendars are in
     test_pairing.py         one clinician and one tech
     test_roster.py          the roster as data
+    test_settings.py        the tuning knobs: offered values only, and
+                            a change that does not cost the week's work
     test_automation.py      the scheduled jobs
     test_graph_privacy.py   free/busy only, never event titles
 

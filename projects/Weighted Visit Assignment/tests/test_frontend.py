@@ -134,6 +134,25 @@ def test_confirming_a_mapping_redraws_every_section():
                f"page would keep showing the previous read")
 
 
+def test_the_tuning_controls_are_drawn_wherever_their_section_is_shown():
+    """A card wired into one entry point and not the other renders sometimes.
+
+    That is exactly what happened: `drawSettings` was added to the boot
+    render, but arriving on the section through the nav or a route went
+    through `setSection`, which did not know about it. The card was correct
+    and invisible.
+    """
+    core = read("js", "core.js")
+    logic_line = [l for l in core.splitlines()
+                  if 'name === "logic"' in l]
+    expect(logic_line, "setSection no longer routes the logic section")
+    expect("drawSettings" in logic_line[0],
+           "setSection shows the logic section without drawing the tuning "
+           "controls, so they render only on some ways in")
+    expect("drawSettings" in read("js", "calendars.js"),
+           "a settings change would not redraw the rest of the board")
+
+
 def test_one_person_with_two_names_is_labelled_once():
     """The board must not show the same human under two different names.
 

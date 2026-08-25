@@ -217,6 +217,47 @@ class LabSession:
 
     # -- lifecycle -----------------------------------------------------------
 
+    def reload_settings(self) -> None:
+        """Re-read the config files without rebuilding the lab.
+
+        Deliberately not ``reset()``. A reset throws away the uploaded
+        calendar, the assignments and the activity log, and somebody nudging a
+        weight is not asking to lose the week's work -- if tweaking a number
+        cost them the upload they would stop tweaking numbers, which defeats
+        the point of the controls existing.
+
+        So this re-reads the files and pushes the per-person values onto the
+        coordinators already in play. Everything downstream -- scores, gates,
+        rankings -- reads these on each call, so the next question the board is
+        asked is answered under the new settings.
+        """
+        with self._lock:
+            self.cfg = load_config()
+            self.matrix = ReliabilityMatrix.load()
+            self.roster_config = Roster.load()
+
+            # Capacity is copied onto the Coordinator objects at build time, so
+            # re-reading the roster alone would leave the old number in force
+            # everywhere it actually gets used.
+            by_id = self.roster_config.by_id()
+            for cid, coord in self.state.coordinators.items():
+                entry = by_id.get(cid)
+                if entry is None:
+                    continue
+                coord.capacity_hours_week = entry.capacity_hours_week
+                coord.van_trained = entry.van_trained
+                coord.tech_trained = entry.tech_trained
+                coord.out_of_hours_count = entry.out_of_hours_count
+
+            # The lab's physical limits are cached for the length of a process,
+            # because the gate consults them once per candidate per visit.
+            from esd_scheduler import constraints
+            constraints.clear_resource_cache()
+
+            # Anything remembered about who needs a closer look was worked out
+            # under the old numbers.
+            self._attention_cache = {}
+
     def reset(self) -> None:
         with self._lock:
             # Two different clocks, and conflating them is what made the board
