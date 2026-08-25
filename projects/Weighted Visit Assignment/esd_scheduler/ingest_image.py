@@ -38,6 +38,12 @@ MIN_SAT = 30
 MIN_VAL = 25
 
 
+#: The fewest pixels per hour of calendar this reader will measure against.
+#: See the note in ``extract`` for where the number comes from -- it is the
+#: midpoint of a measured cliff, not a round number somebody liked.
+MIN_PIXELS_PER_HOUR = 75.0
+
+
 def ocr_available() -> bool:
     """Whether an OCR engine is installed and usable."""
     try:
@@ -444,6 +450,35 @@ def extract(
               "where the times are exact.")
         return result
     span = max(0.5, (hours[1] - hours[0]) if hours else 1.0)
+
+    # How much image there is per hour of calendar. Below a floor, the block
+    # edges and the axis cannot be told apart well enough to place an event,
+    # and the reader stops rather than answering approximately.
+    #
+    # Measured, not guessed. automation/ocr_accuracy.py renders the same page
+    # at a range of resolutions and scores every block against the times it
+    # was drawn at:
+    #
+    #     63 px/hour   1 of 4 blocks found, and that one 135 minutes out
+    #     85 px/hour   3 of 4 found, every one exact
+    #    132 px/hour   4 of 4 found, every one exact
+    #
+    # A 135-minute error is not a near miss. It puts a visit in a different
+    # part of the day, and with screenshot auto-commit on it becomes busy time
+    # nobody checked while the real slot reads free. This module already
+    # refuses to guess the hour range for that reason; a resolution too low to
+    # measure is the same failure arriving by a different route.
+    per_hour = (grid.bottom - grid.top) / span
+    if per_hour < MIN_PIXELS_PER_HOUR:
+        result.unresolved.append(
+            f"TOO LOW A RESOLUTION TO MEASURE: this image gives "
+            f"{per_hour:.0f} pixels per hour of calendar, and below "
+            f"{MIN_PIXELS_PER_HOUR:.0f} the reader has been measured placing a "
+            f"block over two hours from where it belongs. Nothing has been "
+            f"read. Re-take the screenshot at a larger size, or print the "
+            f"calendar to PDF, where the times are read from the file and are "
+            f"exact.")
+        return result
     # Columns from the day headers where OCR can read them, falling back to an
     # even division of the grid otherwise.
     starts = read_day_columns(path, grid)

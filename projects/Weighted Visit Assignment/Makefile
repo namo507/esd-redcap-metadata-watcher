@@ -2,7 +2,7 @@ PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
         import-calendar inbox audit doctor deps \
-        serve serve-quiet static publish simulate smoke \
+        serve serve-quiet static publish simulate smoke ocr-accuracy \
         install-automation uninstall-automation deck clean
 
 help:
@@ -49,6 +49,7 @@ test:
 	$(PY) tests/test_pairing.py
 	$(PY) tests/test_roster.py
 	$(PY) tests/test_settings.py
+	$(PY) tests/test_ocr_accuracy.py
 	$(PY) tests/test_deployment.py
 	$(PY) tests/test_frontend.py
 	$(PY) tests/test_live_mode.py
@@ -82,6 +83,12 @@ smoke:
 
 simulate:
 	$(PY) -m esd_scheduler.simulate
+
+# How accurately the calendar reader reads a calendar, scored against events
+# whose true times are known because the fixture drew them. DPI= renders the
+# same page larger or smaller: make ocr-accuracy DPI=72
+ocr-accuracy:
+	$(PY) automation/ocr_accuracy.py $(if $(DPI),--dpi $(DPI),)
 
 serve-quiet:
 	$(PY) -m backend.server --no-browser

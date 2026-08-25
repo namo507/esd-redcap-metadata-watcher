@@ -60,6 +60,15 @@ jobs:
           python -m pip install -r requirements-optional.txt || \
             echo "optional extras unavailable; those tests will skip"
 
+      # Two things the suite cannot check from inside itself: that every
+      # third-party import is listed in a requirements file, and that the
+      # board still starts with the optional packages blocked. The second is
+      # what the container depends on -- it installs requirements-core.txt
+      # only, so an import moving to the top of a module breaks the image
+      # while every test on this laptop still passes.
+      - name: Check dependencies are declared and the core-only path works
+        run: make doctor
+
       - name: Run the test suite
         run: make test
 

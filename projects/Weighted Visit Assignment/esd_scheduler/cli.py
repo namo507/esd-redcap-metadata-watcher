@@ -697,12 +697,147 @@ def cmd_doctor(args) -> int:
             state = "unreadable"
         print(f"  {state:9s} {os.path.basename(path):26s} {what}")
 
+    problems = _doctor_declarations() + _doctor_core_only()
+
     print()
     if missing_required:
         print(f"{missing_required} required package missing. Calendar uploads will fail.")
         return 1
-    print("Everything needed for calendar uploads is installed.")
+    if problems:
+        print("PROBLEMS")
+        for line in problems:
+            print(f"  - {line}")
+        print()
+        return 1
+    print("Everything needed for calendar uploads is installed, every import "
+          "is declared,")
+    print("and the board still starts with the optional packages blocked.")
     return 0
+
+
+#: Packages the board must run without. The core/optional split in
+#: requirements-*.txt is a promise, and these are what it promises about.
+_OPTIONAL_MODULES = ("cv2", "numpy", "PIL", "pytesseract", "pptx",
+                     "matplotlib", "fontTools")
+
+#: Modules that must import with only the core packages present.
+_MUST_IMPORT_BARE = ("backend.server", "backend.session", "backend.settings",
+                     "esd_scheduler.calendar_import", "esd_scheduler.simulate")
+
+#: Import name -> distribution, where the two differ.
+_DISTRIBUTION = {"fitz": "PyMuPDF", "cv2": "opencv-python", "PIL": "Pillow",
+                 "pptx": "python-pptx", "fontTools": "fonttools"}
+
+_SKIP_DIRS = {".git", "node_modules", "archive", "dist-static", "__pycache__",
+              "data", ".claude", ".venv312"}
+
+
+def _doctor_declarations():
+    """Every third-party import, checked against the requirements files.
+
+    The package list above is written by hand, which is exactly how a
+    dependency goes missing: somebody adds an import and the list is not the
+    thing they were editing. This walks the source instead, so a package that
+    is imported and declared nowhere is reported by name rather than
+    discovered on a clean install by whoever deploys next.
+    """
+    import ast
+    import importlib.util
+    import re
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    declared = ""
+    for name in ("requirements.txt", "requirements-core.txt",
+                 "requirements-optional.txt"):
+        path = os.path.join(root, name)
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                declared += fh.read()
+
+    modules = {}
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
+        for name in files:
+            if not name.endswith(".py"):
+                continue
+            try:
+                with open(os.path.join(base, name), encoding="utf-8") as fh:
+                    tree = ast.parse(fh.read())
+            except (OSError, SyntaxError):
+                continue
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        modules.setdefault(alias.name.split(".")[0], name)
+                elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                    modules.setdefault(node.module.split(".")[0], name)
+
+    problems = []
+    for module, where in sorted(modules.items()):
+        if module.startswith("_"):
+            continue
+        try:
+            spec = importlib.util.find_spec(module)
+        except (ImportError, ValueError):
+            spec = None
+        origin = getattr(spec, "origin", "") or ""
+        third = ("site-packages" in origin or "dist-packages" in origin
+                 or module in _DISTRIBUTION or module in _OPTIONAL_MODULES)
+        if not third:
+            continue
+        dist = _DISTRIBUTION.get(module, module)
+        if not re.search(rf"^{re.escape(dist)}\b", declared, re.M | re.I):
+            problems.append(f"{where} imports {module}, but no requirements "
+                            f"file lists {dist}. A clean install will not "
+                            f"have it.")
+    return problems
+
+
+def _doctor_core_only():
+    """Prove the board still starts with every optional package blocked.
+
+    requirements-core.txt claims one package is enough to serve a working
+    board. That claim is only worth making if something checks it, and the
+    way it breaks is silent: an import moves from inside a function to the
+    top of a module, everything still works on a laptop that has the package,
+    and the container stops booting.
+
+    Run in a subprocess because the point is a clean interpreter -- blocking
+    imports in this one would only block what has not already been imported.
+    """
+    import subprocess
+    import sys
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script = (
+        "import builtins, sys, os\n"
+        f"BLOCKED = {set(_OPTIONAL_MODULES)!r}\n"
+        "real = builtins.__import__\n"
+        "def guard(name, *a, **k):\n"
+        "    if name.split('.')[0] in BLOCKED:\n"
+        "        raise ImportError(name + ' blocked')\n"
+        "    return real(name, *a, **k)\n"
+        "builtins.__import__ = guard\n"
+        f"sys.path.insert(0, {root!r})\n"
+        "os.environ.setdefault('ESD_MODE', 'demo')\n"
+        "bad = []\n"
+        f"for m in {list(_MUST_IMPORT_BARE)!r}:\n"
+        "    try:\n"
+        "        __import__(m)\n"
+        "    except Exception as e:\n"
+        "        bad.append(m + ': ' + type(e).__name__ + ': ' + str(e))\n"
+        "print(chr(10).join(bad))\n"
+    )
+    try:
+        proc = subprocess.run([sys.executable, "-c", script], cwd=root,
+                              capture_output=True, text=True, timeout=120)
+    except Exception as exc:                                   # noqa: BLE001
+        return [f"could not check the core-only import path: {exc}"]
+
+    failures = [line for line in proc.stdout.splitlines() if line.strip()]
+    return [f"{line} -- so the board needs an optional package to start, and "
+            f"the core/optional split in requirements-*.txt is not real"
+            for line in failures]
 
 
 

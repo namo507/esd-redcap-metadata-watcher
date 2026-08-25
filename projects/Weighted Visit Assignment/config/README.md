@@ -170,6 +170,27 @@ Either way the evidence tier still records that the read came off a
 screenshot, so the provenance survives. Upload a PDF print where the timing
 matters.
 
+**What the two paths actually score.** `make ocr-accuracy` renders a page whose
+events have known times and scores both readers against them:
+
+| read | result |
+|---|---|
+| PDF, from the file | every block found, **0 minutes** of error |
+| screenshot at 150 dpi | every *visible* block found, **0 minutes** of error |
+| screenshot at 72 dpi | refused &mdash; see below |
+
+Two things that table does not say, and both matter more than the zeros.
+
+A screenshot cannot show a block that another calendar was painted over. On
+the scored page two of six people's blocks were completely hidden under the
+lab's own shift and offered-time calendars, and a hidden block is simply
+absent from the read. With auto-commit on, absent time reads as free.
+
+And below **75 pixels per hour** the reader has been measured placing a block
+*135 minutes* from where it was drawn, so it now refuses rather than
+answering. That floor is in `esd_scheduler/ingest_image.py`, and the numbers
+either side of it are in the note beside it.
+
 **`holidays` ships empty and that is not the same as "there are none."** The
 manual gives the rule — *"On designated USC staff holidays, no visits should be
 scheduled (no exceptions to this)"* — but not the dates. Add them as

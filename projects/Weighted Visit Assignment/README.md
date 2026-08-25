@@ -133,6 +133,8 @@ view means opening `team.js`.
     test_roster.py          the roster as data
     test_settings.py        the tuning knobs: offered values only, and
                             a change that does not cost the week's work
+    test_ocr_accuracy.py    whether the calendar reader reads the times it
+                            was given, scored against known-drawn events
     test_automation.py      the scheduled jobs
     test_graph_privacy.py   free/busy only, never event titles
 
@@ -593,6 +595,15 @@ Each filter reports `pass`, `fail` or **not applicable**, and the last is not a
 quiet pass &mdash; it means the calendar was absent or empty for that range, so
 nothing was checked. A filter with no windows shows as off rather than being
 hidden, because an empty calendar and a missing one mean different things.
+
+**How accurate is any of this?** `make ocr-accuracy` answers it with a number
+rather than a claim. A page is drawn from a known list of events and both
+readers are scored against it: the PDF path finds every block with zero
+minutes of error, and a screenshot at a usable size does the same for every
+block that is actually visible on it. Below 75 pixels per hour the image
+reader was measured putting a block 135 minutes out, so it now refuses that
+image instead. `make doctor` covers the other half: every import declared, and
+the board still starting with the optional packages blocked.
 
 **Whole-day absence notices.** The lab posts all-day banners like "Makenzie
 unavailable for visits". Those are read and block the named person's whole day
