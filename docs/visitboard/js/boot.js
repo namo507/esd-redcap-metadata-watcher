@@ -84,6 +84,7 @@ async function boot() {
     toast("Board reset.");
   });
 
+  watchScroll();
   startAutoRefresh();
   window.addEventListener("popstate", () => { applyRoute(); });
   // Safari fires hashchange without popstate for a programmatic hash write.

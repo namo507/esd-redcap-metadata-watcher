@@ -6,7 +6,9 @@
 
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
             section: "team", assignments: {}, lastImport: null,
-            syncTab: "availability", logicNode: null, dueOpen: null, batch: null };
+            syncTab: "availability", logicNode: null, dueOpen: null, batch: null,
+            /* Which branch and leaf of the decision tree are open. */
+            mm: { branch: null, leaf: null } };
 
 const $ = (id) => document.getElementById(id);
 
@@ -155,6 +157,23 @@ async function applyRoute() {
     b.setAttribute("aria-current", b.dataset.section === section ? "page" : "false"));
 }
 
+/* The hero collapses once the page moves, so the work is not permanently
+   below a block of orientation text nobody reads twice.
+
+   The listener is passive and does exactly two things: read scrollY and set a
+   class. It deliberately does NOT schedule the work through
+   requestAnimationFrame -- rAF is starved in a hidden or zero-sized document,
+   and a page that only collapses its header when it happens to be visible is
+   a page whose header position depends on where it was rendered. classList
+   .toggle with an explicit boolean is idempotent, so running it per scroll
+   event costs a comparison and nothing else. */
+function watchScroll() {
+  const set = () =>
+    document.body.classList.toggle("is-scrolled", window.scrollY > 48);
+  addEventListener("scroll", set, { passive: true });
+  set();
+}
+
 function setSection(name, opts) {
   const fromRoute = opts && opts.fromRoute;
   S.section = name;
@@ -166,6 +185,9 @@ function setSection(name, opts) {
   SECTION_NAMES.forEach((k) => {
     $("sec-" + k).hidden = k !== name;
   });
+  /* Arriving at a section should start at the top of it. Keeping the old
+     scroll position lands the reader in the middle of a different page. */
+  if (!fromRoute) scrollTo({ top: 0, behavior: "instant" });
   const [eyebrow, title, sub] = SECTIONS[name];
   $("hero-eyebrow").textContent = eyebrow;
   $("hero-title").textContent = title;
