@@ -811,10 +811,18 @@ async function drawReadTable() {
         <th>Whose</th><th class="num">Blocks</th>
       </tr></thead>
       <tbody>
-        ${rows.map((r) => `
-          <tr class="${r.needs_mapping ? "is-unsettled" : ""}">
+        ${rows.map((r) => {
+          /* Three states, and they are not the same thing. A row needing a
+             decision leads the table. A person the lab is not scheduling is
+             shown greyed with their name still on it -- the board knows who
+             they are, it just will not offer them, and hiding that would
+             read as "unidentified". Everything else is simply settled. */
+          const offRoster = r.is_person && r.coordinator_id && !r.scheduled;
+          return `
+          <tr class="${r.needs_mapping ? "is-unsettled" : offRoster ? "is-offroster" : ""}">
             <td><b>${esc(r.label)}</b>
               ${r.needs_mapping ? '<span class="statchip is-fail">identify</span>' : ""}
+              ${offRoster ? '<span class="statchip">not scheduled</span>' : ""}
               <span class="note">${esc(r.meaning || "")}</span></td>
             <td>${esc(r.role_label || "")}</td>
             <td>${r.is_person ? `
@@ -822,10 +830,14 @@ async function drawReadTable() {
                       data-hue="${esc(r.hue || "")}">
                 <option value="">not a person</option>
                 ${options.map((o) => `<option value="${esc(o.id)}"
-                   ${o.id === r.coordinator_id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}
+                   ${o.id === r.coordinator_id ? "selected" : ""}>${
+                   esc(o.name)}${o.alias ? ` (${esc(o.alias)})` : ""}${
+                   o.scheduled === false ? " \u2014 not scheduled" : ""
+                   }</option>`).join("")}
               </select>` : '<span class="note">not a person</span>'}</td>
             <td class="num">${r.blocks === null ? "" : r.blocks}</td>
-          </tr>`).join("")}
+          </tr>`;
+        }).join("")}
       </tbody>
     </table>`;
 

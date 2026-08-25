@@ -38,7 +38,9 @@ function drawTeam() {
           <th class="teamwho">
             <span class="avatar">${esc(r.initials)}</span>
             <span>
-              <b>${esc(r.name)}</b>
+              <b>${esc(r.name)}</b>${r.alias
+                ? `<span class="alias" title="The manual and the absence banners call this person ${esc(r.alias)}. Same person.">${esc(r.alias)}</span>`
+                : ""}
               <span class="teamtags">
                 ${(r.roles || []).map((role) => `<span class="statchip ${
                     role === "clinician" ? "is-pass" : "is-skip"}">${esc(role)}</span>`).join(" ")}
