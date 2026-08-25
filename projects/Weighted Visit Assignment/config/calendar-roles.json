@@ -4,6 +4,6 @@
   "_name_aliases_comment": "First names the lab uses on its all-day 'X unavailable for visits' banners, mapped to a coordinator id. A nickname is not derivable -- 'Maggie' may or may not be Margaret -- and marking the wrong person unavailable is a hard veto on someone who was free, so unlisted names are reported rather than guessed. Example: {\"Maggie\": \"C01\"}.",
   "name_aliases": {
     "Maggie": "C01",
-    "Makenzie": "C07"
+    "Makenzie": "C05"
   }
 }

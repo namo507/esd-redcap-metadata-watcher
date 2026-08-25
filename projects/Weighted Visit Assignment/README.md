@@ -417,9 +417,9 @@ CSBS (9&ndash;12m) and Bayley (9&ndash;12m), so only Lauren, Sanjana and Makenzi
 in training passes only when a signed-off colleague is free to pair with them,
 which is the manual's rule, not an invention.
 
-Two absences are recorded as absences rather than filled in. Sofia Tous and
-Morgan Soto do not appear on the reliability chart, so they hold no independent
-clinical reliability and are tech rather than clinician. And the chart carries
+One absence is recorded as an absence rather than filled in. Sofia Tous does
+not appear on the reliability chart, so she holds no independent clinical
+reliability and is tech rather than clinician. And the chart carries
 no certification dates at all, so **recency is reported as unknown** &mdash; a decay
 curve would be arithmetic on a number nobody wrote down.
 
@@ -592,9 +592,11 @@ quiet pass &mdash; it means the calendar was absent or empty for that range, so
 nothing was checked. A filter with no windows shows as off rather than being
 hidden, because an empty calendar and a missing one mean different things.
 
-**Whole-day absence notices.** The lab posts all-day banners like "Ramiro
+**Whole-day absence notices.** The lab posts all-day banners like "Makenzie
 unavailable for visits". Those are read and block the named person's whole day
-outright.
+outright. A banner naming somebody the roster carries as `active: false` is
+recognised as being about them and then changes nothing, rather than being
+reported as a name the board could not place.
 
 This is the **only** event text the board ever reads. A banner must match a
 narrow allowlist &mdash; a name followed by *unavailable*, *out*, *OOO*, *PTO*,

@@ -52,12 +52,24 @@ is what the board asks about them. Never their name.
 | `grad_student` | Goes on visits on their own calendar's time. The manual says to check with them before offering one, so the board flags it |
 
 `solo_from` and `solo_to` are the manual's **"Visits Can Do Solo"** column,
-transcribed: Lauren and Sanjana 1m–12m, Makenzie 6m–12m. Maggie, Ramiro, Sofia
-and Morgan have no range printed beside their name, so they cannot be the
-clinician however many assessments they are signed off on. Ramiro is reliable
-in Bayley 9-12m and still techs a 9m visit rather than running it. Being
-signed off on an assessment is not the same as being able to run the visit,
-and the board asks both questions separately.
+transcribed: Lauren and Sanjana 1m–12m, Makenzie 6m–12m. Maggie and Sofia
+have no range printed beside their name, so they cannot be the clinician
+however many assessments they are signed off on. Being signed off on an
+assessment is not the same as being able to run the visit, and the board asks
+both questions separately.
+
+**Two names, one person.** The Outlook export prints *Soto, Morgan*; the
+manual’s reliability chart and the lab’s absence banners say *Makenzie*. That
+is one member of staff, held as one row (`C05`) with the printed name in
+`name` and the manual’s in `manual_name`, so a document using either one
+resolves to the same person. They were briefly two rows, which is the quiet
+kind of wrong: the same human would have held competencies under one name and
+none under the other, and been bookable against themselves.
+
+**Taking somebody off scheduling** is `"active": false`. Their calendar is
+still recognised as theirs when it turns up in an export, so nobody is sent
+looking for a mapping that is not missing, but its blocks are not read and
+they are never offered for a visit.
 
 `only_checkpoints` overrides the range, for a row like Emma's which reads
 *"only schedule for 36m visits"*.

@@ -134,6 +134,23 @@ def test_confirming_a_mapping_redraws_every_section():
                f"page would keep showing the previous read")
 
 
+def test_one_person_with_two_names_is_labelled_once():
+    """The board must not show the same human under two different names.
+
+    The Outlook export prints one name and the manual uses another. If the
+    team card says one and the walkthrough says the other, a reader counts
+    two members of staff who do not both exist -- which is exactly the state
+    this roster was in. Both names appear together, from the API, so no file
+    here has to know which person it applies to.
+    """
+    team = read("js", "team.js")
+    expect("r.alias" in team,
+           "the team card shows only one of a person's two names")
+    cal = read("js", "calendars.js")
+    expect("o.alias" in cal,
+           "the read-table dropdown shows only one of a person's two names")
+
+
 def test_the_read_table_offers_the_roster_rather_than_fixed_names():
     """Adding a coordinator must make them selectable with no code change."""
     js = read("js", "calendars.js")

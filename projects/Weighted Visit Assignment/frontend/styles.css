@@ -787,4 +787,12 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .readtable .note { display: block; font-size: .74rem; margin-top: .15rem; }
 .readtable tr.is-unsettled { background: var(--state-warn-bg); }
 .readtable tr.is-unsettled td { border-bottom-color: var(--state-warn-bg); }
+/* Somebody on the print the lab is not scheduling. Greyed rather than
+   hidden: the board knows whose calendar it is, and that is worth showing. */
+.readtable tr.is-offroster td { opacity: 0.55; }
+/* The second name one person goes by. Quiet, beside their name, never on its
+   own line -- two lines is how a reader starts counting two people. */
+.alias { margin-left: 6px; font-weight: 400; color: var(--muted); }
+.alias::before { content: "("; }
+.alias::after { content: ")"; }
 .readtable .mapsel { min-width: 15ch; padding: .35rem .6rem; font-size: .84rem; }

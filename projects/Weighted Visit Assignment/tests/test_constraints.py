@@ -307,9 +307,9 @@ def test_only_the_manuals_clinicians_can_run_a_nano_9m():
     needed = m.required_for("NANO", "9m")
     expect(set(needed) == {"CSBS_9_12m", "Bayley_9_12m"},
            f"9m requirements read as {needed}")
-    able = {c for c in ("C01", "C02", "C03", "C04", "C05", "C06", "C07")
+    able = {c for c in ("C01", "C02", "C03", "C04", "C05", "C06")
             if all(m.is_reliable(c, a) for a in needed)}
-    expect(able == {"C02", "C03", "C07"},
+    expect(able == {"C02", "C03", "C05"},
            f"expected Lauren, Sanjana and Makenzie; got {sorted(able)}")
 
 

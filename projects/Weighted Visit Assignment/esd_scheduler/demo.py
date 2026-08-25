@@ -130,10 +130,14 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     state.families["F5035"].childcare_needed = True
 
     # --- travel: correlated with zone distance ------------------------------
+    # The zone comes off the roster rather than a table of ids written here.
+    # A table keyed by id has to be edited every time somebody joins or
+    # leaves, and it fails by raising on the new name rather than by doing
+    # something visibly wrong, which is the worst way for a fixture to break.
+    from .roster import Roster as _Roster
+    zones = {e.id: e.zone for e in _Roster.load().entries}
     for cid in ids:
-        czone = state.coordinators[cid].coordinator_id
-        czone_num = {"C01": 1, "C02": 2, "C03": 1, "C04": 3,
-                     "C05": 2, "C06": 4, "C07": 2}[czone]
+        czone_num = zones.get(state.coordinators[cid].coordinator_id, 1)
         for fid, fam in state.families.items():
             base = 18 + 22 * abs(czone_num - fam.zone)
             state.travel_minutes[(cid, fid)] = round(base + rng.uniform(-6, 10), 1)
@@ -206,8 +210,12 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             fetched_at=now - timedelta(seconds=rng.randint(30, 600)),
             blocks=cal,
         )
-    # One coordinator's calendar is stale enough to make the assignment provisional.
-    state.calendars["C06"].fetched_at = now - timedelta(minutes=40)
+    # One coordinator's calendar is stale enough to make the assignment
+    # provisional. Whose does not matter, and naming one means the demo breaks
+    # when that person leaves, so take the last of them in id order.
+    if state.calendars:
+        stale = sorted(state.calendars)[-1]
+        state.calendars[stale].fetched_at = now - timedelta(minutes=40)
     state.demo_blocks = blocks  # type: ignore[attr-defined]
 
     # --- open visits --------------------------------------------------------

@@ -70,6 +70,18 @@ def quote(text: str) -> None:
 
 # ------------------------------------------------------------------ the script
 
+def label_for(entry) -> str:
+    """How to write a person's name once, when they have two.
+
+    The Outlook export prints one name and the manual uses another for the
+    same human. Either alone leaves a reader matching them up by guesswork,
+    so both appear together wherever the walkthrough names somebody.
+    """
+    if entry.manual_name and entry.manual_name.lower() not in entry.name.lower():
+        return f"{entry.name} ({entry.manual_name})"
+    return entry.name
+
+
 def run() -> int:
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, here)
@@ -250,20 +262,31 @@ def run() -> int:
           "assessments needed for that visit age.")
     say("Two separate questions, and passing one is not passing the other.")
     print()
+    # One label per person, everywhere. Somebody printed on the calendar under
+    # one name and written in the manual under another is still one person,
+    # and showing them as "Makenzie" here and "Morgan Soto" three lines later
+    # is how a reader concludes the lab has two staff who do not exist.
     for entry in roster.active:
         can_run = roster.can_be_clinician_for(entry, "9m")
         solo = (f"{entry.solo_from}-{entry.solo_to}"
                 if entry.solo_from else "no solo range")
-        show(entry.first_name,
+        show(label_for(entry),
              f"{'clinician' if can_run else 'tech only':<12} {solo}")
     say()
-    say("Two different reasons are visible here. Ramiro is out of this "
-        "particular visit on the assessments alone: a 9m needs CSBS and "
-        "Bayley and he has only Bayley. But even at a checkpoint he is fully "
-        "signed off on, he still could not be the clinician, because the "
-        "manual prints no solo range beside his name. Being reliable in an "
-        "assessment and being able to run the visit are not the same "
-        "question, and the board asks both.")
+    # Worked out from the roster rather than written down, so the point stays
+    # true when somebody joins or leaves instead of describing a person the
+    # board no longer schedules.
+    blocked = [e for e in roster.active
+               if not roster.can_be_clinician_for(e, "9m")]
+    names = [label_for(e) for e in blocked]
+    named = (" and ".join([", ".join(names[:-1]), names[-1]])
+             if len(names) > 1 else (names[0] if names else "nobody here"))
+    say(f"Both questions are visible here. {named} "
+        f"cannot be the clinician on a 9m: the manual prints no solo range "
+        f"beside their name, whatever they are signed off on. Somebody can "
+        f"hold every assessment a visit needs and still not be able to run "
+        f"it, so the board asks about the assessments and about the range, "
+        f"and a pass on one is not a pass on the other.")
     if pairs:
         say()
         top = pairs[0]

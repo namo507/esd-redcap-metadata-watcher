@@ -62,6 +62,23 @@ Calendars:
 `tests/test_docs.py` checks this list against the routes the server actually
 registers, so an endpoint added without a line here fails the suite.
 
+### What a read-table row says
+
+One row per overlaid calendar in the print, because that is what an Outlook
+export is. Three fields carry the state a scheduler has to act on:
+
+- `needs_mapping` — the board could not tell whose calendar this is. These
+  rows lead the table and carry a dropdown. Nothing is guessed from a colour.
+- `scheduled` — whether the board would ever offer this person. `false` for
+  somebody the roster holds as `active: false`: the calendar is recognised as
+  theirs, so it is not an open question, but its blocks are not read and the
+  row is greyed. A count of `0` would have read as "free all week", so the
+  count is left blank instead.
+- `coordinator_id` — who it resolved to. `options` is built from the roster on
+  every request, so adding a coordinator makes them selectable with no code
+  change, and anyone already attributed on the print is included even when
+  they are not being scheduled, flagged rather than hidden.
+
 ## Rules this layer enforces
 
 **No scheduling logic lives here.** Every ranking, veto and eligibility decision

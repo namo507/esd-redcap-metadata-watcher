@@ -221,8 +221,21 @@ def test_a_stale_colour_map_cannot_turn_a_policy_calendar_into_a_person():
             expect(block.coordinator_id in ROSTER,
                    f"a policy calendar became {block.coordinator_id}")
     timed = [b for b in result.blocks if b.start.hour != 0]
-    expect(len(timed) == 7,
-           f"expected the 7 coordinator events, got {len(timed)}")
+    # Six, not seven. The fixture prints seven coordinator calendars and one
+    # of them belongs to somebody the roster carries as active: false, whose
+    # colour is deliberately not attributed -- busy time for a person who can
+    # never be offered is time the board would carry and never use. The row is
+    # still recognised as theirs, which is the assertion below.
+    expect(len(timed) == 6,
+           f"expected the 6 scheduled coordinators' events, got {len(timed)}")
+    expect(result.off_roster_names,
+           "the calendar of somebody not being scheduled was left looking "
+           "like one nobody could identify")
+    for label, cid in result.off_roster_names.items():
+        expect(result.roles.get(label) == "coordinator",
+               f"{label} resolves to {cid} but is not read as a person")
+        expect(cid not in {b.coordinator_id for b in result.blocks},
+               f"{label} is not being scheduled but their blocks were read")
 
 
 def test_without_a_legend_no_colour_is_attributed_to_anyone():
@@ -492,8 +505,11 @@ def test_a_declared_alias_resolves_the_nickname():
         result = import_pdf(WEEK, coordinators=ROSTER, year_hint=2026)
         expect(any(u["name"] == "Margaret Bell" for u in result.unavailable),
                "a declared alias did not resolve")
-        expect(not result.unresolved_names,
-               f"nothing should remain unresolved: {result.unresolved_names}")
+        # A notice naming somebody the lab is not currently scheduling is
+        # reported but is not a mystery: the board knows exactly who they are
+        # and the notice cannot change any offer it makes.
+        mystery = [r for r in result.unresolved_names if not r.get("off_roster")]
+        expect(not mystery, f"nothing should remain unresolved: {mystery}")
     finally:
         os.remove(path)
 

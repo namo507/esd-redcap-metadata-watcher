@@ -10,10 +10,10 @@
     "  Sanjana  -> C03 Sanjana Oak",
     "  Lauren   -> C02 Lauren Puttock",
     "  Ramiro   -> C06 Ramiro Lucas-Mariano",
-    "  Makenzie -> C07 Makenzie",
+    "  Makenzie -> C05 (printed 'Soto, Morgan' on the calendar;\n               the manual calls the same person Makenzie)",
     "  Maggie   -> C01 Margaret Bell   (alias confirmed by the lab)",
     "",
-    "Sofia Tous (C04) and Morgan Soto (C05) do NOT appear in the manual's",
+    "Sofia Tous (C04) does NOT appear in the manual's",
     "reliability chart. That is recorded here as an absence, not filled in:",
     "on this chart they hold no independent clinical reliability, which makes",
     "them tech rather than clinician on a visit. If that is wrong it is a",
@@ -105,9 +105,13 @@
     },
     "C05": {
       "_name": "Morgan Soto",
-      "_manual_name": null,
+      "_manual_name": "Makenzie",
       "_note": "not listed in the manual's reliability chart",
-      "assessments": {},
+      "assessments": {
+        "CSBS_6m": "RELIABLE",
+        "CSBS_9_12m": "RELIABLE",
+        "Bayley_9_12m": "RELIABLE"
+      },
       "last_reliable_on": {}
     },
     "C06": {
@@ -115,17 +119,6 @@
       "_manual_name": "Ramiro",
       "_solo_range": null,
       "assessments": {
-        "Bayley_9_12m": "RELIABLE"
-      },
-      "last_reliable_on": {}
-    },
-    "C07": {
-      "_name": "Makenzie",
-      "_manual_name": "Makenzie",
-      "_solo_range": "6m - 12m",
-      "assessments": {
-        "CSBS_6m": "RELIABLE",
-        "CSBS_9_12m": "RELIABLE",
         "Bayley_9_12m": "RELIABLE"
       },
       "last_reliable_on": {}

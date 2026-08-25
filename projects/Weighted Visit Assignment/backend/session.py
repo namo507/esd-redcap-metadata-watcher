@@ -157,6 +157,24 @@ DEMO = "demo"
 LIVE = "live"
 
 
+def alias_of(entry) -> Optional[str]:
+    """The other name this person goes by, or None if they only have one.
+
+    Somebody can be printed on the Outlook export under one name and written
+    in the manual under another. Showing only one of them leaves a reader
+    matching the two documents up by guesswork, and showing a different one
+    in each part of the board is how one member of staff comes to look like
+    two. So wherever the board names a person it names them the same way.
+    """
+    if entry is None:
+        return None
+    manual = getattr(entry, "manual_name", None)
+    name = getattr(entry, "name", "") or ""
+    if manual and manual.lower() not in name.lower():
+        return manual
+    return None
+
+
 def board_mode() -> str:
     """Which lab the board builds: the synthetic one, or the real roster only.
 
@@ -273,19 +291,45 @@ class LabSession:
         legend = last.get("legend") or {}
         by_hue = {v: k for k, v in legend.items()} if isinstance(legend, dict) else {}
 
+        # Who the board would actually schedule. Somebody can be on the print
+        # and not on this list: `active: false` is how the lab takes a person
+        # out of scheduling without deleting them. Their calendar is still
+        # recognised as theirs -- so it never reads as an unidentified one a
+        # scheduler has to go and map -- but its blocks are not read, because
+        # busy time for somebody who can never be offered is time the board
+        # would carry around and never use.
+        scheduled = {e.id for e in self.roster_config.active}
+
         rows = []
         for entry in last.get("role_summary") or []:
             cid = entry.get("coordinator_id") or ""
+            is_person = entry.get("role") == "coordinator"
+            on_roster = bool(cid) and cid in scheduled and entry.get(
+                "scheduled", True)
+            meaning = entry.get("meaning", "")
+            if is_person and cid and not on_roster:
+                meaning = ("On this print, but not currently being "
+                           "scheduled. The board recognises the calendar as "
+                           "theirs so it is not mistaken for an unidentified "
+                           "one; their blocks are not read, because they "
+                           "will not be offered for a visit.")
             rows.append({
                 "label": entry.get("label", ""),
                 "role": entry.get("role", ""),
                 "role_label": entry.get("role_label", ""),
                 "polarity": entry.get("polarity", ""),
-                "meaning": entry.get("meaning", ""),
+                "meaning": meaning,
                 "coordinator_id": cid,
-                "blocks": blocks.get(cid, 0) if cid else None,
-                "is_person": entry.get("role") == "coordinator",
-                "needs_mapping": entry.get("role") == "coordinator" and not cid,
+                # No count for somebody not being scheduled: their colour is
+                # not attributed, so a 0 here would read as "free all week"
+                # rather than "not read at all".
+                "blocks": blocks.get(cid, 0) if cid and on_roster else None,
+                "is_person": is_person,
+                "scheduled": on_roster,
+                # A person the lab has taken off scheduling is not an
+                # unfinished decision. The board knows exactly whose calendar
+                # it is; it just will not offer them.
+                "needs_mapping": is_person and not cid,
             })
 
         # Colours the print used that belong to nobody the board could name.
@@ -309,7 +353,7 @@ class LabSession:
                 "meaning": ("This colour appears in the print but the board "
                             "could not tell whose calendar it is."),
                 "coordinator_id": "", "blocks": None,
-                "is_person": True, "needs_mapping": True,
+                "is_person": True, "scheduled": False, "needs_mapping": True,
             })
 
         rows.sort(key=lambda r: (not r["needs_mapping"], r["label"].lower()))
@@ -322,8 +366,23 @@ class LabSession:
             "needs_mapping": sum(1 for r in rows if r["needs_mapping"]),
             # Who a row can be pointed at. Read from the roster every time, so
             # adding a coordinator makes them selectable with no code change.
-            "options": [{"id": e.id, "name": e.name}
-                        for e in self.roster_config.active],
+            #
+            # Anyone already attributed on this print is included even when
+            # they are not being scheduled, so their row shows the name the
+            # board actually matched instead of an empty dropdown that reads
+            # as "unknown". They are flagged, not hidden: the difference
+            # between "we do not know who this is" and "we know, and we are
+            # not offering them" is one a scheduler has to be able to see.
+            "options": (
+                [{"id": e.id, "name": e.name, "alias": alias_of(e),
+                  "scheduled": True}
+                 for e in self.roster_config.active]
+                + [{"id": e.id, "name": e.name, "alias": alias_of(e),
+                    "scheduled": False}
+                   for e in self.roster_config.entries
+                   if not e.active
+                   and e.id in {r["coordinator_id"] for r in rows}]
+            ),
             "hues_seen": hues,
         }
 
@@ -861,6 +920,7 @@ class LabSession:
             rows.append({
                 "id": cid,
                 "name": coord.name,
+                "alias": alias_of(entry),
                 "initials": "".join(p[0] for p in coord.name.split()[:2]).upper(),
                 "days": days,
                 "free_hours": free_hours,

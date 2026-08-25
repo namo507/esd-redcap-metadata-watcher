@@ -125,25 +125,69 @@ def test_the_solo_column_decides_who_can_be_the_clinician():
     expected = {
         "C02": ("1m", "12m"),      # Lauren
         "C03": ("1m", "12m"),      # Sanjana
-        "C07": ("6m", "12m"),      # Makenzie
+        "C05": ("6m", "12m"),      # Makenzie, printed "Soto, Morgan"
     }
     for cid, (lo, hi) in expected.items():
         entry = by_id[cid]
         expect((entry.solo_from, entry.solo_to) == (lo, hi),
                f"{entry.name} has range {entry.solo_from}-{entry.solo_to}, "
                f"manual says {lo}-{hi}")
-    for cid in ("C01", "C04", "C05", "C06"):     # Maggie, Sofia, Morgan, Ramiro
+    for cid in ("C01", "C04", "C06"):            # Maggie, Sofia, Ramiro
         entry = by_id[cid]
         expect(not roster.can_be_clinician_for(entry, "9m"),
                f"{entry.name} has no range in the manual but was allowed to "
                f"be the clinician on a 9m visit")
 
 
+def test_one_person_with_two_names_is_one_row():
+    """The calendar prints "Soto, Morgan"; the manual calls them Makenzie.
+
+    Both names have to land on the same id. They were once two rows, which
+    is the quiet kind of wrong: the same human would hold competencies under
+    one name and none under the other, be busy on one calendar and free on
+    the other, and the board would happily double-book them against
+    themselves. Whichever name a document uses, it resolves here.
+    """
+    from esd_scheduler.roster import Roster
+    roster = Roster.load()
+
+    ids = {roster.resolve(n) for n in ("Morgan Soto", "Makenzie", "Morgan")}
+    expect(ids == {"C05"},
+           f"the printed name and the manual's name resolve to {ids}, "
+           f"so the same person is recorded more than once")
+
+    person = roster.by_id()["C05"]
+    expect(roster.can_be_clinician_for(person, "9m"),
+           "the merged record lost the manual's 6m-12m solo range")
+    expect(person.van_trained, "the merged record lost the van training")
+
+
+def test_somebody_not_being_scheduled_still_exists():
+    """Ramiro is off the roster, not deleted.
+
+    Deleting him would strand his calendar: the export still prints it, and a
+    calendar matching nobody reads as one somebody has to go and identify. He
+    stays, inactive, so the print is fully explained while he is never offered
+    for a visit.
+    """
+    from esd_scheduler.roster import Roster
+    roster = Roster.load()
+
+    expect(roster.resolve("Ramiro") == "C06",
+           "Ramiro's calendar no longer resolves to anybody")
+    expect("C06" not in {e.id for e in roster.active},
+           "Ramiro is still being scheduled")
+
+    scheduled = sorted(e.id for e in roster.active)
+    expect(scheduled == ["C01", "C02", "C03", "C04", "C05"],
+           f"expected the five research coordinators, got {scheduled}")
+
+
 def test_a_range_is_read_by_age_not_alphabetically():
     """"12m" is after "9m". Sorting these as strings puts it before "1m"."""
     from esd_scheduler.roster import Roster
     roster = Roster.load()
-    makenzie = roster.by_id()["C07"]           # 6m-12m
+    makenzie = roster.by_id()["C05"]           # 6m-12m
     for inside in ("6m", "9m", "12m"):
         expect(roster.can_be_clinician_for(makenzie, inside),
                f"{inside} should be inside 6m-12m")

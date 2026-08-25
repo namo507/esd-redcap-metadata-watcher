@@ -51,8 +51,12 @@ signed off on one assessment is not thereby able to run a visit, and the page
 used to say "clinician" on the strength of the first. A row now carries the
 roles from `config/roster.json` and, where the manual gives one, the visit ages
 that person can run alone: *Lauren Puttock — coordinator, clinician, tech,
-1m-12m, van*. Maggie and Ramiro read *coordinator, tech* because the manual
+1m-12m, van*. Maggie and Sofia read *coordinator, tech* because the manual
 prints no solo range beside their names.
+
+Where the export and the manual use different names for the same person, both
+are shown together &mdash; *Morgan Soto (Makenzie)* &mdash; so one member of
+staff never reads as two.
 
 A pairing shows which **vehicle** it should take and why, and flags a visit
 that runs **out of hours**, because that puts the pair into the rotation.

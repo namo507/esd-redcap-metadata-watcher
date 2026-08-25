@@ -83,6 +83,24 @@ class RosterEntry:
     def first_name(self) -> str:
         return (self.manual_name or self.name).split()[0]
 
+    @property
+    def first_names(self) -> tuple:
+        """Every first name this person goes by, deduplicated.
+
+        Somebody can be printed on the calendar under one name and written in
+        the manual under another -- the same human, two documents. Both have
+        to lead here, or a notice using the name that happens not to be the
+        preferred one silently matches nobody.
+        """
+        seen = []
+        for source in (self.manual_name, self.name):
+            if not source or not source.split():
+                continue
+            first = source.split()[0].lower()
+            if first not in seen:
+                seen.append(first)
+        return tuple(seen)
+
 
 @dataclass
 class Roster:
@@ -190,5 +208,5 @@ class Roster:
                 if candidate and " ".join(
                         candidate.lower().replace("-", " ").split()) == want:
                     return entry.id
-        firsts = [e for e in self.entries if e.first_name.lower() == want]
+        firsts = [e for e in self.entries if want in e.first_names]
         return firsts[0].id if len(firsts) == 1 else None

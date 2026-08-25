@@ -166,6 +166,43 @@ def suggest_roster_matches(
     return out
 
 
+def off_roster_matches(
+    labels: Sequence[str], coordinators: Dict[str, object]
+) -> Dict[str, str]:
+    """Labels that name somebody on the roster the board is not scheduling.
+
+    ``active: false`` takes a person out of scheduling without deleting them,
+    and their calendar keeps turning up in the export. Matching it here is the
+    difference between "the board cannot tell whose calendar this is" and "the
+    board knows, and is not offering them" -- the first sends a scheduler
+    hunting for a mapping that is not missing.
+
+    The match is the same full-name normalisation used for everyone else. No
+    nickname is inferred, because an unscheduled person is still a person and
+    the rule against guessing does not relax for them.
+    """
+    try:
+        from .roster import Roster
+        entries = Roster.load().entries
+    except Exception:                     # a board running without a roster file
+        return {}
+
+    by_norm = {_norm_name(e.name): e.id for e in entries
+               if e.id not in (coordinators or {})}
+    out: Dict[str, str] = {}
+    for label in labels:
+        clean = label.strip()
+        if "," in clean:
+            surname, _, forename = clean.partition(",")
+            candidate = f"{forename.strip()} {surname.strip()}"
+        else:
+            candidate = clean
+        cid = by_norm.get(_norm_name(candidate))
+        if cid:
+            out[label] = cid
+    return out
+
+
 def _norm_name(name: str) -> str:
     return " ".join(name.lower().replace("-", " ").split())
 
@@ -344,6 +381,8 @@ class ImportResult:
     legend: Dict[str, str] = field(default_factory=dict)
     attribution_source: str = "none"   # legend | stored_map | none
     matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
+    # Labels naming somebody on the roster the board is not scheduling.
+    off_roster_names: Dict[str, str] = field(default_factory=dict)
     axis_source: Optional[str] = None
     roles: Dict[str, str] = field(default_factory=dict)
     unavailable: List[dict] = field(default_factory=list)
@@ -395,6 +434,7 @@ class ImportResult:
             "attribution_source": self.attribution_source,
             "axis_source": self.axis_source,
             "matched_names": self.matched_names,
+            "off_roster_names": self.off_roster_names,
             "roles": self.roles,
             "role_summary": [
                 {
@@ -404,6 +444,10 @@ class ImportResult:
                     "polarity": POLARITY.get(role, "ignored"),
                     "meaning": ROLE_MEANING.get(role, ""),
                     "coordinator_id": self.matched_names.get(label),
+                    # Whether the board would ever offer this person. False
+                    # for somebody on the roster with active: false.
+                    "scheduled": bool(self.matched_names.get(label))
+                    and label not in self.off_roster_names,
                     "blocks": len(self.resources.get(role, []))
                     if role != ROLE_COORDINATOR else None,
                 }
@@ -506,12 +550,20 @@ def import_pdf(
     role_map = RoleMap.load()
     if parsed.legend and coordinators:
         matches = suggest_roster_matches(list(parsed.legend), coordinators)
+        # A label matching nobody being scheduled may still be somebody the
+        # roster knows. Naming them makes the print fully explained; their
+        # colour is deliberately NOT attributed, because blocks belonging to
+        # a person who can never be offered would be busy time the board
+        # carries around and never uses.
+        result.off_roster_names = off_roster_matches(
+            [label for label, cid in matches.items() if not cid], coordinators)
+        matches.update(result.off_roster_names)
         result.matched_names = dict(matches)
         for label, hue in parsed.legend.items():
             role = role_map.role_of(label, is_roster_name=bool(matches.get(label)))
             result.roles[label] = role
             cid = matches.get(label)
-            if cid and role == ROLE_COORDINATOR:
+            if cid and role == ROLE_COORDINATOR and cid in coordinators:
                 attributed[hue] = cid
         if attributed:
             result.attribution_source = "legend"
@@ -604,6 +656,23 @@ def _resolve_unavailability(parsed, result, coordinators, role_map) -> None:
         if first:
             by_first.setdefault(first, []).append(cid)
 
+    # People the roster knows about but the board is not scheduling. Consulted
+    # only when the name matches nobody above, and on first names alone -- the
+    # no-guessing rule still holds, so a nickname is no more resolvable here
+    # than anywhere else. The point is only to stop the board reporting "no
+    # coordinator has this first name" about somebody plainly on the roster.
+    off_roster: Dict[str, str] = {}
+    try:
+        from .roster import Roster
+        for entry in Roster.load().entries:
+            if entry.id in (coordinators or {}):
+                continue
+            first = entry.name.split()[0].lower() if entry.name.split() else ""
+            if first and first not in by_first:
+                off_roster.setdefault(first, entry.name)
+    except Exception:                      # a board running without a roster file
+        pass
+
     unresolved: Dict[str, dict] = {}
     for note in parsed.unavailability:
         token = note["name"].strip()
@@ -613,11 +682,17 @@ def _resolve_unavailability(parsed, result, coordinators, role_map) -> None:
             hits = by_first.get(key, [])
             cid = hits[0] if len(hits) == 1 else None
         if cid is None:
+            if key in off_roster:
+                reason = (f"{off_roster[key]} is on the roster but is not "
+                          f"currently being scheduled, so this notice changes "
+                          f"nothing")
+            elif len(by_first.get(key, [])) > 1:
+                reason = "ambiguous: more than one coordinator has this first name"
+            else:
+                reason = "no coordinator on the roster has this first name"
             row = unresolved.setdefault(
-                token, {"name": token, "days": [], "reason": (
-                    "ambiguous: more than one coordinator has this first name"
-                    if len(by_first.get(key, [])) > 1
-                    else "no coordinator on the roster has this first name")})
+                token, {"name": token, "days": [], "reason": reason,
+                        "off_roster": key in off_roster})
             row["days"].append(note["day"])
             continue
         result.unavailable.append({
@@ -628,10 +703,14 @@ def _resolve_unavailability(parsed, result, coordinators, role_map) -> None:
         })
 
     result.unresolved_names = sorted(unresolved.values(), key=lambda r: r["name"])
-    if result.unresolved_names:
+    # A notice about somebody the lab is not scheduling is not an unmatched
+    # name, and telling a scheduler to go and add an alias for it would send
+    # them after a problem that does not exist.
+    mystery = [r for r in result.unresolved_names if not r.get("off_roster")]
+    if mystery:
         listed = ", ".join(
             f"{r['name']} ({len(r['days'])} day{'s' if len(r['days']) != 1 else ''})"
-            for r in result.unresolved_names
+            for r in mystery
         )
         result.blockers.append(
             "UNAVAILABILITY NOTICES NOT MATCHED TO ANYONE: " + listed + ". These "
