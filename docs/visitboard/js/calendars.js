@@ -887,5 +887,6 @@ function redrawEverything() {
   drawSync();
   drawData();
   drawReadTable();
+  drawSettings();
   if (S.selected) selectVisit(S.selected, { silent: true });
 }

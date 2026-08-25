@@ -26,7 +26,7 @@ function redrawCurrent() {
   drawQueue();
   if (S.section === "team") { drawTeam(); drawDue(); }
   if (S.section === "sync") { drawSync(); drawData(); }
-  if (S.section === "logic") drawLogic();
+  if (S.section === "logic") { drawLogic(); drawSettings(); }
 }
 
 function startAutoRefresh() {
