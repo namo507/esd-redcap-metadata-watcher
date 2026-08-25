@@ -14,6 +14,7 @@ js/core.js          state, fetch, routing, page chrome
 js/team.js          the team table and the protocol clock
 js/assign.js        the queue, the pair, entering a visit
 js/calendars.js     uploads, what came back, exports
+js/mindmap.js       the visit window, opened one level at a time
 js/logic.js         the decision map
 js/settings.js      the tuning dropdowns
 js/boot.js          start-up and the once-a-minute refresh
@@ -58,6 +59,26 @@ prints no solo range beside their names.
 Where the export and the manual use different names for the same person, both
 are shown together &mdash; *Morgan Soto (Makenzie)* &mdash; so one member of
 staff never reads as two.
+
+**The visit view opens rather than pre-answering.** Picking a visit used to
+print the ranked pairs, the individual ranking and the exclusions at once, so
+the recommendation arrived before the reasoning and every visit was a
+different height. It is now a tree: the window, then three branches &mdash;
+the pairs that work, who can go, who was ruled out &mdash; and each opens to
+its leaves, and a leaf to its detail. Only the level you opened is on screen.
+Clicking an open branch closes it, because a tree you can only open ends up
+fully open, which is the layout this replaced.
+
+Connectors are pseudo-elements, not measured and painted, so they survive a
+resize and a reflow with no JavaScript running. The columns scroll sideways
+inside their card: a visit with nine workable pairs must not turn the page
+into something you scroll past.
+
+**Less page to scroll.** The hero collapses to a title bar once the page
+moves and returns at the top, so the work is not permanently below a block of
+orientation text. On a wide screen the visit queue keeps its own scrollbar and
+its column sticks, so picking a different visit does not mean scrolling the
+document back up. Changing section returns to the top of the new one.
 
 **Tuning.** Every number the board uses that is a judgement rather than a rule
 from the manual is a dropdown under *How it decides* &mdash; the four weights,

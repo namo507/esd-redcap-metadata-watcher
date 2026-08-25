@@ -134,6 +134,92 @@ def test_confirming_a_mapping_redraws_every_section():
                f"page would keep showing the previous read")
 
 
+def test_the_visit_view_opens_rather_than_answering_first():
+    """Picking a visit must not print the recommendation before the reasoning.
+
+    The old view rendered the ranked pairs, the individual ranking and the
+    exclusions in one pass. That is the thing the tree replaced, so the
+    renderer it used has to be gone rather than merely unreferenced -- dead
+    code is an invitation to wire it back in.
+    """
+    js = read("js", "assign.js")
+    expect("function pairSection" not in js,
+           "the static pair list is still in assign.js; the tree replaced it")
+    expect("drawMindmap(d, assigned)" in js,
+           "drawDetail no longer renders the decision tree")
+
+
+def test_the_tree_shows_only_the_level_that_was_opened():
+    """A branch renders its leaves only while it is the open one."""
+    js = read("js", "mindmap.js")
+    expect("${open ? " in js or "open ?" in js,
+           "the leaf column is rendered unconditionally, so every branch is "
+           "always on screen")
+    expect("S.mm.branch === id ? null : id" in js,
+           "clicking an open branch does not close it, so the tree can only "
+           "ever be opened")
+
+
+def test_the_tree_folds_up_only_when_the_visit_changes():
+    """A silent redraw must not close what the scheduler had open.
+
+    selectVisit runs on the auto-refresh and after an assignment. Resetting
+    unconditionally would shut the tree under them every few seconds.
+    """
+    js = read("js", "assign.js")
+    expect("if (S.selected !== visitId) resetMindmap();" in js,
+           "the tree is reset on every selectVisit, including silent ones")
+
+
+def test_no_reason_a_pair_fails_is_dropped_on_the_way_to_the_tree():
+    """pair_problems explains an empty pair list. Losing it loses the why."""
+    js = read("js", "mindmap.js")
+    expect("pair_problems" in js,
+           "the reasons no pair works are not shown anywhere in the tree")
+
+
+def test_nobody_is_both_able_to_go_and_ruled_out():
+    """The two exclusion lists overlap, and listing both duplicated people.
+
+    `excluded` carries reasons somebody cannot take the clinician seat, and
+    `clinician_blocked` carries the same kind of no. Rendering both put two
+    coordinators under "ruled out" twice while they were also under "who can
+    go" as techs -- they can go, they just cannot run it. Anyone still
+    eligible for a seat has to be filtered out of the blocked list.
+    """
+    js = read("js", "mindmap.js")
+    expect("const usable = new Set(mmPeople(d).map((p) => p.coordinator_id));" in js,
+           "mmBlocked no longer checks whether the person is still usable")
+    expect("if (!id || usable.has(id)) return;" in js,
+           "somebody eligible for a seat can still reach the ruled-out list")
+    expect("mmClinicianLimit" in js,
+           "the reason somebody cannot run a visit is no longer shown where "
+           "they are listed as able to go")
+
+
+def test_the_hero_collapses_without_depending_on_a_frame():
+    """The collapse must not need requestAnimationFrame to happen.
+
+    rAF is starved in a hidden or zero-sized document, so routing the toggle
+    through it made the header's position depend on whether the page happened
+    to be visible when it was scrolled. The handler reads scrollY and sets a
+    class, and nothing else -- no element measurement, which is the thing that
+    would actually make a scroll handler expensive.
+    """
+    js = read("js", "core.js")
+    watcher = js[js.index("function watchScroll()"):]
+    watcher = watcher[:watcher.index("function setSection")]
+    expect("passive: true" in watcher, "the scroll listener is not passive")
+    expect("requestAnimationFrame" not in watcher,
+           "the collapse still waits for a frame that may never come")
+    expect("getBoundingClientRect" not in watcher,
+           "the scroll handler measures an element on every event")
+    css = read("styles.css")
+    expect("body.is-scrolled" in css, "nothing responds to the scrolled state")
+    expect("prefers-reduced-motion" in css,
+           "the hero animates with no reduced-motion escape")
+
+
 def test_the_tuning_controls_are_drawn_wherever_their_section_is_shown():
     """A card wired into one entry point and not the other renders sometimes.
 

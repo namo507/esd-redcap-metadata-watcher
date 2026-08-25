@@ -792,6 +792,142 @@ details.excluded[open] summary { border-bottom: 1px solid var(--line); }
 .readtable tr.is-offroster td { opacity: 0.55; }
 /* The second name one person goes by. Quiet, beside their name, never on its
    own line -- two lines is how a reader starts counting two people. */
+/* --- less page to scroll -------------------------------------------------
+
+   Two changes, both aimed at the same thing: the board should answer a
+   question without the reader travelling to find the answer.
+
+   The hero is a full blue block on every section, and after the first look
+   nobody needs to read it again -- it was pushing the actual work below the
+   fold on arrival. It collapses to a title bar as soon as the page moves, and
+   comes back at the top. Nothing is removed, so a first-time reader still
+   gets the orientation.
+
+   The visit queue keeps its own scrollbar and the column sticks, so choosing
+   a different visit does not mean scrolling the document back up to reach the
+   list. The list scrolls; the page mostly does not. */
+.hero-in, .hero h1 { transition: padding .18s ease, font-size .18s ease; }
+body.is-scrolled .hero-in { padding-top: .85rem; padding-bottom: .75rem; }
+body.is-scrolled .hero h1 { font-size: 1.4rem; }
+body.is-scrolled .hero .eyebrow,
+body.is-scrolled .hero-sub { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-in, .hero h1 { transition: none; }
+}
+
+@media (min-width: 900px) {
+  .layout > aside {
+    position: sticky;
+    /* Clear of the sticky topbar, which carries the nav. */
+    top: 6.6rem;
+  }
+  .layout > aside .queue {
+    max-height: calc(100vh - 22rem);
+    overflow-y: auto;
+    /* Room for the scrollbar so rows do not shift when it appears. */
+    scrollbar-gutter: stable;
+  }
+}
+
+/* --- the decision tree ---------------------------------------------------
+   Columns left to right: the window, its three branches, the leaves of the
+   open branch, and the detail of the open leaf. Connectors are drawn with
+   pseudo-elements rather than measured and painted in SVG, so they survive a
+   resize, a font change and a reflow without any JavaScript running.
+
+   The tree scrolls sideways inside its own card. A visit with nine eligible
+   pairs should not turn the page into something you scroll past to reach
+   anything else. */
+.mmcard { margin-top: 1.3rem; }
+.mm {
+  display: flex; align-items: flex-start; gap: 0 2.2rem;
+  overflow-x: auto; padding: .4rem .2rem 1rem;
+}
+.mm-col {
+  display: flex; flex-direction: column; gap: .5rem;
+  position: relative; flex: 0 0 auto; max-width: 21rem;
+}
+
+/* The spine, and one stub per node hanging off it. */
+.mm-col.has-parent::before {
+  content: ""; position: absolute; left: -1.1rem;
+  top: 1.4rem; bottom: 1.4rem; width: 1px; background: var(--line);
+}
+.mm-col.has-parent > .mm-node::before {
+  content: ""; position: absolute; left: -1.1rem; top: 1.4rem;
+  width: 1.1rem; height: 1px; background: var(--line);
+}
+
+.mm-node {
+  position: relative; text-align: left; cursor: pointer;
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  padding: .6rem .8rem; display: grid; gap: 1px; font: inherit;
+  color: var(--ink); transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.mm-node:hover { border-color: var(--esd-science-blue); }
+.mm-node:focus-visible { outline: 2px solid var(--esd-discovery-blue); outline-offset: 2px; }
+.mm-node.is-open {
+  border-color: var(--esd-discovery-blue);
+  box-shadow: inset 3px 0 0 var(--esd-discovery-blue);
+  background: var(--esd-cool-blue);
+}
+.mm-node.is-empty { opacity: .55; }
+.mm-node.is-root { background: var(--esd-cool-blue); border-color: var(--esd-science-blue); }
+.mm-sub { font-size: .82rem; color: var(--muted); }
+.mm-count {
+  position: absolute; top: .55rem; right: .8rem;
+  font-weight: 600; color: var(--esd-discovery-blue);
+}
+.mm-score {
+  position: absolute; top: .55rem; right: .8rem;
+  font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem;
+}
+.mm-tag {
+  justify-self: start; margin-top: .3rem; font-size: .72rem; font-weight: 600;
+  padding: 1px 7px; border-radius: 999px;
+  background: var(--esd-cool-blue); color: var(--ink-on-tint);
+}
+.mm-tag.is-warn { background: var(--state-warn-bg); color: var(--ink-on-yellow); }
+.mm-none { color: var(--muted); font-size: .88rem; max-width: 20rem; padding: .5rem 0; }
+
+.mm-detailcol { max-width: 25rem; }
+.mm-detail {
+  border: 1px solid var(--line); border-left: 3px solid var(--esd-discovery-blue);
+  border-radius: 12px; padding: .9rem 1rem; background: var(--bg);
+}
+.mm-detail h3 { margin: .1rem 0 .5rem; line-height: 1.35; }
+.mm-seat {
+  font-size: .72rem; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.mm-bars { display: grid; gap: .3rem; margin: .6rem 0; }
+.mm-bar { display: grid; grid-template-columns: 9.5rem 1fr auto; gap: .5rem; align-items: center; }
+.mm-bark { font-size: .8rem; color: var(--muted); }
+.mm-bart { background: var(--esd-cool-blue); border-radius: 999px; height: 7px; overflow: hidden; }
+.mm-bart i { display: block; height: 100%; background: var(--esd-discovery-blue); }
+.mm-barv { font-size: .76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mm-total { margin-top: .4rem; padding-top: .5rem; border-top: 1px solid var(--line); }
+.mm-facts { display: grid; gap: .35rem; margin: .7rem 0 0; }
+.mm-facts div { display: grid; grid-template-columns: 5rem 1fr; gap: .5rem; }
+.mm-facts dt { color: var(--muted); font-size: .82rem; }
+.mm-facts dd { margin: 0; font-size: .88rem; }
+.mm-checks { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .3rem; }
+.mm-checks li { display: grid; grid-template-columns: 1.1rem 1fr; gap: .4rem; font-size: .86rem; }
+.mm-checks li.is-pass span { color: var(--esd-discovery-blue); }
+.mm-checks li.is-fail span { color: var(--ink-on-pink); }
+.mm-reason { margin-top: .3rem; }
+.mm-go { margin-top: .9rem; width: 100%; }
+
+@media (max-width: 780px) {
+  /* Stacked, because four columns on a phone is four columns of nothing. */
+  .mm { flex-direction: column; gap: .6rem; overflow-x: visible; }
+  .mm-col { max-width: none; width: 100%; }
+  .mm-col.has-parent { padding-left: 1.1rem; }
+  .mm-col.has-parent::before { left: 0; }
+  .mm-col.has-parent > .mm-node::before { left: -1.1rem; }
+}
+
 /* --- tuning controls -----------------------------------------------------
    Groups closed by default. Somebody opening this to change one number should
    meet three headings, not every control the board has. */
