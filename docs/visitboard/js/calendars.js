@@ -385,6 +385,7 @@ async function uploadBatch(files) {
   S.lastImport = null;
   await refresh();
   setSection("sync");
+  drawReadTable();
   const ok = done.filter((d) => !d.error).length;
   toast(`${ok} of ${done.length} calendars read.`, ok < done.length);
 }
@@ -404,6 +405,7 @@ async function uploadPdf(file) {
     S.lastImport = out;
     await refresh();
     setSection("sync");
+    drawReadTable();
     toast(out.schedulable
       ? `Read ${out.block_count} blocks. Confirm them below.`
       : `Read ${out.entry_count} entries as a workload signal only.`,
@@ -758,4 +760,120 @@ function drawData() {
         so reliability gates are not being enforced yet.</p>
       <button class="btn btn-ghost" type="button" disabled>Needs the local board</button>
     </div>`;
+}
+
+/* ------------------------------------------------------- what the read found
+
+   The step between dropping a print on the board and trusting what it says.
+   One row per calendar the export overlaid, because that is the unit the
+   print itself is built from: Outlook stacks several calendars, gives each a
+   colour, and names them in the header.
+
+   Two things can go wrong and both are visible here. The board may not know
+   what a calendar is, or it may know it is a person and not which person.
+   Those rows carry a dropdown of the roster and sort to the top. Everything
+   else is shown for checking and needs no action.
+
+   The dropdown is built from the roster on every draw, so adding a
+   coordinator makes them selectable without touching this file. */
+
+async function drawReadTable() {
+  const card = $("read-table-card");
+  if (!card) return;
+  let table;
+  try {
+    table = await api("/api/calendar/read-table");
+  } catch (err) {
+    card.hidden = true;
+    return;
+  }
+  const rows = table.rows || [];
+  if (!rows.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const unsettled = table.needs_mapping || 0;
+  $("read-table-title").textContent = unsettled
+    ? `${unsettled} calendar${unsettled === 1 ? "" : "s"} to identify`
+    : "What was read";
+  $("read-table-note").innerHTML = unsettled
+    ? `The board could not tell whose calendar these are. Point each one at a
+       person, or leave it alone if it is not a person at all. Nothing here is
+       guessed from a colour.`
+    : `${esc(table.source_file || "")} &middot; ${esc(table.view_type || "")}
+       &middot; covers ${esc(table.date_range || "an unstated range")}.
+       Every calendar in the print was recognised.`;
+
+  const options = table.options || [];
+  $("read-table").innerHTML = `
+    <table class="readtable">
+      <thead><tr>
+        <th>Calendar as printed</th><th>Read as</th>
+        <th>Whose</th><th class="num">Blocks</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr class="${r.needs_mapping ? "is-unsettled" : ""}">
+            <td><b>${esc(r.label)}</b>
+              ${r.needs_mapping ? '<span class="statchip is-fail">identify</span>' : ""}
+              <span class="note">${esc(r.meaning || "")}</span></td>
+            <td>${esc(r.role_label || "")}</td>
+            <td>${r.is_person ? `
+              <select class="input select mapsel" data-label="${esc(r.label)}"
+                      data-hue="${esc(r.hue || "")}">
+                <option value="">not a person</option>
+                ${options.map((o) => `<option value="${esc(o.id)}"
+                   ${o.id === r.coordinator_id ? "selected" : ""}>${esc(o.name)}</option>`).join("")}
+              </select>` : '<span class="note">not a person</span>'}</td>
+            <td class="num">${r.blocks === null ? "" : r.blocks}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  $("read-table-apply").onclick = applyReadTable;
+}
+
+async function applyReadTable() {
+  /* Save the corrections, then redraw every section from the board's own
+     answer rather than patching the page in place. A mapping change moves
+     whose time is whose, which moves availability, which moves the ranking,
+     so nothing downstream can be left holding the old view. */
+  const map = {};
+  document.querySelectorAll("#read-table .mapsel").forEach((sel) => {
+    const hue = sel.dataset.hue;
+    if (hue && sel.value) map[hue] = sel.value;
+  });
+  const button = $("read-table-apply");
+  button.disabled = true;
+  button.textContent = "Updating…";
+  try {
+    if (Object.keys(map).length) {
+      await api("/api/calendar/colors", {
+        method: "POST",
+        body: JSON.stringify({ map, confirmed_by: "board" }),
+      });
+    }
+    await refresh();
+    redrawEverything();
+    toast("Updated. Every section now reflects that mapping.");
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Confirm and update";
+  }
+}
+
+function redrawEverything() {
+  /* One place that knows what "everything" is. A section added later has to
+     be listed here or it will quietly keep showing the previous read. */
+  drawKpis();
+  drawQueue();
+  drawSyncBadge();
+  drawModeNote();
+  drawTeam();
+  drawDue();
+  drawSync();
+  drawData();
+  drawReadTable();
+  if (S.selected) selectVisit(S.selected, { silent: true });
 }
