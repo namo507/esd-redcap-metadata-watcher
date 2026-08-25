@@ -51,6 +51,7 @@ Calendars:
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/calendar/read-table` | What the last upload read, one row per calendar, ready to correct |
 | GET | `/api/calendar/imports` | Every upload on file, newest first |
 | POST | `/api/calendar/upload` | `{filename, data}` with the file base64-encoded |
 | POST | `/api/calendar/review` | Confirm or reject one block read from an image |

@@ -57,6 +57,29 @@ prints no solo range beside their names.
 A pairing shows which **vehicle** it should take and why, and flags a visit
 that runs **out of hours**, because that puts the pair into the rotation.
 
+## Upload, then check what was read
+
+Dropping a print on the board is only half the step. The card underneath it
+shows **one row per calendar the export overlaid**, because that is the unit
+the print is built from: Outlook stacks several calendars, gives each a
+colour, and names them in the header.
+
+Two things can go wrong, and both are visible in that table. The board may not
+know what a calendar is, or it may know it is a person and not which person.
+Those rows sort to the top, are tinted, and carry a dropdown of the roster.
+Everything else is shown for checking and needs no action. Nothing on this
+board guesses a person from a colour.
+
+**Confirm and update** saves the corrections and redraws every section from
+the board's own answer. A mapping change moves whose time is whose, which
+moves availability, which moves the ranking, so no part of the page may keep
+showing the previous read. `redrawEverything()` is the one place that knows
+what "everything" is, and a test fails if a section is missing from it.
+
+The dropdown is built from the roster the API returns, so adding a
+coordinator makes them selectable without touching the frontend. A test
+asserts no coordinator name appears in that file at all.
+
 ## Design rules this page follows
 
 **No bare codes.** `V002 · NANO` is an eyebrow; the heading is

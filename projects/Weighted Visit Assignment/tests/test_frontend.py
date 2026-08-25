@@ -113,6 +113,41 @@ def test_no_class_is_defined_twice_on_its_own():
            f"component is silently restyling another: {repeated}")
 
 
+def test_confirming_a_mapping_redraws_every_section():
+    """A mapping change moves whose time is whose, so nothing may lag.
+
+    Correcting who a calendar belongs to changes availability, which changes
+    who is eligible, which changes the ranking. If one section redraws and
+    another does not, the board shows two answers at once. redrawEverything
+    is the single place that knows what "everything" is, and this checks it
+    still names every section the page draws.
+    """
+    js = read("js", "calendars.js")
+    expect("function redrawEverything" in js,
+           "there is no single place that redraws after a mapping change")
+    body = js[js.index("function redrawEverything"):]
+    body = body[:body.index("\n}")]
+    for drawer in ("drawKpis", "drawQueue", "drawTeam", "drawSync",
+                   "drawReadTable", "selectVisit"):
+        expect(drawer in body,
+               f"redrawEverything does not call {drawer}, so that part of the "
+               f"page would keep showing the previous read")
+
+
+def test_the_read_table_offers_the_roster_rather_than_fixed_names():
+    """Adding a coordinator must make them selectable with no code change."""
+    js = read("js", "calendars.js")
+    block = js[js.index("function drawReadTable"):]
+    block = block[:block.index("async function applyReadTable")]
+    expect("table.options" in block,
+           "the dropdown is not built from the roster the API returned")
+    for name in ("Sofia", "Maggie", "Makenzie", "Sanjana", "Lauren",
+                 "Morgan", "Ramiro"):
+        expect(name not in block,
+               f"{name} is written into the read table; the options come from "
+               f"the roster, so no name belongs in this file")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

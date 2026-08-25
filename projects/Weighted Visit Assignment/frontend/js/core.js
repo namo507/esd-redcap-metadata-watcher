@@ -171,7 +171,7 @@ function setSection(name, opts) {
   $("hero-title").textContent = title;
   $("hero-sub").textContent = sub;
   if (name === "team") { drawTeam(); drawDue(); }
-  if (name === "sync") { drawSync(); drawData(); }
+  if (name === "sync") { drawSync(); drawData(); drawReadTable(); }
   if (name === "logic") drawLogic();
   if (!fromRoute) syncRoute(false);
 }

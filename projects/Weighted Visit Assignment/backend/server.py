@@ -66,6 +66,12 @@ def r_calendar_imports(params, body):
     return 200, SESSION.imports()
 
 
+@get("/api/calendar/read-table")
+def r_calendar_read_table(params, body):
+    """What the last upload read, one row per calendar, ready to correct."""
+    return 200, SESSION.read_table()
+
+
 @get("/api/calendar/colors")
 def r_calendar_colors(params, body):
     return 200, SESSION.color_map_state()

@@ -250,6 +250,83 @@ class LabSession:
 
     # -- calendar uploads ----------------------------------------------------
 
+    def read_table(self) -> dict:
+        """What the last upload actually read, one row per calendar in it.
+
+        This is the table the page shows after Upload and Run, and the shape
+        is taken from the print rather than invented: an Outlook export
+        overlays several calendars, prints each in its own colour, and names
+        them in the header. So a row is one overlaid calendar, and the two
+        things a scheduler needs to check are whether the board worked out
+        what that calendar *is* and, if it is a person, *which* person.
+
+        Rows where it could not are the point of the exercise. They come back
+        with ``needs_mapping`` set and an empty ``coordinator_id``, and the
+        page offers the roster as a dropdown against them. Nothing on this
+        board guesses a person from a colour.
+        """
+        last = self.last_import or {}
+        blocks = {row[0]: row[1] for row in self.store.query(
+            "SELECT coordinator_id, COUNT(*) FROM calendar_import_block "
+            "WHERE reviewed=1 AND confirmed=1 GROUP BY coordinator_id")}
+        hues = last.get("hues_seen") or {}
+        legend = last.get("legend") or {}
+        by_hue = {v: k for k, v in legend.items()} if isinstance(legend, dict) else {}
+
+        rows = []
+        for entry in last.get("role_summary") or []:
+            cid = entry.get("coordinator_id") or ""
+            rows.append({
+                "label": entry.get("label", ""),
+                "role": entry.get("role", ""),
+                "role_label": entry.get("role_label", ""),
+                "polarity": entry.get("polarity", ""),
+                "meaning": entry.get("meaning", ""),
+                "coordinator_id": cid,
+                "blocks": blocks.get(cid, 0) if cid else None,
+                "is_person": entry.get("role") == "coordinator",
+                "needs_mapping": entry.get("role") == "coordinator" and not cid,
+            })
+
+        # Colours the print used that belong to nobody the board could name.
+        # These are the rows a person has to settle, so they lead the table.
+        #
+        # A hue is "unattributed" whenever it does not resolve to a person,
+        # which includes every calendar that is not one: the export owner and
+        # the lab's own room and shift calendars. Those already have a row
+        # saying what they are, and asking somebody to map the ESDI lab room
+        # to a coordinator would be asking the wrong question. Only colours
+        # with no row at all are unfinished business.
+        named = {r["label"] for r in rows}
+        for hue in last.get("unattributed_hues") or []:
+            label = by_hue.get(hue)
+            if label and label in named:
+                continue
+            rows.append({
+                "label": label or f"unnamed {hue} calendar",
+                "role": "unknown", "role_label": "Not recognised",
+                "polarity": "", "hue": hue,
+                "meaning": ("This colour appears in the print but the board "
+                            "could not tell whose calendar it is."),
+                "coordinator_id": "", "blocks": None,
+                "is_person": True, "needs_mapping": True,
+            })
+
+        rows.sort(key=lambda r: (not r["needs_mapping"], r["label"].lower()))
+        return {
+            "source_file": last.get("source_file"),
+            "view_type": last.get("view_type"),
+            "tier": last.get("tier"),
+            "date_range": last.get("date_range"),
+            "rows": rows,
+            "needs_mapping": sum(1 for r in rows if r["needs_mapping"]),
+            # Who a row can be pointed at. Read from the roster every time, so
+            # adding a coordinator makes them selectable with no code change.
+            "options": [{"id": e.id, "name": e.name}
+                        for e in self.roster_config.active],
+            "hues_seen": hues,
+        }
+
     def color_map_state(self) -> dict:
         """The hue -> person map, plus what this roster could match it to."""
         cmap = ColorMap.load()
