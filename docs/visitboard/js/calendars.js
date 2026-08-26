@@ -320,7 +320,7 @@ function drawUpload() {
         <div class="uploadzone-title">Drop the Outlook calendars here</div>
         <div class="uploadzone-sub">or</div>
         <label class="btn btn-primary" for="pdf-file">Choose a file&hellip;</label>
-        <div class="uploadzone-hint" data-tip="A PDF is read exactly; a screenshot is measured in pixels and every block has to be confirmed">
+        <div class="uploadzone-hint" data-tip="A PDF is read from the file exactly. A screenshot is measured in pixels, cannot show a block another calendar was drawn over, and is held for confirmation unless the lab turns that off">
           One file per coordinator, or several at once. A <b>Work Week</b> PDF is read
           exactly . A screenshot is approximate.</div>
       </div>
@@ -406,9 +406,14 @@ async function uploadPdf(file) {
     await refresh();
     setSection("sync");
     drawReadTable();
-    toast(out.schedulable
-      ? `Read ${out.block_count} blocks. Confirm them below.`
-      : `Read ${out.entry_count} entries as a workload signal only.`,
+    /* What to say is decided by what the board did with the upload, not by
+       what this file assumes the setting is. Both are real states, and the
+       lab can switch between them from the tuning controls. */
+    toast(!out.schedulable
+      ? `Read ${out.entry_count} entries as a workload signal only.`
+      : out.pending_review
+      ? `Read ${out.block_count} blocks. ${out.pending_review} to confirm below.`
+      : `Read ${out.block_count} blocks. They are in effect now.`,
       !out.schedulable);
   } catch (err) {
     $("sync-result").innerHTML =
@@ -443,7 +448,7 @@ function drawImportResult() {
         <div><b>${imp.pending_review}</b><span>awaiting review</span></div>
       </div>
       <div class="importverdict">${tier === 4
-        ? `Read from an image, so the times are measured in pixels rather than read off the file. Every block below has to be confirmed before it counts. The same calendar printed to PDF is read exactly.`
+        ? `Read from an image, so the times are measured in pixels rather than read off the file. ${imp.pending_review ? "Every block below has to be confirmed before it counts." : "They are in effect already."} An image also cannot show a block another calendar was drawn over, and a block nobody saw reads as free time. The same calendar printed to PDF is read from the file exactly.`
         : tier === 2
         ? "This export has real start and end times, so once you confirm the blocks below the board will schedule around them."
         : "This is a month grid. It shows how loaded each day looks, but it cannot say when anyone is free. <b>Re-print the same dates as Work Week</b> to make it schedulable."}</div>
