@@ -147,6 +147,102 @@ def test_burden_is_shared_and_family_facing_criteria_take_the_better_half():
                "burden should be shared, not taken from one of them")
 
 
+def test_a_tech_is_not_held_to_the_clinicians_assessment_bar():
+    """The manual puts the assessment requirement on one seat, not both.
+
+    "Clinician must be able to reliably/independently admin all the
+    assessments needed for that visit age" -- and it asks nothing of the tech.
+    The assessment gate was dropping people from the candidate pool outright,
+    and because pairing draws both seats from that pool, a tech had to hold
+    every assessment the clinician did.
+
+    Found on real prints: a 9m visit with a signed-off clinician free and a
+    perfectly good tech free alongside her came back "no clinician and tech
+    are free at the same time".
+    """
+    from esd_scheduler.constraints import check_candidate
+
+    state, visits = build_lab(NOW)
+    matrix = ReliabilityMatrix.load()
+    visit = next((v for v in visits
+                  if matrix.required_for(v.protocol, v.checkpoint)), None)
+    expect(visit is not None,
+           "no visit on the board requires an assessment, so the two seats "
+           "cannot be told apart here")
+    family = state.families[visit.family_id]
+    required = matrix.required_for(visit.protocol, visit.checkpoint)
+
+    short = next(
+        (c for c in state.coordinators.values()
+         if any(not matrix.is_reliable(c.coordinator_id, a) for a in required)),
+        None)
+    expect(short is not None,
+           "everybody is signed off on everything, so the seats cannot differ")
+
+    as_clinician = check_candidate(short, visit, family, state, NOW,
+                                   matrix=matrix, seat="clinician")
+    as_tech = check_candidate(short, visit, family, state, NOW,
+                              matrix=matrix, seat="tech")
+    expect(not as_clinician.passed and as_clinician.gate == "reliability",
+           f"{short.name} should fail the clinician seat on assessments, got "
+           f"{as_clinician.gate!r}")
+    expect(as_tech.passed or as_tech.gate != "reliability",
+           f"{short.name} was refused the tech seat for an assessment the "
+           f"manual only asks of the clinician ({as_tech.reason})")
+
+
+def test_the_slot_chooser_honours_a_lab_day_and_a_holiday():
+    """It picks its own slot, so every day-rule has to be applied here.
+
+    The gates run against each candidate's provisional slot; this function
+    chooses a different one. Fridays were already handled that way, and the
+    same reasoning was never applied to in-lab days or university holidays --
+    so a pair could be offered on somebody's lab day, or on Thanksgiving.
+    """
+    from datetime import timedelta
+    from esd_scheduler.pairing import _common_slot
+
+    state, visits = build_lab(NOW)
+    visit = next(iter(visits))
+    people = [c for c in state.coordinators.values()][:2]
+    expect(len(people) == 2, "need two coordinators to pair")
+    a, b = people[0].coordinator_id, people[1].coordinator_id
+
+    # Give one of them an in-lab day and clear both calendars, so the only
+    # thing that can rule a day out is the rule under test.
+    for cid in (a, b):
+        snap = state.calendars.get(cid)
+        if snap:
+            snap.blocks = []
+    lab_day = 1                                   # Tuesday
+    state.coordinators[a].in_lab_day = lab_day
+    state.coordinators[b].in_lab_day = None
+
+    visit.window_start = datetime(2026, 8, 18, 9, 0)      # a Tuesday
+    visit.window_end = datetime(2026, 8, 18, 17, 0)
+    start, _ = _common_slot(state, visit, a, b, NOW, 2.0)
+    expect(start is None,
+           f"a slot was offered on {state.coordinators[a].name}'s in-lab day: "
+           f"{start}")
+
+    # Thanksgiving 2026, with nobody in the lab that day.
+    state.coordinators[a].in_lab_day = None
+    visit.window_start = datetime(2026, 11, 26, 9, 0)
+    visit.window_end = datetime(2026, 11, 26, 17, 0)
+    start, _ = _common_slot(state, visit, a, b, NOW, 2.0)
+    expect(start is None,
+           f"a slot was offered on a university holiday: {start}")
+
+    # A plain Wednesday with nothing in the way still works, or the rules
+    # above are just refusing everything.
+    visit.window_start = datetime(2026, 8, 19, 9, 0)
+    visit.window_end = datetime(2026, 8, 19, 17, 0)
+    start, _ = _common_slot(state, visit, a, b, NOW, 2.0)
+    expect(start is not None,
+           "no slot on an ordinary open Wednesday with both calendars clear")
+
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

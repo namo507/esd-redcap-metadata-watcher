@@ -338,8 +338,22 @@ def check_candidate(
     matrix: Optional[ReliabilityMatrix] = None,
     pool: Optional[Sequence[Coordinator]] = None,
     allow_friday: bool = False,
+    seat: str = "clinician",
 ) -> GateResult:
-    """Run gates 1 through 7 in order and stop at the first failure."""
+    """Run gates 1 through 7 in order and stop at the first failure.
+
+    ``seat`` says which of the two jobs on a visit is being checked. The
+    manual puts the assessment requirement on one of them and not the other:
+    "Clinician must be able to reliably/independently admin all the
+    assessments needed for that visit age", and it asks nothing of the tech.
+    So gates 2 and 3, which are both about holding the visit's assessments,
+    are skipped for ``seat="tech"``. Every other gate -- the lab day, the
+    closed day, the kit ceiling, availability -- applies to anybody who is
+    going, whichever seat they sit in.
+
+    The default stays "clinician", so every existing caller keeps the
+    stricter behaviour it already had.
+    """
     matrix = matrix or ReliabilityMatrix.load()
     required = matrix.required_for(visit.protocol, visit.checkpoint)
 
@@ -355,7 +369,7 @@ def check_candidate(
     # --- 2. Assessment reliability ------------------------------------------
     # Only enforced once the matrix has been confirmed against the manual.
     # An unconfirmed matrix would otherwise exclude the entire roster.
-    if matrix.confirmed and required:
+    if matrix.confirmed and required and seat != "tech":
         unmet = [a for a in required if not matrix.is_reliable(coordinator.coordinator_id, a)]
         training = [a for a in unmet if matrix.is_in_training(coordinator.coordinator_id, a)]
         blocking = [a for a in unmet if a not in training]

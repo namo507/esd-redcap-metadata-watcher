@@ -598,6 +598,21 @@ quiet pass &mdash; it means the calendar was absent or empty for that range, so
 nothing was checked. A filter with no windows shows as off rather than being
 hidden, because an empty calendar and a missing one mean different things.
 
+**Running it on the right Python.** The engine, the API and the tests run on
+the standard library, and `python3` on a Mac is often 3.9 while CI runs 3.11.
+That gap has bitten: a tuple seed for `random.Random` was removed in 3.11 and
+3.9 accepted it silently, so the suite passed locally and failed in CI. A
+project-local interpreter with every requirement installed avoids it:
+
+```
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+PY=.venv/bin/python make test
+```
+
+`.venv/` is gitignored, and `make doctor` reports which interpreter it is
+running on and says when that is older than the one CI uses.
+
 **How accurate is any of this?** `make ocr-accuracy` answers it with a number
 rather than a claim. A page is drawn from a known list of events and both
 readers are scored against it: the PDF path finds every block with zero

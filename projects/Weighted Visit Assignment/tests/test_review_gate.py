@@ -236,6 +236,118 @@ def test_with_the_gate_off_a_screenshot_counts_at_once():
            "with the gate off blocks were still queued for review")
 
 
+def test_re_applying_an_import_replaces_it_rather_than_stacking_another_copy():
+    """Every upload re-applies all confirmed blocks. They must not accumulate.
+
+    The code meant to drop previously applied import blocks and keep the rest,
+    filtering on a `source` marker of "pdf_import". Nothing ever set that
+    marker -- BusyBlock had no such field -- so the filter matched nothing and
+    each re-apply appended a second copy of the same busy time. Three uploads
+    in a row left one event on the calendar three times.
+
+    Free/busy is unaffected, which is why it went unnoticed. The burden
+    criterion is not: it reads committed hours off these blocks, so a
+    duplicated calendar makes somebody look progressively busier than they
+    are, and the ranking moves.
+    """
+    if not (needs("fitz") and needs("cv2")):
+        print("SKIP test_re_applying_an_import_replaces_it_rather_than_stacking")
+        return
+    import collections
+
+    session, _ = _held_board(auto_confirm=True)
+    before = {cid: len(cal.blocks)
+              for cid, cal in session.state.calendars.items()}
+
+    # Apply the very same confirmed blocks again, which is what the next
+    # upload does.
+    session._apply_confirmed_blocks()
+    session._apply_confirmed_blocks()
+
+    for cid, cal in session.state.calendars.items():
+        counts = collections.Counter((b.start, b.end) for b in cal.blocks
+                                     if getattr(b, "source", "") == "pdf_import")
+        repeated = {k: n for k, n in counts.items() if n > 1}
+        expect(not repeated,
+               f"{cid} has the same imported block more than once after "
+               f"re-applying: {list(repeated)[:2]}")
+        expect(len(cal.blocks) == before.get(cid, 0),
+               f"{cid} went from {before.get(cid)} blocks to {len(cal.blocks)} "
+               f"without anything new being read")
+
+
+def test_the_read_table_counts_this_print_and_not_every_print():
+    """The blocks column sits beside "calendar as printed".
+
+    It was counting every block the board had ever confirmed for that person,
+    so a print of twelve events reported forty-six once a few uploads had
+    accumulated. The check is an invariant rather than a fixed number: the
+    per-person counts have to add up to what this import said it read.
+
+    Run against a PDF, because that is what the table describes. A screenshot
+    carries no printed legend, so it produces no rows at all -- see
+    `test_a_screenshot_has_no_legend_to_build_a_table_from` below.
+    """
+    if not needs("fitz"):
+        print("SKIP test_the_read_table_counts_this_print_and_not_every_print")
+        return
+    import tempfile as _tf
+    import make_work_week_pdf as fx
+    from backend.session import LabSession
+
+    tmp = _tf.mkdtemp(prefix="read-table-")
+    os.environ["ESD_COLOR_MAP_PATH"] = os.path.join(tmp, "colours.json")
+    pdf = os.path.join(tmp, "week.pdf")
+    fx.build(pdf, first_day=FIRST_DAY, month=MONTH, year=YEAR)
+    session = LabSession(db_path=os.path.join(tmp, "board.db"))
+
+    for _ in range(2):          # twice: a table counting history would double
+        with open(pdf, "rb") as fh:
+            upload = session.upload_calendar_pdf("week.pdf", fh.read())
+
+    table = session.read_table()
+    counted = sum(r["blocks"] for r in table["rows"]
+                  if isinstance(r["blocks"], int))
+    expect(counted == upload["block_count"],
+           f"the table counts {counted} blocks for a print that read "
+           f"{upload['block_count']}")
+
+
+def test_a_screenshot_names_the_people_its_colours_were_matched_to():
+    """A screenshot prints no header, so every colour reaches the fallback.
+
+    That fallback said "unnamed blue calendar -- Not recognised" and asked
+    somebody to identify it, while the confirmed colour map had already put
+    those very blocks on the right people. The board was asking a question it
+    had the answer to, about time it had already committed.
+
+    Colour is weaker evidence than a printed name, which is why the row says
+    where the match came from. But it is evidence, and pretending otherwise
+    sent a scheduler to map a calendar that was already mapped.
+    """
+    if not (needs("fitz") and needs("cv2")):
+        print("SKIP test_a_screenshot_names_the_people_its_colours_were_matched_to")
+        return
+    session, upload = _held_board(auto_confirm=True)
+    expect(upload["block_count"] > 0,
+           "the screenshot produced no blocks, so this proves nothing")
+
+    table = session.read_table()
+    named = [r for r in table["rows"] if r["coordinator_id"]]
+    expect(named,
+           f"the screenshot attributed {upload['block_count']} blocks to "
+           f"people, and the table names none of them: "
+           f"{[r['label'] for r in table['rows']]}")
+    counted = sum(r["blocks"] for r in named if isinstance(r["blocks"], int))
+    expect(counted == upload["block_count"],
+           f"the table accounts for {counted} of {upload['block_count']} "
+           f"blocks the screenshot produced")
+    for row in named:
+        expect("colour" in row["meaning"],
+               f"row {row['label']!r} does not say the match came from a "
+               f"colour rather than a printed name")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

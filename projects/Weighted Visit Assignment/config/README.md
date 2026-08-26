@@ -209,12 +209,22 @@ And below **75 pixels per hour** the reader has been measured placing a block
 answering. That floor is in `esd_scheduler/ingest_image.py`, and the numbers
 either side of it are in the note beside it.
 
-**`holidays` ships empty and that is not the same as "there are none."** The
-manual gives the rule — *"On designated USC staff holidays, no visits should be
-scheduled (no exceptions to this)"* — but not the dates. Add them as
-`"2026-11-26"` strings. Until you do, the board cannot check the rule and says
-so rather than quietly scheduling through a holiday. Unlike a Friday, a holiday
-cannot be overridden, because the manual says it cannot.
+**`holidays` now carries the university's actual dates.** The manual gives the
+rule — *"On designated USC staff holidays, no visits should be scheduled (no
+exceptions to this)"* — but not the dates, so it shipped empty and the board
+said it could not check rather than quietly scheduling through one.
+
+The list is the University of South Carolina staff holiday schedule from the
+[Division of Human Resources](https://sc.edu/about/offices_and_divisions/human_resources/benefits/holidays-and-leave/holidays/),
+transcribed on 26 August 2026 and covering calendar 2026 and 2027 plus the
+observed 2028 New Year's Day. Unlike a Friday, a holiday cannot be overridden,
+because the manual says it cannot.
+
+Two things to know before trusting it. These are the **university-wide staff**
+holidays, not the academic calendar — a lab that closes for anything else, a
+department shutdown or a conference week, has to add those dates itself. And
+the list ends: add the next year from the same HR page when it is published,
+because a date past the end is treated as an ordinary working day.
 
 ## Visit profiles and who may staff them
 

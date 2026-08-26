@@ -137,12 +137,30 @@ def _common_slot(state, visit, a: str, b: str, now: datetime,
     length = timedelta(hours=duration_hours)
     cursor = visit.window_start
     limit = visit.window_end
+
+    # Whichever day this picks has to be legal for both people. The gates run
+    # against each candidate's own provisional slot; this function chooses a
+    # different one, so every rule that depends on *which day* it is has to be
+    # honoured here too or it is silently skipped. Fridays were already
+    # handled that way. In-lab days and university holidays were not, so a
+    # pair could be offered on somebody's lab day or on Thanksgiving.
+    from .resources import LabResources
+    _res = LabResources.load()
+    lab_days = set()
+    for cid in (a, b):
+        coord = (state.coordinators or {}).get(cid)
+        day = getattr(coord, "in_lab_day", None)
+        if day is not None:
+            lab_days.add(day)
+
     while cursor + length <= limit:
-        # Fridays are lab meeting days and carry no visits without a logged
-        # override. The gate that enforces that runs against each candidate's
-        # own slot; this function picks its own, so it has to honour the rule
-        # itself or it will happily offer a Friday morning.
         workday = cursor.weekday() < 5 and (allow_friday or cursor.weekday() != 4)
+        if workday and cursor.weekday() in lab_days:
+            workday = False              # one of them is in the lab that day
+        if workday:
+            shut = _res.closed_on(cursor)
+            if shut and "holiday" in shut:
+                workday = False          # the manual allows no exceptions
         if workday:
             hour = cursor.hour + cursor.minute / 60.0
             finish = hour + duration_hours
@@ -167,15 +185,25 @@ def rank_pairs(
     roster=None,
     limit: int = 12,
     allow_friday: bool = False,
+    tech_only=(),
 ) -> Tuple[List[Pair], List[str]]:
     """Every workable clinician/tech pairing, best first.
 
     ``survivors`` are the candidates that already passed the Layer 1 gates, so
     this never has to re-litigate eligibility -- it only has to decide roles,
     find a slot both can make, and combine the scores.
+
+    ``tech_only`` are people the assessment gate turned down. That gate is
+    about the clinician's seat: the manual requires the *clinician* to be able
+    to administer everything the visit needs and asks nothing of the tech. So
+    they can fill the second seat, and never the first -- ``clinicians_for``
+    is asked only about the survivors below.
     """
     by_id = {c.coordinator_id: c for c in survivors}
-    ids = list(by_id)
+    tech_extra = [c for c in tech_only if c.coordinator_id not in by_id]
+    by_id.update({c.coordinator_id: c for c in tech_extra})
+    # Only survivors are considered for the clinician seat.
+    ids = [c.coordinator_id for c in survivors]
     problems: List[str] = []
 
     # The lab's physical limits, and the family this visit belongs to. Both
@@ -208,10 +236,11 @@ def rank_pairs(
             "The reliability chart lists no assessments for this visit, so which "
             "of these people counts as its clinician is unverified.")
 
-    tech_ok = set(ids)
+    tech_ids = ids + [c.coordinator_id for c in tech_extra]
+    tech_ok = set(tech_ids)
     if roster is not None:
         entries = roster.by_id()
-        tech_ok = {c for c in ids
+        tech_ok = {c for c in tech_ids
                    if c not in entries or entries[c].can_tech}
     if not tech_ok:
         problems.append("Nobody eligible is marked as able to run the tech side.")

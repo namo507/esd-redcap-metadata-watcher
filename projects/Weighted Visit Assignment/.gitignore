@@ -47,3 +47,8 @@ data/inbox/*.pdf
 # not the ESD palette. Ignored because a plain `git add -A` kept sweeping it
 # into commits it did not belong in. Delete this line if you want it tracked.
 config/PowerBI-Theme-ESD.json
+
+# A project-local interpreter with every requirement installed. Built with
+# `python3.12 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt`,
+# matched to the version CI runs rather than whatever python3 happens to be.
+.venv/

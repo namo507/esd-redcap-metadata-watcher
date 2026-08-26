@@ -34,6 +34,36 @@ def test_there_are_two_nano_kits():
            "a protocol with no kit limit should be unlimited, not zero")
 
 
+def test_the_universitys_holidays_are_on_file_and_stop_a_visit():
+    """The manual gives the rule and not the dates, so the dates are data.
+
+    While the list was empty the board could not check the rule at all -- it
+    said so rather than scheduling through a holiday, which was the right
+    behaviour and not a working one. These are the University of South
+    Carolina staff holidays from HR, and the point of the test is that they
+    reach the gate: a transcription nobody checks is how a lab books a visit
+    on Christmas Eve.
+    """
+    from esd_scheduler.resources import LabResources
+    lab = LabResources.load()
+
+    expect(lab.holidays_known,
+           "the holiday list is empty again, so the board cannot check the "
+           "manual's 'no exceptions' rule")
+    for day, name in ((date(2026, 11, 26), "Thanksgiving"),
+                      (date(2026, 11, 27), "the day after Thanksgiving"),
+                      (date(2026, 12, 25), "Christmas Day"),
+                      (date(2026, 1, 19), "Martin Luther King Jr. Day"),
+                      (date(2027, 9, 6), "Labor Day the following year")):
+        reason = lab.closed_on(day)
+        expect(reason and "holiday" in reason,
+               f"{name} ({day}) is not being treated as a university holiday")
+
+    # An ordinary working day must still be open, or the list is over-broad.
+    expect(lab.closed_on(date(2026, 8, 19)) is None,
+           "a plain Wednesday in August is being reported as closed")
+
+
 def test_friday_is_held_for_lab_meetings():
     friday = date(2026, 8, 21)
     thursday = date(2026, 8, 20)
@@ -48,9 +78,19 @@ def test_an_empty_holiday_list_is_not_a_claim_that_there_are_none():
 
     Shipping an empty list and treating it as "no holidays" would schedule
     straight through one, which the manual calls out as having no exceptions.
+
+    The invariant is that `holidays_known` tracks whether there are any dates
+    on file, checked here in both directions. It was written as
+    "holidays_known is False OR holidays", which was satisfied by either
+    branch and so could not fail once the dates were added.
     """
-    expect(RES.holidays_known is False or RES.holidays,
-           "holidays_known should be False while the list is empty")
+    expect(RES.holidays_known == bool(RES.holidays),
+           f"holidays_known is {RES.holidays_known} with "
+           f"{len(RES.holidays)} dates on file")
+    expect(LabResources(holidays=[]).holidays_known is False,
+           "a board with no dates on file claims to know the holidays")
+    expect(LabResources.load().holidays_known is True,
+           "the shipped config has dates but does not report knowing them")
 
 
 def test_a_holiday_cannot_be_overridden_but_a_friday_can():

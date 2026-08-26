@@ -187,6 +187,11 @@ class BusyBlock:
     # Microsoft Graph getSchedule vocabulary; oof is a hard block, tentative and
     # workingElsewhere are soft (pass but flag).
     status: str = "busy"  # free | tentative | busy | oof | workingElsewhere
+    #: Where this block came from. Blocks re-derived from uploaded calendars
+    #: are tagged so that re-applying an import replaces the previous one
+    #: instead of stacking another copy on top of it. Anything read from a
+    #: provider leaves this empty.
+    source: str = ""
 
     HARD_STATUSES = ("busy", "oof")
 

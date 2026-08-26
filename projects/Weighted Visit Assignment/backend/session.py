@@ -325,9 +325,18 @@ class LabSession:
         board guesses a person from a colour.
         """
         last = self.last_import or {}
-        blocks = {row[0]: row[1] for row in self.store.query(
-            "SELECT coordinator_id, COUNT(*) FROM calendar_import_block "
-            "WHERE reviewed=1 AND confirmed=1 GROUP BY coordinator_id")}
+        # Only this upload's blocks. The column sits beside "calendar as
+        # printed" and is read as "what came off this print", so counting
+        # every block the board has ever confirmed for that person made a
+        # print of twelve events report forty-six.
+        import_id = last.get("import_id")
+        if import_id:
+            blocks = {row[0]: row[1] for row in self.store.query(
+                "SELECT coordinator_id, COUNT(*) FROM calendar_import_block "
+                "WHERE reviewed=1 AND confirmed=1 AND import_id=? "
+                "GROUP BY coordinator_id", (import_id,))}
+        else:
+            blocks = {}
         hues = last.get("hues_seen") or {}
         legend = last.get("legend") or {}
         by_hue = {v: k for k, v in legend.items()} if isinstance(legend, dict) else {}
@@ -361,10 +370,11 @@ class LabSession:
                 "polarity": entry.get("polarity", ""),
                 "meaning": meaning,
                 "coordinator_id": cid,
-                # No count for somebody not being scheduled: their colour is
-                # not attributed, so a 0 here would read as "free all week"
-                # rather than "not read at all".
-                "blocks": blocks.get(cid, 0) if cid and on_roster else None,
+                # A count whenever this print produced blocks for them. The
+                # legend path attributes nothing to somebody not being
+                # scheduled, so theirs is blank -- which reads as "not read",
+                # where a 0 would have read as "free all week".
+                "blocks": blocks.get(cid) if cid else None,
                 "is_person": is_person,
                 "scheduled": on_roster,
                 # A person the lab has taken off scheduling is not an
@@ -383,9 +393,69 @@ class LabSession:
         # to a coordinator would be asking the wrong question. Only colours
         # with no row at all are unfinished business.
         named = {r["label"] for r in rows}
+        # A screenshot has no printed header, so it produces no named calendars
+        # and every colour arrives here. Most of them are not a mystery: the
+        # confirmed colour map is how a screenshot gets attributed at all, and
+        # five blocks had already been put on the right people while this table
+        # was still reporting "unnamed blue calendar -- Not recognised" and
+        # asking somebody to identify it.
+        cmap = ColorMap.load()
+
+        # A screenshot prints no header, so no calendar is *named* and the
+        # loop above produced nothing. Its blocks were still attributed --
+        # by colour, through the confirmed map, which is the only evidence an
+        # image offers. Without these rows the table listed the two colours it
+        # could not place and none of the people it could, so a good read
+        # looked like a complete failure to read anything.
+        if not rows:
+            for hue in sorted(last.get("hues_seen") or {}):
+                mapped = cmap.mapping.get(hue) if cmap.confirmed else None
+                if not mapped:
+                    continue
+                entry = self.roster_config.by_id().get(mapped)
+                on_roster = mapped in scheduled
+                rows.append({
+                    "label": entry.name if entry else mapped,
+                    "role": "coordinator", "role_label": "Coordinator",
+                    "polarity": "busy", "hue": hue,
+                    "meaning": (f"Matched by colour, from the map "
+                                f"{cmap.confirmed_by or 'somebody'} confirmed. "
+                                f"An image prints no names, so the colour is "
+                                f"the only evidence of whose calendar it is."),
+                    "coordinator_id": mapped,
+                    # A count whenever this print produced blocks for them,
+                    # scheduled or not. Blank means none were read -- never
+                    # "free all week", which is what a 0 would have implied.
+                    "blocks": blocks.get(mapped),
+                    "is_person": True, "scheduled": on_roster,
+                    "needs_mapping": False,
+                })
+            named = {r["label"] for r in rows}
+
         for hue in last.get("unattributed_hues") or []:
             label = by_hue.get(hue)
             if label and label in named:
+                continue
+            mapped = cmap.mapping.get(hue) if cmap.confirmed else None
+            if mapped:
+                entry = self.roster_config.by_id().get(mapped)
+                on_roster = mapped in scheduled
+                rows.append({
+                    "label": label or (entry.name if entry else mapped),
+                    "role": "coordinator", "role_label": "Coordinator",
+                    "polarity": "busy", "hue": hue,
+                    "meaning": (f"Matched by colour, from the map "
+                                f"{cmap.confirmed_by or 'somebody'} confirmed. "
+                                f"A screenshot prints no names, so colour is "
+                                f"the only evidence of whose calendar this is."),
+                    "coordinator_id": mapped,
+                    # A count whenever this print produced blocks for them,
+                    # scheduled or not. Blank means none were read -- never
+                    # "free all week", which is what a 0 would have implied.
+                    "blocks": blocks.get(mapped),
+                    "is_person": True, "scheduled": on_roster,
+                    "needs_mapping": False,
+                })
                 continue
             rows.append({
                 "label": label or f"unnamed {hue} calendar",
@@ -812,7 +882,14 @@ class LabSession:
             except (TypeError, ValueError):
                 continue
             by_coord.setdefault(row["coordinator_id"], []).append(
-                BusyBlock(start=start, end=end, status="busy")
+                # Tagged, because the line below drops previously applied
+                # import blocks by exactly this marker. Nothing ever set it,
+                # so the filter matched nothing and every re-apply appended a
+                # second copy of the same busy time -- three uploads in a row
+                # left one event on the calendar three times, and the burden
+                # score reads committed hours off these.
+                BusyBlock(start=start, end=end, status="busy",
+                          source="pdf_import")
             )
         applied = 0
         for cid, blocks in by_coord.items():
@@ -1461,7 +1538,7 @@ class LabSession:
         Anyone a gate rejects leaves the ranking entirely. A hard rule is not
         something a good score is allowed to argue with.
         """
-        survivors, gated = [], []
+        survivors, gated, tech_only = [], [], []
         roster = [
             self.state.coordinators[c.coordinator_id]
             for c in pool.candidates
@@ -1481,13 +1558,43 @@ class LabSession:
             )
             if verdict.passed:
                 survivors.append(cand)
-            else:
-                gated.append({
-                    "id": cand.coordinator_id,
-                    "name": cand.coordinator_name,
-                    "reason": verdict.reason or verdict.gate,
-                })
-        return survivors, gated
+                continue
+
+            gated.append({
+                "id": cand.coordinator_id,
+                "name": cand.coordinator_name,
+                "reason": verdict.reason or verdict.gate,
+            })
+            # The assessment gate is about the clinician's seat, not the
+            # visit. The manual asks that "Clinician must be able to
+            # reliably/independently admin all the assessments needed for that
+            # visit age" and asks nothing of the tech, so somebody short an
+            # assessment can still tech it. They were being dropped from the
+            # pool entirely, and because the pairing step draws both seats
+            # from that pool, a tech was being held to the clinician's bar --
+            # which made real visits unstaffable with a valid pair sitting
+            # right there.
+            if verdict.gate == "reliability":
+                # The gates stop at the first failure, so gates 3 to 7 never
+                # ran for this person -- their lab day, the closed days, the
+                # kit ceiling, whether they are actually free. Re-run the
+                # whole chain for the tech seat rather than assuming the rest
+                # would have passed. The first version of this fix did assume
+                # it, and offered somebody a visit on their in-lab day.
+                # No slot: the day-dependent rules are enforced where the
+                # slot is actually chosen, in _common_slot, which now honours
+                # lab days and holidays for both people. Checking them here
+                # against this person's *provisional* slot would reject them
+                # for a day the pair was never going to use -- which it did,
+                # dropping the only workable tech because her provisional slot
+                # landed on her lab day.
+                tech_verdict = check_candidate(
+                    coord, visit, family, self.state, self.now, slot=None,
+                    matrix=self.matrix, pool=roster, seat="tech",
+                )
+                if tech_verdict.passed:
+                    tech_only.append(cand)
+        return survivors, gated, tech_only
 
     def is_remote(self, visit) -> bool:
         """Whether this checkpoint is ever seen in person.
@@ -1576,7 +1683,7 @@ class LabSession:
             # on screen. Anyone a gate rejects is moved out of the ranking
             # entirely rather than ranked and flagged, because a hard rule is
             # not something a good score should be able to argue with.
-            survivors, gated = self._apply_gates(visit, family, pool)
+            survivors, gated, tech_only = self._apply_gates(visit, family, pool)
 
             ranked = []
             for cand in survivors:
@@ -1666,7 +1773,7 @@ class LabSession:
             pairs, pair_problems = rank_pairs(
                 visit, self.state, self.cfg.weights, self.matrix, survivors,
                 self.now, duration_hours=visit_duration_hours(visit, family),
-                roster=self.roster_config,
+                roster=self.roster_config, tech_only=tech_only,
             )
 
             return {
@@ -1764,7 +1871,7 @@ class LabSession:
             family = self.state.families[visit.family_id]
             pool = score_visit(visit, self.state, self.cfg, self.now)
             pool, _ = self._eligible_pool(visit, pool)
-            survivors, gated = self._apply_gates(visit, family, pool)
+            survivors, gated, tech_only = self._apply_gates(visit, family, pool)
             if not survivors:
                 raise ValueError("Nobody is eligible for this visit.")
             blocked = next((g for g in gated if g["id"] == coordinator_id), None)
