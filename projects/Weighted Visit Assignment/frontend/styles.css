@@ -856,13 +856,18 @@ body.is-scrolled .hero-sub { display: none; }
    anything else. */
 .mmcard { margin-top: 1.3rem; }
 .mm {
-  display: flex; align-items: flex-start; gap: 0 2.2rem;
+  display: flex; align-items: flex-start; gap: 0 1.6rem;
   overflow-x: auto; padding: .4rem .2rem 1rem;
 }
+/* The columns share whatever the card has rather than each taking a fixed
+   21rem. Fixed widths overflowed as soon as a third column opened, and the
+   thing being clipped was the recommendation -- the one part of this view
+   somebody actually came for. They still scroll sideways below the min. */
 .mm-col {
   display: flex; flex-direction: column; gap: .5rem;
-  position: relative; flex: 0 0 auto; max-width: 21rem;
+  position: relative; flex: 1 1 0; min-width: 11.5rem; max-width: 21rem;
 }
+
 
 /* The spine, and one stub per node hanging off it. */
 .mm-col.has-parent::before {
@@ -877,7 +882,11 @@ body.is-scrolled .hero-sub { display: none; }
 .mm-node {
   position: relative; text-align: left; cursor: pointer;
   background: #fff; border: 1px solid var(--line); border-radius: 12px;
-  padding: .6rem .8rem; display: grid; gap: 1px; font: inherit;
+  /* The right gutter is reserved for the count and the score, which sit
+     top-right and out of the flow. Without it the score printed straight
+     through "Lauren Puttock + Sanjana Oak". */
+  padding: .6rem 4.2rem .6rem .8rem;
+  display: grid; gap: 1px; font: inherit; min-width: 0;
   color: var(--ink); transition: border-color .12s, box-shadow .12s, background .12s;
 }
 .mm-node:hover { border-color: var(--esd-science-blue); }
@@ -898,6 +907,9 @@ body.is-scrolled .hero-sub { display: none; }
   position: absolute; top: .55rem; right: .8rem;
   font-variant-numeric: tabular-nums; color: var(--muted); font-size: .85rem;
 }
+/* Long enough to need it: two full names wrap rather than run under the
+   score or push the column wider than the card. */
+.mm-node b { overflow-wrap: anywhere; }
 .mm-tag {
   justify-self: start; margin-top: .3rem; font-size: .72rem; font-weight: 600;
   padding: 1px 7px; border-radius: 999px;
@@ -906,7 +918,7 @@ body.is-scrolled .hero-sub { display: none; }
 .mm-tag.is-warn { background: var(--state-warn-bg); color: var(--ink-on-yellow); }
 .mm-none { color: var(--muted); font-size: .88rem; max-width: 20rem; padding: .5rem 0; }
 
-.mm-detailcol { max-width: 25rem; }
+.mm-detailcol { flex: 1 1 14rem; min-width: 13rem; max-width: 25rem; }
 .mm-detail {
   border: 1px solid var(--line); border-left: 3px solid var(--esd-discovery-blue);
   border-radius: 12px; padding: .9rem 1rem; background: var(--bg);
