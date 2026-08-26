@@ -47,12 +47,21 @@ verified-human timing reference moves off 131 completed 4797 records.
 
 `Caregiver Outputs/` contains the original six figures plus fraud-facing and
 cluster-validation figures through `figure_20`, each as 300-DPI PNG and PDF.
-Tables `table_1` through `table_34` cover the original analysis, API provenance,
+Tables `table_1` through `table_35b` cover the original analysis, API provenance,
 field differences, R1–R10, false-positive rates, tier counts, detector
 concordance, five inclusion definitions, Firth logistic models, Gaussian-mixture
 diagnostics, bootstrap LRT, BCH correction, tipping points, power/precision,
-data quality, figure QA, and the branching-logic audit table keyed to the
-generalized R8 rule.
+data quality, figure QA, the branching-logic audit table keyed to the
+generalized R8 rule, and a demographic signal audit table pair
+(`table_35_demographic_signal_summary.csv`,
+`table_35b_demographic_signal_enrichment.csv`).
+
+The demographic signal audit is an anomaly-concentration check, not a labeling
+rule. It reports project-level prevalence with Wilson intervals, clean-vs-dirty
+Fisher exact comparisons, and enrichment of Tier/R-rule flags among the marked
+subset with Benjamini-Hochberg correction for the ten per-rule tests. These
+tables must be interpreted as concentration evidence only; they do not prove the
+demographic field itself identifies bots.
 
 R8 now covers three logical inconsistency families: autistic-child follow-up
 answers that persist when `fif_num_autistic=0`, manually specified branching

@@ -1,0 +1,4 @@
+analysis,field,source_project,n_records,n_selected,selected_pct,ci_low,ci_high,odds_ratio,risk_ratio,risk_difference_pp,p_value,note
+project_prevalence,demo_maternalrace___1,clean_4797,177,2,0.011299435028248588,0.0031041368075416624,0.04025756757905964,,,,,project-level prevalence with Wilson 95% interval
+project_prevalence,demo_maternalrace___1,dirty_4581,1779,46,0.025857223159078135,0.019441193269659738,0.03431658308018537,,,,,project-level prevalence with Wilson 95% interval
+dirty_vs_clean_comparison,demo_maternalrace___1,dirty_4581 vs clean_4797,1956,48,,,,2.3225620311598383,2.288364249578415,1.4557788130829548,0.31213024589407956,two-sided Fisher exact test on project prevalence

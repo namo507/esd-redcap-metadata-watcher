@@ -6,9 +6,33 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from pptx.enum.shapes import MSO_SHAPE
 from PIL import Image
 import os
+from pathlib import Path
 
-SK = "/sessions/trusting-cool-heisenberg/mnt/.claude/skills/esd-lab"
-OUT = "/sessions/trusting-cool-heisenberg/mnt/caregiver-cluster-analysis/Caregiver Outputs"
+PROJECT_DIR = Path(__file__).resolve().parent
+
+
+def _first_existing(paths):
+    for candidate in paths:
+        if candidate and Path(candidate).exists():
+            return str(candidate)
+    return str(paths[-1])
+
+
+SK = _first_existing(
+    [
+        os.getenv("ESD_SKILLS_ROOT"),
+        "/sessions/trusting-cool-heisenberg/mnt/.claude/skills/esd-lab",
+        PROJECT_DIR / "assets" / "esd-lab",
+    ]
+)
+OUT = str(
+    Path(
+        os.getenv(
+            "ESD_DECK_OUT",
+            str(PROJECT_DIR / "Caregiver Outputs"),
+        )
+    ).resolve()
+)
 
 # --- canon brand tokens (non-negotiable) ---
 DISCOVERY = RGBColor(0x33, 0x66, 0xFF)
@@ -38,6 +62,8 @@ STAR_ORANGE    = f"{SK}/assets/icons/star-confident-orange.png"
 
 
 def aspect(path):
+    if not os.path.exists(path):
+        return 1.0
     with Image.open(path) as im:
         return im.size[0] / im.size[1]
 
@@ -116,19 +142,26 @@ def plate(slide, x, y, w, h, fill=COOLWHITE, radius=0.035, line_color=None):
 
 def lab_logo(slide, x, y, h, white=False):
     p = LOGO_LAB_WHITE if white else LOGO_LAB_BLUE
-    a = aspect(p)
-    slide.shapes.add_picture(p, Inches(x), Inches(y), height=Inches(h), width=Inches(h * a))
-    return h * a
+    if os.path.exists(p):
+        a = aspect(p)
+        slide.shapes.add_picture(p, Inches(x), Inches(y), height=Inches(h), width=Inches(h * a))
+        return h * a
+    # fallback when brand assets are unavailable in local workspace
+    txt(slide, x, y, 1.6, h, "ESD Lab", size=10, color=DISCOVERY, font=FH, bold=True, space_after=0)
+    return 1.6
 
 
 def logo_pair(slide, x, y, h, white=False):
     """Lab logo LEFT of UofSC logo, both same height (brand rule)."""
     w1 = lab_logo(slide, x, y, h, white=white)
     gap = 0.22
-    a2 = aspect(LOGO_UOFSC)
-    slide.shapes.add_picture(LOGO_UOFSC, Inches(x + w1 + gap), Inches(y),
-                             height=Inches(h), width=Inches(h * a2))
-    return w1 + gap + h * a2
+    if os.path.exists(LOGO_UOFSC):
+        a2 = aspect(LOGO_UOFSC)
+        slide.shapes.add_picture(LOGO_UOFSC, Inches(x + w1 + gap), Inches(y),
+                                 height=Inches(h), width=Inches(h * a2))
+        return w1 + gap + h * a2
+    txt(slide, x + w1 + gap, y, 1.4, h, "UofSC", size=10, color=ORANGE, font=FH, bold=True, space_after=0)
+    return w1 + gap + 1.4
 
 
 def header(slide, eyebrow, title, title_color=DISCOVERY, title_size=26):
@@ -153,6 +186,12 @@ def source(slide, text):
 
 def figure(slide, path, x, y, w, h, pad=0.10):
     """Fit image inside box (x,y,w,h) on a cool-white rounded card."""
+    if not os.path.exists(path):
+        plate(slide, x, y, w, h, fill=COOLWHITE, radius=0.05)
+        txt(slide, x + 0.2, y + h / 2 - 0.15, w - 0.4, 0.3,
+            f"Missing figure: {os.path.basename(path)}", size=10, color=GREY,
+            font=FB, space_after=0, align=PP_ALIGN.CENTER)
+        return
     a = aspect(path)
     iw, ih = w - 2 * pad, (w - 2 * pad) / a
     if ih > h - 2 * pad:

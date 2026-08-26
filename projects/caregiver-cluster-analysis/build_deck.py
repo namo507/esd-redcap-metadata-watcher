@@ -14,7 +14,7 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.dml.color import RGBColor
 from esd_deck_lib import *
 
-OUTDIR = "/sessions/trusting-cool-heisenberg/mnt/caregiver-cluster-analysis"
+OUTDIR = os.path.dirname(OUT)
 F = lambda n: f"{OUT}/{n}"
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +30,8 @@ t5   = pd.read_csv(F("table_5_screening_outcome.csv"))
 t5b  = pd.read_csv(F("table_5b_cohort_flow.csv"))
 t20  = pd.read_csv(F("table_20_tier_sensitivity.csv"))
 t30  = pd.read_csv(F("table_30_decision_summary.csv"))
+t35  = pd.read_csv(F("table_35_demographic_signal_summary.csv"))
+t35b = pd.read_csv(F("table_35b_demographic_signal_enrichment.csv"))
 
 A = []
 def chk(name, got, want, tol=0.0):
@@ -63,6 +65,20 @@ d = t16[t16.source_project == "dirty_4581"]
 chk("dirty tiers 1-3 pct", round(float(d[d.tier <= 3].pct_within_project.sum()), 1), 96.1, 0.05)
 chk("dirty tier 4 pct", round(float(d[d.tier == 4].pct_within_project.iloc[0]), 1), 3.9, 0.05)
 
+dirty_prev = t35[(t35.analysis == "project_prevalence") & (t35.source_project == "dirty_4581")].iloc[0]
+clean_prev = t35[(t35.analysis == "project_prevalence") & (t35.source_project == "clean_4797")].iloc[0]
+cmp_prev = t35[t35.analysis == "dirty_vs_clean_comparison"].iloc[0]
+tier1_enrich = t35b[t35b.metric == "tier_1_confirmed_invalid"].iloc[0]
+tier2_enrich = t35b[t35b.metric == "tier_le_2_high_or_confirmed"].iloc[0]
+r8_enrich = t35b[t35b.metric == "rule_R8"].iloc[0]
+
+chk("demographic dirty selected", int(dirty_prev.n_selected), 46)
+chk("demographic clean selected", int(clean_prev.n_selected), 2)
+chk("demographic comparison p", round(float(cmp_prev.p_value), 3), 0.312, 0.001)
+chk("demographic tier1 group flagged", int(tier1_enrich.group_flagged_n), 27)
+chk("demographic tier<=2 group flagged", int(tier2_enrich.group_flagged_n), 39)
+chk("demographic R8 group flagged", int(r8_enrich.group_flagged_n), 4)
+
 bad = [a for a in A if not a[3]]
 print(f"[anchors] {len(A)-len(bad)}/{len(A)} passed")
 if bad:
@@ -87,8 +103,9 @@ prs = new_deck()
 # S1 — TITLE
 # ─────────────────────────────────────────────────────────────────────────────
 s = blank(prs, bg=DISCOVERY)
-s.shapes.add_picture(PATTERN_BAND, Inches(-0.6), Inches(5.55),
-                     width=Inches(14.5), height=Inches(2.4))
+if os.path.exists(PATTERN_BAND):
+    s.shapes.add_picture(PATTERN_BAND, Inches(-0.6), Inches(5.55),
+                         width=Inches(14.5), height=Inches(2.4))
 plate(s, M, 0.46, 5.95, 0.92, fill=WHITE, radius=0.28)
 logo_pair(s, M + 0.32, 0.66, 0.46)
 txt(s, M, 2.10, 11.6, 1.7,
@@ -522,15 +539,62 @@ s.notes_slide.notes_text_frame.text = (
     "report the full range the gap could take if they were reassigned, 39.0 to 44.5 points. The conclusion does not flip anywhere in that range."
 )
 
-print("[exec] 13 slides written")
+# ─────────────────────────────────────────────────────────────────────────────
+# S14 — DEMOGRAPHIC SIGNAL PREVALENCE
+# ─────────────────────────────────────────────────────────────────────────────
+fig_slide(prs, "Demographic concentration check",
+    "The prevalence contrast alone is directional but not decisive",
+    "The subgroup appears more often in 4581 than 4797, but prevalence alone does not justify a label.",
+    [f"dirty_4581: {int(dirty_prev.n_selected)}/{int(dirty_prev.n_records)} = {float(dirty_prev.selected_pct)*100:.2f}% (Wilson 95% CI {float(dirty_prev.ci_low)*100:.2f}–{float(dirty_prev.ci_high)*100:.2f}%)",
+     f"clean_4797: {int(clean_prev.n_selected)}/{int(clean_prev.n_records)} = {float(clean_prev.selected_pct)*100:.2f}% (Wilson 95% CI {float(clean_prev.ci_low)*100:.2f}–{float(clean_prev.ci_high)*100:.2f}%)",
+     f"Dirty vs clean Fisher exact p={float(cmp_prev.p_value):.3f}, odds ratio {float(cmp_prev.odds_ratio):.2f}, risk ratio {float(cmp_prev.risk_ratio):.2f}",
+     "Interpretation rule: demographic field values are never a stand-alone bot label; they are only an anomaly-concentration signal when corroborated by independent trust-risk evidence"],
+    F("figure_21_demographic_signal_enrichment.png"),
+    "figure_21_demographic_signal_enrichment.png; table_35_demographic_signal_summary.csv",
+    "This slide separates a descriptive fact from an inferential claim.\n\n"
+    "The descriptive fact is that the subgroup appears at 2.59% in 4581 and 1.13% in 4797. "
+    "The inferential question is whether that prevalence contrast by itself proves contamination. "
+    "It does not: the two-sided Fisher test is 0.312.\n\n"
+    "That is exactly why this remains a concentration signal rather than a label. We keep the "
+    "prevalence numbers visible, but we do not use them to classify records on their own.\n\n"
+    "The analytic guardrail is simple: demographic values can only contribute to quality review "
+    "when they co-enrich with independent timing, logic, and response-pattern rules that were "
+    "defined without demographic outcomes."
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S15 — DEMOGRAPHIC SIGNAL CO-ENRICHMENT
+# ─────────────────────────────────────────────────────────────────────────────
+fig_slide(prs, "Co-enrichment with trust-risk rules",
+    "The marked 46-record subgroup is concentrated in independent risk signals",
+    "Concentration is strongest for hard invalidity and rapid-completion rule families.",
+    [f"Tier 1 confirmed invalid: {int(tier1_enrich.group_flagged_n)}/{int(tier1_enrich.group_total_n)} ({float(tier1_enrich.group_rate)*100:.1f}%) vs {int(tier1_enrich.comparison_flagged_n)}/{int(tier1_enrich.comparison_total_n)} ({float(tier1_enrich.comparison_rate)*100:.1f}%), OR {float(tier1_enrich.odds_ratio):.2f}, p={float(tier1_enrich.p_value):.2g}",
+     f"Tier <=2 high-or-confirmed: {int(tier2_enrich.group_flagged_n)}/{int(tier2_enrich.group_total_n)} ({float(tier2_enrich.group_rate)*100:.1f}%) vs {int(tier2_enrich.comparison_flagged_n)}/{int(tier2_enrich.comparison_total_n)} ({float(tier2_enrich.comparison_rate)*100:.1f}%), OR {float(tier2_enrich.odds_ratio):.2f}, p={float(tier2_enrich.p_value):.2g}",
+     "Rule-level enrichment survives FDR correction for R1, R2, R3, R7 and R8; R6 is not enriched because it is high-base-rate in the entire legacy project",
+     "Operational decision: treat this as a suspected contamination cluster requiring stricter inclusion tiering, not deterministic demographic exclusion"],
+    F("figure_21_demographic_signal_enrichment.png"),
+    "figure_21_demographic_signal_enrichment.png; table_35b_demographic_signal_enrichment.csv; table_16_trust_tier_counts.csv",
+    "This slide is the key decision support piece for the 46-record question.\n\n"
+    "Once we condition on dirty_4581 only, the subgroup is substantially over-represented in "
+    "Tier 1 and Tier <=2, and in several independent rule families. That cross-rule pattern "
+    "is much stronger evidence than prevalence alone.\n\n"
+    "We still avoid a demographic label. What we can claim is concentration of independent "
+    "quality-risk signals, which supports stricter tiering and manual review.\n\n"
+    "This is the mathematically conservative position: do not claim identity-based causation, "
+    "do not claim exact bot prevalence, and do use the co-enrichment profile to prioritize "
+    "exclusion sensitivity analyses."
+)
+
+print("[exec] 15 slides written")
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SHARED HELPERS FOR APPENDIX / TABLE SLIDES
 # ═════════════════════════════════════════════════════════════════════════════
 def divider(prs, eyebrow, title, sub):
     s = blank(prs)
-    s.shapes.add_picture(SUNBURST, Inches(9.55), Inches(1.55),
-                         height=Inches(4.2), width=Inches(4.2 * aspect(SUNBURST)))
+    if os.path.exists(SUNBURST):
+        s.shapes.add_picture(SUNBURST, Inches(9.55), Inches(1.55),
+                             height=Inches(4.2), width=Inches(4.2 * aspect(SUNBURST)))
     txt(s, M, 2.60, 8.4, 0.26, eyebrow, size=11, color=ORANGE, font=FH, bold=True,
         caps=True, space_after=0, char_space=0.6)
     txt(s, M, 2.94, 8.6, 1.0, title, size=38, color=DISCOVERY, font=FH, bold=True,
@@ -866,6 +930,8 @@ TRACE_B = [
     ("12", "Maximum detector agreement is Cohen's kappa 0.29", "figure_11_detector_scores_and_agreement.png · table_19_detector_agreement.csv"),
     ("12", "Top PU feature is open-text field count (permutation AUC drop 0.204)", "figure_11b_pu_feature_importance.png · table_18_detector_feature_importance.csv"),
     ("13", "Five decisions, four implemented, contamination fraction left open", "table_30_decision_summary.csv · table_17_contamination_identifiability.csv"),
+    ("14", "Demographic prevalence contrast is directional but not decisive", "table_35_demographic_signal_summary.csv · figure_21_demographic_signal_enrichment.png"),
+    ("15", "Marked subgroup co-enriches with independent trust-risk flags", "table_35b_demographic_signal_enrichment.csv · table_16_trust_tier_counts.csv"),
     ("A1", "Hashed dated caches, halt gates, and field alignment across projects", "table_12 · table_13 · table_13b · table_1 · table_31 · README.md"),
     ("A2", "What is clustered: ten standardized TFA domains, softly structured", "figure_12_tfa_clustermap.png · table_25_latent_profile_quality.csv"),
     ("A2", "Linear structure and centroid validity in PCA space", "figure_13_tfa_pca_biplot.png"),
@@ -890,7 +956,7 @@ for part, rowset in (("1 of 2", TRACE_A), ("2 of 2", TRACE_B)):
                "Two conventions worth stating. Where a figure and a table cover the same claim, the table is authoritative for the number "
                "and the figure is illustrative, because figures round and tables do not. And the two native charts in this deck, on slides 9 "
                "and 10, are drawn directly from table_16 and table_34 values rather than re-computed, so there is no separate derivation to audit.\n\n"
-               "All 21 generated figures, figure_1 through figure_20 including figure_11b, appear somewhere in this map. If a reviewer asks "
+               "All 22 generated figures, figure_1 through figure_21 including figure_11b, appear somewhere in this map. If a reviewer asks "
                "why a particular figure was not shown in the executive section, the answer is in this table: it was bound to an appendix claim instead."))
 print("[traceability] 2 slides written")
 

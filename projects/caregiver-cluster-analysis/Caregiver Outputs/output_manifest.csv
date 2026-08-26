@@ -25,6 +25,8 @@ figure_1_cluster_count_diagnostics.pdf,,,d8740d016c58,
 figure_1_cluster_count_diagnostics.png,,,e13548a81717,
 figure_20_tier_sensitivity.pdf,,,3f21ff42c809,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.
 figure_20_tier_sensitivity.png,,,1916b40b97d2,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.
+figure_21_demographic_signal_enrichment.pdf,,,80773283ffca,"Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; this is anomaly concentration evidence, not a demographic label."
+figure_21_demographic_signal_enrichment.png,,,d7e86910c38c,"Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; this is anomaly concentration evidence, not a demographic label."
 figure_2_primary_cluster_profiles.pdf,,,d9ea69b7e353,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out."
 figure_2_primary_cluster_profiles.png,,,5c493a01c681,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out."
 figure_3_screening_outcome.pdf,,,9b9e1c497db3,
@@ -43,7 +45,7 @@ figure_9_rule_cooccurrence.pdf,,,1b7532e504b7,"Rules R1–R10 on all 1,956 recor
 figure_9_rule_cooccurrence.png,,,243115c5a392,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule."
 table_10_sensitivity_checks.csv,4.0,9.0,ce05647b5a24,
 table_11_asd_family_context.csv,9.0,7.0,9e44e30981a3,
-table_12_api_cache_inventory.csv,6.0,8.0,8e22af28e0c5,
+table_12_api_cache_inventory.csv,6.0,8.0,28cea641adda,
 table_13_field_intersection.csv,328.0,2.0,b4d1a1934c57,
 table_13b_shared_field_range_mismatches.csv,56.0,9.0,c804d82b5e61,
 table_14_fraud_rule_definitions.csv,10.0,4.0,ce6f7a0066b3,
@@ -68,8 +70,10 @@ table_2_data_quality_summary.csv,6.0,3.0,3b0a2f35fee8,
 table_30_decision_summary.csv,5.0,4.0,9bec7b9dc32d,
 table_31_upgrade_data_quality.csv,8.0,4.0,17a13033be70,
 table_32_color_accessibility_check.csv,3.0,5.0,ec216f07e982,
-table_33_figure_map.csv,32.0,3.0,41d7cccdadea,
+table_33_figure_map.csv,34.0,3.0,a144d7650691,
 table_34_branching_logic_audit.csv,44.0,12.0,c8283e984e3e,
+table_35_demographic_signal_summary.csv,3.0,13.0,4801343d9f11,
+table_35b_demographic_signal_enrichment.csv,12.0,12.0,04fc6288f63b,
 table_3_cluster_diagnostics.csv,5.0,9.0,1517ae00862e,
 table_4_cluster_defining_profiles.csv,10.0,6.0,38f501979b04,
 table_5_screening_outcome.csv,2.0,14.0,76afa5fe3b9c,

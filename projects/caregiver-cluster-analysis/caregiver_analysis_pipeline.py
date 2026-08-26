@@ -2555,6 +2555,7 @@ def generate_upgrade_figures(
     detector_scores: pd.DataFrame,
     detector_importance: pd.DataFrame,
     detector_context: dict,
+    demographic_signal_enrichment: pd.DataFrame,
     sensitivity: pd.DataFrame,
     logistic_table: pd.DataFrame,
     fits: dict[str, ClusterFit],
@@ -3469,6 +3470,95 @@ def generate_upgrade_figures(
         "records with valid screening outcomes. Screening remains held out of profile formation.",
     )
 
+    # Figure 21: demographic anomaly concentration vs trust-risk metrics.
+    enrichment = demographic_signal_enrichment.copy()
+    keep_metrics = [
+        "tier_1_confirmed_invalid",
+        "tier_le_2_high_or_confirmed",
+        "rule_R1",
+        "rule_R2",
+        "rule_R3",
+        "rule_R7",
+        "rule_R8",
+    ]
+    enrichment = enrichment.loc[enrichment["metric"].isin(keep_metrics)].copy()
+    label_map = {
+        "tier_1_confirmed_invalid": "Tier 1 confirmed invalid",
+        "tier_le_2_high_or_confirmed": "Tier <=2 high or confirmed",
+        "rule_R1": "R1 total-time floor",
+        "rule_R2": "R2 TFA-time floor",
+        "rule_R3": "R3 fast instrument quantile",
+        "rule_R7": "R7 near-duplicate open text",
+        "rule_R8": "R8 branching/logic impossibility",
+    }
+    enrichment["metric_label"] = enrichment["metric"].map(label_map)
+    enrichment["group_pct"] = enrichment["group_rate"] * 100
+    enrichment["comparison_pct"] = enrichment["comparison_rate"] * 100
+    enrichment = enrichment.sort_values("odds_ratio", ascending=True)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14.5, 6.3), constrained_layout=True)
+
+    y = np.arange(len(enrichment))
+    bar_h = 0.34
+    axes[0].barh(
+        y - bar_h / 2,
+        enrichment["group_pct"],
+        height=bar_h,
+        color=palette["orange"],
+        label="Marked subgroup (46 records)",
+    )
+    axes[0].barh(
+        y + bar_h / 2,
+        enrichment["comparison_pct"],
+        height=bar_h,
+        color=palette["blue"],
+        label="Other dirty_4581 records",
+    )
+    axes[0].set(
+        title="Flag-rate concentration",
+        xlabel="Percent flagged",
+        ylabel="",
+        yticks=y,
+        yticklabels=enrichment["metric_label"],
+    )
+    axes[0].grid(axis="x", color=palette["grid"], linewidth=0.8)
+    axes[0].legend(frameon=False, loc="lower right")
+    sns.despine(ax=axes[0])
+
+    colors = np.where(enrichment["p_value"].lt(0.05), palette["orange"], palette["neutral"])
+    axes[1].barh(y, enrichment["odds_ratio"], color=colors, edgecolor=palette["ink"], linewidth=0.5)
+    axes[1].axvline(1.0, color=palette["ink"], linestyle="--", linewidth=1.2)
+    axes[1].set(
+        title="Enrichment odds ratio",
+        xlabel="Odds ratio (>1 means concentration in marked subgroup)",
+        ylabel="",
+        yticks=y,
+        yticklabels=enrichment["metric_label"],
+    )
+    for idx, row in enrichment.reset_index(drop=True).iterrows():
+        p_text = f"p={row['p_value']:.3g}"
+        if isinstance(row.get("fdr_q"), (float, np.floating)) and not np.isnan(row["fdr_q"]):
+            p_text = f"p={row['p_value']:.3g}, q={row['fdr_q']:.3g}"
+        axes[1].text(
+            row["odds_ratio"] + 0.08,
+            idx,
+            p_text,
+            va="center",
+            fontsize=8,
+            color=palette["ink"],
+        )
+    axes[1].grid(axis="x", color=palette["grid"], linewidth=0.8)
+    sns.despine(ax=axes[1])
+
+    chart_rows += _save_figure(
+        fig,
+        output_dir,
+        "figure_21_demographic_signal_enrichment",
+        "Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. "
+        "Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; "
+        "this is anomaly concentration evidence, not a demographic label.",
+    )
+
     chart_map = pd.DataFrame(chart_rows).drop_duplicates("file")
     chart_map["analytical_role"] = chart_map["file"].str.extract(
         r"(figure_\d+[a-z]?)", expand=False
@@ -3659,6 +3749,232 @@ def _data_quality_summary(
     )
 
 
+def _wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Return a Wilson score interval for a binomial proportion."""
+
+    if total <= 0:
+        return np.nan, np.nan
+    phat = successes / total
+    denominator = 1 + (z**2) / total
+    center = (phat + (z**2) / (2 * total)) / denominator
+    half_width = (
+        z
+        * math.sqrt((phat * (1 - phat) + (z**2) / (4 * total)) / total)
+        / denominator
+    )
+    return max(0.0, center - half_width), min(1.0, center + half_width)
+
+
+def _demographic_signal_audit(
+    bundle: SourceBundle,
+    features: pd.DataFrame,
+    rules: pd.DataFrame,
+    *,
+    field: str = "demo_maternalrace___1",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Audit demographic signal concentration without treating demographics as labels."""
+
+    project_rows = []
+    for source_project, frame in bundle.records.items():
+        if field not in frame.columns or "record_id" not in frame.columns:
+            continue
+        project_signal = frame[["record_id", field]].copy()
+        project_signal["record_id"] = project_signal["record_id"].astype(str)
+        project_signal[field] = (
+            pd.to_numeric(project_signal[field], errors="coerce").fillna(0).astype(int)
+        )
+        project_signal = (
+            project_signal.groupby("record_id", as_index=False)[field].max().copy()
+        )
+        project_signal["source_project"] = source_project
+        project_rows.append(project_signal)
+
+    if not project_rows:
+        empty_summary = pd.DataFrame(
+            [
+                {
+                    "analysis": "missing_field",
+                    "field": field,
+                    "source_project": "all",
+                    "n_records": 0,
+                    "n_selected": 0,
+                    "selected_pct": np.nan,
+                    "ci_low": np.nan,
+                    "ci_high": np.nan,
+                    "odds_ratio": np.nan,
+                    "risk_ratio": np.nan,
+                    "risk_difference_pp": np.nan,
+                    "p_value": np.nan,
+                    "note": "field missing in cached records",
+                }
+            ]
+        )
+        empty_enrichment = pd.DataFrame(
+            columns=[
+                "metric",
+                "group_flagged_n",
+                "group_total_n",
+                "group_rate",
+                "comparison_flagged_n",
+                "comparison_total_n",
+                "comparison_rate",
+                "risk_ratio",
+                "odds_ratio",
+                "p_value",
+                "fdr_q",
+                "note",
+            ]
+        )
+        return empty_summary, empty_enrichment
+
+    signal = pd.concat(project_rows, ignore_index=True)
+
+    summary_rows = []
+    project_stats = {}
+    for source_project, frame in signal.groupby("source_project", sort=False):
+        n_records = int(len(frame))
+        n_selected = int(frame[field].eq(1).sum())
+        selected_pct = n_selected / n_records if n_records else np.nan
+        ci_low, ci_high = _wilson_interval(n_selected, n_records)
+        project_stats[source_project] = {
+            "n_records": n_records,
+            "n_selected": n_selected,
+            "selected_pct": selected_pct,
+        }
+        summary_rows.append(
+            {
+                "analysis": "project_prevalence",
+                "field": field,
+                "source_project": source_project,
+                "n_records": n_records,
+                "n_selected": n_selected,
+                "selected_pct": selected_pct,
+                "ci_low": ci_low,
+                "ci_high": ci_high,
+                "odds_ratio": np.nan,
+                "risk_ratio": np.nan,
+                "risk_difference_pp": np.nan,
+                "p_value": np.nan,
+                "note": "project-level prevalence with Wilson 95% interval",
+            }
+        )
+
+    clean_name = "clean_4797"
+    dirty_name = "dirty_4581"
+    if clean_name in project_stats and dirty_name in project_stats:
+        dirty = project_stats[dirty_name]
+        clean = project_stats[clean_name]
+        table = [
+            [dirty["n_selected"], dirty["n_records"] - dirty["n_selected"]],
+            [clean["n_selected"], clean["n_records"] - clean["n_selected"]],
+        ]
+        odds_ratio, p_value = stats.fisher_exact(table, alternative="two-sided")
+        clean_rate = clean["selected_pct"]
+        dirty_rate = dirty["selected_pct"]
+        risk_ratio = dirty_rate / clean_rate if clean_rate and clean_rate > 0 else np.nan
+        risk_difference_pp = (dirty_rate - clean_rate) * 100
+        summary_rows.append(
+            {
+                "analysis": "dirty_vs_clean_comparison",
+                "field": field,
+                "source_project": f"{dirty_name} vs {clean_name}",
+                "n_records": dirty["n_records"] + clean["n_records"],
+                "n_selected": dirty["n_selected"] + clean["n_selected"],
+                "selected_pct": np.nan,
+                "ci_low": np.nan,
+                "ci_high": np.nan,
+                "odds_ratio": float(odds_ratio),
+                "risk_ratio": float(risk_ratio) if not np.isnan(risk_ratio) else np.nan,
+                "risk_difference_pp": float(risk_difference_pp),
+                "p_value": float(p_value),
+                "note": "two-sided Fisher exact test on project prevalence",
+            }
+        )
+
+    summary = pd.DataFrame(summary_rows)
+
+    dirty_signal = signal.loc[signal["source_project"].eq(dirty_name), ["record_id", field]]
+    tier_rules = pd.concat(
+        [
+            features[["source_project", "record_id"]].copy(),
+            rules[["tier"] + [f"rule_R{i}" for i in range(1, 11)]].copy(),
+        ],
+        axis=1,
+    )
+    tier_rules["record_id"] = tier_rules["record_id"].astype(str)
+    tier_rules = tier_rules.loc[tier_rules["source_project"].eq(dirty_name)].copy()
+    merged = tier_rules.merge(dirty_signal, on="record_id", how="left")
+    merged[field] = merged[field].fillna(0).astype(int)
+    merged["group_member"] = merged[field].eq(1)
+
+    metric_series: dict[str, pd.Series] = {
+        "tier_1_confirmed_invalid": merged["tier"].eq(1),
+        "tier_le_2_high_or_confirmed": merged["tier"].le(2),
+    }
+    metric_series.update(
+        {
+            f"rule_R{i}": merged[f"rule_R{i}"].fillna(False).astype(bool)
+            for i in range(1, 11)
+        }
+    )
+
+    enrichment_rows = []
+    for metric, mask in metric_series.items():
+        group_mask = merged["group_member"]
+        comparison_mask = ~group_mask
+        group_total = int(group_mask.sum())
+        comparison_total = int(comparison_mask.sum())
+        group_flagged = int(mask[group_mask].sum())
+        comparison_flagged = int(mask[comparison_mask].sum())
+
+        group_rate = group_flagged / group_total if group_total else np.nan
+        comparison_rate = (
+            comparison_flagged / comparison_total if comparison_total else np.nan
+        )
+        table = [
+            [group_flagged, max(group_total - group_flagged, 0)],
+            [comparison_flagged, max(comparison_total - comparison_flagged, 0)],
+        ]
+        odds_ratio, p_value = stats.fisher_exact(table, alternative="two-sided")
+        risk_ratio = (
+            group_rate / comparison_rate
+            if comparison_rate and not np.isnan(group_rate)
+            else np.nan
+        )
+        enrichment_rows.append(
+            {
+                "metric": metric,
+                "group_flagged_n": group_flagged,
+                "group_total_n": group_total,
+                "group_rate": group_rate,
+                "comparison_flagged_n": comparison_flagged,
+                "comparison_total_n": comparison_total,
+                "comparison_rate": comparison_rate,
+                "risk_ratio": risk_ratio,
+                "odds_ratio": float(odds_ratio),
+                "p_value": float(p_value),
+                "note": "comparison is dirty_4581 records with field!=1",
+            }
+        )
+
+    enrichment = pd.DataFrame(enrichment_rows)
+
+    rule_mask = enrichment["metric"].str.startswith("rule_R")
+    enrichment["fdr_q"] = np.nan
+    if rule_mask.any():
+        rule_subset = enrichment.loc[rule_mask].sort_values("p_value").copy()
+        rule_subset["rank"] = np.arange(1, len(rule_subset) + 1)
+        rule_subset["fdr_q"] = (
+            (rule_subset["p_value"] * len(rule_subset) / rule_subset["rank"])
+            .clip(upper=1.0)
+        )
+        rule_subset["fdr_q"] = rule_subset["fdr_q"][::-1].cummin()[::-1]
+        enrichment.loc[rule_subset.index, "fdr_q"] = rule_subset["fdr_q"]
+
+    enrichment = enrichment.sort_values("p_value").reset_index(drop=True)
+    return summary, enrichment
+
+
 def _export_tables(
     project_dir: Path,
     tables: dict[str, pd.DataFrame],
@@ -3774,6 +4090,9 @@ def run_upgrade(project_dir: Path) -> dict:
         sensitivity, contamination_summary, tipping, regression_checks
     )
     branching_audit = feature_context["branching_audit"]
+    demographic_signal_summary, demographic_signal_enrichment = _demographic_signal_audit(
+        bundle, features, rules
+    )
     data_quality = _data_quality_summary(
         bundle,
         features,
@@ -3830,6 +4149,7 @@ def run_upgrade(project_dir: Path) -> dict:
         detector_scores=detector_scores,
         detector_importance=detector_importance,
         detector_context=detector_context,
+        demographic_signal_enrichment=demographic_signal_enrichment,
         sensitivity=sensitivity,
         logistic_table=logistic_table,
         fits=fits,
@@ -3884,6 +4204,8 @@ def run_upgrade(project_dir: Path) -> dict:
         "table_32_color_accessibility_check.csv": color_accessibility,
         "table_33_figure_map.csv": chart_map,
         "table_34_branching_logic_audit.csv": branching_audit,
+        "table_35_demographic_signal_summary.csv": demographic_signal_summary,
+        "table_35b_demographic_signal_enrichment.csv": demographic_signal_enrichment,
     }
     manifest = _export_tables(
         project_dir, tables, record_flags.reset_index(drop=True), chart_map
@@ -3922,6 +4244,8 @@ def run_upgrade(project_dir: Path) -> dict:
         "frames": frames,
         "feature_context": feature_context,
         "branching_audit": branching_audit,
+        "demographic_signal_summary": demographic_signal_summary,
+        "demographic_signal_enrichment": demographic_signal_enrichment,
         "detector_context": detector_context,
         "latent_context": latent_context,
     }
