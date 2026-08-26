@@ -153,6 +153,15 @@ KNOBS: List[dict] = [
         "options": _numbers([0, 15, 30, 45, 60], " min"),
     },
     {
+        "key": "lab.screenshot_uploads.image_reader", "group": "lab",
+        "label": "Screenshot reader",
+        "help": "Geometry alone, or geometry plus a local neural read of each "
+                "event's own text. Measured on this lab's prints, the neural "
+                "pass changed nothing: the events do not print their times.",
+        "options": _choice([("classical", "Geometry (measured)"),
+                            ("neural", "Geometry + neural text read")]),
+    },
+    {
         "key": "lab.screenshot_uploads.auto_confirm", "group": "lab",
         "label": "Screenshot uploads",
         "help": "A PDF is read exactly. A screenshot is measured off pixels, "

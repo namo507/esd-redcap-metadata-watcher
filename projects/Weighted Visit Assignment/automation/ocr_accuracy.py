@@ -287,6 +287,33 @@ def run_report(dpi=150):
 
     visible, hidden = visible_rows(expected)
     report["pixel"] = score(found_px, visible, tolerance=PIXEL_TOLERANCE_MIN)
+
+    # The same page, same colour map, read with the optional neural pass on.
+    # Scored separately rather than replacing the number above: the point of
+    # having two readers is being able to see which one is better on your own
+    # prints, and that needs both numbers side by side.
+    import os as _os
+    from esd_scheduler import resources as _res_mod
+    previous = _res_mod.LabResources.load
+    loaded = previous()
+    loaded.image_reader = "neural"
+    _res_mod.LabResources.load = staticmethod(lambda *a, **k: loaded)
+    try:
+        found_nn, nn_result, nn_refusal = read_pixels(png, coordinators,
+                                                      colour_map)
+        if nn_refusal:
+            report["neural"] = {"refused": nn_refusal}
+        else:
+            report["neural"] = score(found_nn, visible,
+                                     tolerance=PIXEL_TOLERANCE_MIN)
+            report["neural"]["hidden_under_another_calendar"] = [
+                f"{h['label']} {h['start']}-{h['end']}" for h in hidden]
+            report["neural"]["pass_report"] = getattr(
+                nn_result, "neural_read", {}) or {}
+    except Exception as exc:                                   # noqa: BLE001
+        report["neural"] = {"error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        _res_mod.LabResources.load = previous
     report["pixel"]["hidden_under_another_calendar"] = [
         f"{h['label']} {h['start']}-{h['end']}" for h in hidden]
     report["pixel"]["tier"] = px_result.tier
@@ -331,7 +358,20 @@ def _passed(report):
         return True         # neither missing nor refusing is a wrong answer
     if "error" in p:
         return False        # but a reader that raises is not a passing reader
-    return not p.get("missed") and p.get("within_tolerance", False)
+    if not (not p.get("missed") and p.get("within_tolerance", False)):
+        return False
+
+    n = report.get("neural", {})
+    if not n or "skipped" in n or "refused" in n:
+        return True
+    if "error" in n:
+        return False
+    # The optional reader is allowed to be no better. It is not allowed to be
+    # worse: it only ever overwrites a measured time with a stated one, so a
+    # block it loses or misplaces means the correction is doing harm.
+    if n.get("missed") or not n.get("within_tolerance", False):
+        return False
+    return n.get("worst_error_min", 0) <= p.get("worst_error_min", 0)
 
 
 def _print(report):
@@ -342,8 +382,10 @@ def _print(report):
     print(f"  {report['events_drawn']} events drawn, "
           f"{report['events_expected_on_a_person']} of them a scheduled "
           f"person's busy time")
-    for path, title in (("vector", "PDF, read from the file (evidence tier 2)"),
-                        ("pixel", f"the same page as pixels at {report['dpi']} dpi")):
+    for path, title in (
+            ("vector", "PDF, read from the file (evidence tier 2)"),
+            ("pixel", f"the same page as pixels at {report['dpi']} dpi"),
+            ("neural", f"the same pixels, with the optional neural pass on")):
         block = report.get(path, {})
         print()
         print(f"  {title}")
@@ -367,6 +409,13 @@ def _print(report):
             print(f"    NOT FOUND          {block['missed']}")
         if block["spurious"]:
             print(f"    INVENTED           {block['spurious']}")
+        pr = block.get("pass_report")
+        if pr:
+            if pr.get("used"):
+                print(f"    text read from      {pr.get('read', 0)} block(s); "
+                      f"{pr.get('corrected', 0)} time(s) taken from the text")
+            else:
+                print(f"    did not run:       {pr.get('reason')}")
         hidden = block.get("hidden_under_another_calendar")
         if hidden:
             print(f"    not on the page    {len(hidden)} block(s) painted over "

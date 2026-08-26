@@ -383,6 +383,8 @@ class ImportResult:
     matched_names: Dict[str, Optional[str]] = field(default_factory=dict)
     # Labels naming somebody on the roster the board is not scheduling.
     off_roster_names: Dict[str, str] = field(default_factory=dict)
+    #: What the optional neural pass did, when it was selected at all.
+    neural_read: Dict[str, object] = field(default_factory=dict)
     axis_source: Optional[str] = None
     roles: Dict[str, str] = field(default_factory=dict)
     unavailable: List[dict] = field(default_factory=list)
@@ -435,6 +437,7 @@ class ImportResult:
             "axis_source": self.axis_source,
             "matched_names": self.matched_names,
             "off_roster_names": self.off_roster_names,
+            "neural_read": self.neural_read,
             "roles": self.roles,
             "role_summary": [
                 {
@@ -498,6 +501,7 @@ def import_pdf(
     """Parse an uploaded calendar and emit evidence at whatever tier it earns."""
     now = now or datetime.now()
     color_map = color_map if color_map is not None else ColorMap.load()
+    neural_report = None
 
     if is_image(path):
         from .ingest_image import extract as extract_image
@@ -506,6 +510,19 @@ def import_pdf(
         parsed = extract_image(path, day_start=start, n_days=image_days,
                                hours=image_hours)
         tier = TIER_IMAGE
+
+        # An optional second pass, off by default. The geometry above decides
+        # what and whose; this decides *when* for any event that prints its
+        # own time, which is stronger evidence than a measured position and
+        # does not drift with the resolution. It only ever corrects the times
+        # already read, so selecting it cannot lose a block.
+        #
+        # Recorded here and attached to the result further down: the result
+        # object does not exist yet at this point in the function.
+        from .resources import LabResources as _Res
+        if (_Res.load().image_reader or "").lower() == "neural":
+            from . import ingest_image_neural
+            neural_report = ingest_image_neural.annotate(path, parsed)
         # Whether a pixel read counts straight away is the lab's call, and it
         # lives in config rather than here. A PDF is vector extraction and its
         # times are exact; this is measurement off an image, and an image
@@ -537,6 +554,23 @@ def import_pdf(
         blockers=list(parsed.unresolved),
     )
     result.axis_source = getattr(parsed, "axis_source", None)
+    if neural_report is not None:
+        result.neural_read = neural_report
+        if neural_report.get("used") and neural_report.get("corrected"):
+            result.notes.append(
+                f"{neural_report['corrected']} block time(s) were taken from "
+                f"the event's own printed text rather than from where the box "
+                f"sits on the grid. A stated time does not drift with the "
+                f"image's resolution.")
+        elif neural_report.get("used"):
+            result.notes.append(
+                f"The neural reader ran and changed nothing: it found text in "
+                f"{neural_report.get('read', 0)} block(s) and none of them "
+                f"printed a time it could use. The measured times stand.")
+        else:
+            result.notes.append(
+                f"The neural reader is selected but did not run: "
+                f"{neural_report.get('reason')} The measured times stand.")
 
     for entry in parsed.entries:
         hue = entry.calendar_color_id or "unknown"

@@ -59,6 +59,11 @@ class LabResources:
     # reads as free time. A board running without a config file should hold
     # pixel reads rather than commit them.
     auto_confirm_screenshots: bool = False
+    #: Which reader measures a screenshot. "classical" is geometry against the
+    #: ruled grid; "neural" adds a tesseract-LSTM pass that prefers the time an
+    #: event prints in its own text over the time measured off its position.
+    #: The classical pass runs either way -- neural only corrects it.
+    image_reader: str = "classical"
     confirmed: bool = False
 
     # -- what stops a visit happening ---------------------------------------
@@ -188,5 +193,8 @@ class LabResources:
             holidays_known=bool(holidays),
             auto_confirm_screenshots=bool(
                 (raw.get("screenshot_uploads") or {}).get("auto_confirm", False)),
+            image_reader=str(
+                (raw.get("screenshot_uploads") or {}).get(
+                    "image_reader", "classical")).lower(),
             confirmed=bool(raw.get("confirmed")),
         )

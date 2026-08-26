@@ -123,7 +123,30 @@
       "The evidence tier records that it was a screenshot either way, so the",
       "provenance is never lost. Upload a PDF print where the timing matters."
     ],
-    "auto_confirm": false
+    "auto_confirm": false,
+    "image_reader": "classical",
+    "_image_reader_comment": [
+      "Which reader measures a screenshot.",
+      "",
+      "classical (the current setting): geometry. Coloured rectangles are",
+      "  found and timed by where they sit against the ruled grid.",
+      "neural: the same geometry pass, plus a tesseract-LSTM read of each",
+      "  block's own text. Where an event prints its time ('9:00 AM - 10:00",
+      "  AM') that stated time replaces the measured one, because a stated",
+      "  time does not drift with the image's resolution. Where it prints no",
+      "  legible time the measurement stands, so this can only ever correct a",
+      "  block, never lose one.",
+      "",
+      "MEASURED ON THIS LAB'S OWN PRINTS: it changed nothing. The neural pass",
+      "read text out of 14 blocks and none of them printed a time -- Outlook's",
+      "work-week view shows the event title in the box and puts the time in the",
+      "row position, which is exactly what the geometry pass already reads.",
+      "Leave it on classical unless your prints show times inside the events.",
+      "`make ocr-accuracy` scores both readers side by side.",
+      "",
+      "Neither reader is a cloud service. The LSTM is the local tesseract",
+      "binary; nothing is uploaded anywhere."
+    ]
   },
   "_holidays_comment": [
     "Official University of South Carolina holidays, from the Division of",

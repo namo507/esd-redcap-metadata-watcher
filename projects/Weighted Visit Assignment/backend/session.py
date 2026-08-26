@@ -592,6 +592,19 @@ class LabSession:
                 image_hours=image_hours or (8.0, 18.0),
                 image_start=self.epoch.date(),
             )
+            # Say so when the print is for a different week than the one on
+            # screen. Uploading a real calendar and watching every number stay
+            # exactly the same, with no message, reads as a broken upload --
+            # and the upload worked perfectly, it was just for last week.
+            #
+            # Added to the result *before* it is recorded. Putting it only on
+            # the response meant whoever uploaded saw it and anybody who
+            # reloaded the page did not, which is the half of the audience
+            # most likely to be confused by a board that did not move.
+            note = self._week_coverage_note(result)
+            if note:
+                result.notes.insert(0, note)
+
             self.store.record_import(result)
             payload = result.to_dict()
             payload["stored_as"] = os.path.basename(path)
@@ -613,6 +626,7 @@ class LabSession:
                 self.unresolved_names = result.unresolved_names
             applied = self._apply_confirmed_blocks()
             payload["applied_blocks"] = applied
+
             who = ", ".join(
                 a["name"] for a in result.availability if a.get("coordinator_id")
             ) or "nobody the roster recognises"
@@ -863,6 +877,38 @@ class LabSession:
             else:
                 spans[cid] = (lo, hi)
         return spans
+
+    def _week_coverage_note(self, result) -> Optional[str]:
+        """A sentence when an import does not cover the week being scheduled.
+
+        Freshness and coverage are different questions and the header only
+        answers the first: a print uploaded ten seconds ago is "just now" even
+        when every date in it is a fortnight old. The evidence gate already
+        refuses to schedule off dates a snapshot does not cover, so nothing
+        unsafe happens -- but nothing visible happens either, and silence
+        after an upload is indistinguishable from a failure.
+        """
+        span = getattr(result, "date_range", None) or ""
+        try:
+            first, _, last = span.partition(" to ")
+            covers_from = date.fromisoformat(first.strip())
+            covers_to = date.fromisoformat(last.strip())
+        except (ValueError, AttributeError):
+            return None
+
+        week_start = self.epoch.date()
+        week_end = week_start + timedelta(days=6)
+        if covers_to >= week_start and covers_from <= week_end:
+            return None
+        when = "before" if covers_to < week_start else "after"
+        return (
+            f"This print covers {covers_from:%-d %b} to {covers_to:%-d %b}, "
+            f"which is {when} the week the board is scheduling "
+            f"({week_start:%-d %b} to {week_end:%-d %b}). It has been recorded "
+            f"and nothing on this week's board will change, because none of "
+            f"its dates are on this week. Print the same calendars for "
+            f"{week_start:%-d %b} to {week_end:%-d %b} to schedule from them."
+        )
 
     def _apply_confirmed_blocks(self) -> int:
         """Push reviewed-and-confirmed blocks into the live snapshots.

@@ -26,6 +26,8 @@ recommend on its own.
 
     ingest_outlook_pdf.py   vector extraction from a printed Outlook PDF
     ingest_image.py         the same from a screenshot, measured in pixels
+    ingest_image_neural.py  optional: reads an event's own printed time
+                            with the local tesseract LSTM, off by default
     calendar_import.py      tiering, attribution, and what counts as evidence
     calendar_roles.py       what an overlaid calendar means: person, or policy
 

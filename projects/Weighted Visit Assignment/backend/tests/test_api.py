@@ -433,6 +433,45 @@ def _confirm_colours():
     return body
 
 
+def test_an_upload_for_a_different_week_says_so():
+    """Silence after an upload is indistinguishable from a failed upload.
+
+    Freshness and coverage are different questions and the header answers only
+    the first: a print uploaded ten seconds ago reads "calendars just now" even
+    when every date in it is a fortnight old. The evidence gate already refuses
+    to schedule off dates a snapshot does not cover, so nothing unsafe happens
+    -- but nothing visible happens either. Uploading a real calendar and
+    watching every number stay identical, with no message, looks broken when
+    the upload worked perfectly and was simply for another week.
+    """
+    import datetime as _dt
+    import re as _re
+
+    status, body = _upload(WEEK_PDF)
+    expect(status == 200, f"upload returned {status}")
+    notes = " ".join(body.get("notes") or [])
+    span = body.get("date_range") or ""
+    match = _re.match(r"(\d{4}-\d{2}-\d{2}) to (\d{4}-\d{2}-\d{2})", span)
+    expect(match, f"the upload reported no readable date range: {span!r}")
+    covers_from = _dt.date.fromisoformat(match.group(1))
+    covers_to = _dt.date.fromisoformat(match.group(2))
+
+    _, health = call("GET", "/api/health")
+    week = _dt.date.fromisoformat(health["week_of"])
+    overlaps = covers_to >= week and covers_from <= week + _dt.timedelta(days=6)
+
+    if overlaps:
+        expect("is before the week" not in notes and
+               "is after the week" not in notes,
+               f"a print covering this week was reported as covering another: "
+               f"{notes[:160]}")
+    else:
+        expect("the week the board is scheduling" in notes,
+               f"this print covers {covers_from} to {covers_to}, the board is "
+               f"scheduling the week of {week}, and the upload said nothing "
+               f"about the difference: {notes[:160]!r}")
+
+
 def test_work_week_upload_applies_immediately():
     """A PDF is parsed exactly, so its blocks take effect without a review step."""
     status, body = _upload(WEEK_PDF)
