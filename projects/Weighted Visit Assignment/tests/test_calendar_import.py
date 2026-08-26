@@ -569,13 +569,18 @@ def test_an_image_is_a_lower_tier_than_the_same_calendar_as_a_pdf():
 
 
 def test_whether_a_screenshot_waits_for_review_is_the_labs_call():
-    """Both settings, because the lab chose the riskier one deliberately.
+    """Both settings, forced here rather than read from the config.
 
     A PDF is vector extraction and its times are exact. A screenshot is
-    measured off pixels, and the reader can miss a block at the edge of a
-    grid. With auto-commit on, a block it never saw is simply absent, and
-    absent time reads as free, so the board can offer a slot somebody is
-    busy in. The lab has accepted that in exchange for no confirmation step.
+    measured off pixels, and it can miss a block another calendar was painted
+    over -- two of six on the page `make ocr-accuracy` scores. A missed block
+    is simply absent, and absent time reads as free, so the board can offer a
+    slot somebody is busy in. The lab holds pixel reads for review because of
+    that, and can turn it off from the board.
+
+    Which way the shipped config points is not this test's business: it sets
+    both explicitly, so it goes on proving the flag works whichever default
+    the lab later prefers.
 
     What must hold either way is that the tier still records the read came
     off an image, so the provenance survives even when the review does not.

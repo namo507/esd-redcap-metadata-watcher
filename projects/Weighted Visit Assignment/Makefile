@@ -50,6 +50,7 @@ test:
 	$(PY) tests/test_roster.py
 	$(PY) tests/test_settings.py
 	$(PY) tests/test_ocr_accuracy.py
+	$(PY) tests/test_review_gate.py
 	$(PY) tests/test_deployment.py
 	$(PY) tests/test_frontend.py
 	$(PY) tests/test_live_mode.py

@@ -886,9 +886,7 @@ class LabSession:
             {
                 "block_id": b["block_id"],
                 "coordinator_id": b["coordinator_id"],
-                "coordinator": getattr(
-                    self.state.coordinators.get(b["coordinator_id"]), "name",
-                    b["coordinator_id"]),
+                "coordinator": self._person_label(b["coordinator_id"]),
                 "start": b["start_ts"],
                 "end": b["end_ts"],
                 "import_id": b["import_id"],
@@ -1179,6 +1177,24 @@ class LabSession:
         out["applied_blocks"] = applied
         out["settled"] = n
         return out
+
+    def _person_label(self, cid: str) -> str:
+        """A name for a coordinator id, even one the board is not scheduling.
+
+        ``state.coordinators`` holds only active people, so an id belonging to
+        somebody taken off scheduling fell through to the raw id -- a review
+        queue asking a scheduler to confirm time for "C06" tells them nothing
+        and looks like corrupt data. The roster still knows who that is, and
+        saying they are not being scheduled is the useful part: it is why
+        their block is worth rejecting.
+        """
+        coord = self.state.coordinators.get(cid)
+        if coord is not None:
+            return getattr(coord, "name", cid)
+        entry = self.roster_config.by_id().get(cid)
+        if entry is not None:
+            return f"{entry.name} (not scheduled)"
+        return cid
 
     def review_import_block(self, block_id: str, confirmed: bool, reviewer: str) -> dict:
         with self._lock:

@@ -53,7 +53,12 @@ class LabResources:
     holidays_known: bool = False
     # Whether a screenshot read applies immediately or waits to be confirmed.
     # A PDF is exact and always applies; this is only about pixel reads.
-    auto_confirm_screenshots: bool = True
+    #
+    # The default is False, matching the shipped config: a measured screenshot
+    # can miss a block another calendar was painted over, and a missing block
+    # reads as free time. A board running without a config file should hold
+    # pixel reads rather than commit them.
+    auto_confirm_screenshots: bool = False
     confirmed: bool = False
 
     # -- what stops a visit happening ---------------------------------------
@@ -182,6 +187,6 @@ class LabResources:
             ],
             holidays_known=bool(holidays),
             auto_confirm_screenshots=bool(
-                (raw.get("screenshot_uploads") or {}).get("auto_confirm", True)),
+                (raw.get("screenshot_uploads") or {}).get("auto_confirm", False)),
             confirmed=bool(raw.get("confirmed")),
         )

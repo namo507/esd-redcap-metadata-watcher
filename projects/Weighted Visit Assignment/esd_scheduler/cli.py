@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import sys
 import time
 from datetime import datetime, timedelta
@@ -646,6 +647,12 @@ def cmd_doctor(args) -> int:
          "pip3 install --user python-pptx", False),
     ]
 
+    print("INTERPRETER")
+    print(f"  {platform.python_version():16s} {sys.executable}")
+    for line in _doctor_version_note():
+        print(f"  {line}")
+    print()
+
     missing_required = 0
     print("PYTHON PACKAGES")
     for module, package, purpose, fix, required in checks:
@@ -713,6 +720,34 @@ def cmd_doctor(args) -> int:
           "is declared,")
     print("and the board still starts with the optional packages blocked.")
     return 0
+
+
+#: The Python the automation actually runs on. Local work has been done on
+#: 3.9 while this has been the CI version, and the gap has bitten: a tuple
+#: seed for random.Random was removed in 3.11 and 3.9 accepted it silently,
+#: so the suite passed here and failed there.
+CI_PYTHON = (3, 11)
+
+
+def _doctor_version_note():
+    """Say when this interpreter is older than the one CI runs.
+
+    Not a failure -- the board runs on both -- but a thing worth knowing
+    before trusting a green suite. The failures this catches are the ones
+    where an older Python accepts something a newer one removed, so the tests
+    pass locally and CI is the first to see the problem.
+    """
+    import sys as _sys
+
+    here = _sys.version_info[:2]
+    if here >= CI_PYTHON:
+        return []
+    return [
+        f"this is older than the {CI_PYTHON[0]}.{CI_PYTHON[1]} CI runs, so a "
+        f"green suite here",
+        "is not proof of a green suite there. Worth a check on the newer one "
+        "before a release.",
+    ]
 
 
 #: Packages the board must run without. The core/optional split in

@@ -156,15 +156,33 @@ scores say. All transcribed from the manual except one:
 ### Screenshot uploads
 
 `screenshot_uploads.auto_confirm` decides whether a calendar read off a
-screenshot counts immediately or waits to be settled. It is **on**: a
-screenshot applies the moment it is uploaded, with no confirmation step.
+screenshot counts immediately or waits to be settled. It is **off**: blocks
+measured off pixels are held in the "To confirm" tab, and until somebody
+settles them they are neither free nor busy. A PDF is unaffected &mdash; its
+times are read from the file and always apply.
 
-Worth knowing what that trades. A PDF print is vector extraction and its times
-are read from the file exactly. A screenshot is measured off pixels, and the
-reader can miss a block at the edge of a grid or misread an hour by a row.
-With auto-commit on, a block it never saw is simply absent, and absent time
-reads as free, so the board can offer a slot somebody is actually busy in.
-Set it to `false` to hold pixel reads in the "To confirm" tab instead.
+It was on until the reader was actually scored, and two measured failures
+changed the answer. Both point the same way: towards offering a family a slot
+somebody is sitting in.
+
+A screenshot cannot show a block another calendar was painted over. On the
+scored page **two of six** people's blocks were completely hidden under the
+lab's own shift and offered-time calendars. The PDF reader still finds them,
+because in the file both rectangles exist whatever is on top. A pixel read
+simply does not have them, and absent time reads as free.
+
+And below 75 pixels per hour the reader was measured putting a block **135
+minutes** from where it was drawn. That one now refuses outright rather than
+answering, so it is handled &mdash; but it is the same error by another route,
+and it was found by measuring rather than by anybody noticing.
+
+`make ocr-accuracy` reproduces both numbers.
+
+The trade is a step against a wrong booking: holding costs somebody opening a
+tab, not holding costs a visit booked over a real commitment and found by the
+family. Set it back to `true` if the lab would rather take that trade &mdash;
+it is a dropdown on the board under *How it decides*, and nothing else has to
+change.
 
 Either way the evidence tier still records that the read came off a
 screenshot, so the provenance survives. Upload a PDF print where the timing

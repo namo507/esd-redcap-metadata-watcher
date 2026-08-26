@@ -135,6 +135,8 @@ view means opening `team.js`.
                             a change that does not cost the week's work
     test_ocr_accuracy.py    whether the calendar reader reads the times it
                             was given, scored against known-drawn events
+    test_review_gate.py     holding a pixel read until somebody settles it:
+                            confirming applies, rejecting does not
     test_automation.py      the scheduled jobs
     test_graph_privacy.py   free/busy only, never event titles
 
