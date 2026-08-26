@@ -90,6 +90,43 @@ disk at all, so this needs a paid plan there.
 
 | Workflow | Fires on | Does |
 |---|---|---|
+## Building and checking the image locally
+
+```
+docker build -t esd-visitboard:local .
+docker run -d --name esd-check -p 8137:8080 esd-visitboard:local
+docker inspect --format '{{.State.Health.Status}}' esd-check
+```
+
+Verified on 26 August 2026: **733 MB**, healthy about a second after start,
+and a real 58-block Outlook print uploads inside it and reads at tier 2 with
+nothing left to identify. Python 3.11 in the image, and `esd_scheduler doctor`
+runs clean there — every import declared, and the board starting with only the
+core packages present.
+
+`python-pptx` and `matplotlib` are deliberately absent: they build the slide
+deck, which the container never does. `tesseract`, PyMuPDF, OpenCV, NumPy,
+Pillow and pytesseract are all present, so both calendar readers work.
+
+**Nothing sensitive is in the image**, and this is worth re-checking whenever
+`.dockerignore` changes, because it is a different list from `.gitignore`:
+
+```
+docker run --rm --entrypoint sh esd-visitboard:local -c \
+  "find /app -name '*.env' -o -name '*.xlsx' -o -name 'nano-families.json'"
+```
+
+That must print nothing. `config/redcap.env` holds the NANO study's API token
+and `COPY . .` was copying it before those patterns were added — `data/` was
+excluded, so the export stayed out while the credential that fetches it went
+in. An image is pushed, pulled, and keeps every layer it was built from, so a
+later `rm` does not undo it.
+
+One local gotcha, not a container fault: if a host process already holds the
+port you publish on, requests to `127.0.0.1` can reach that instead of the
+container while the container's own healthcheck passes from inside. Check with
+`lsof -nP -iTCP:<port> -sTCP:LISTEN` before concluding the image is broken.
+
 | `visitboard-backend.yml` | backend, engine, config, Dockerfile changes | runs every test, builds the image, checks the container serves and sends CORS, then deploys to Fly if the token is set |
 | `visitboard-frontend.yml` | `frontend/**` changes | builds the offline snapshot, copies the page to `docs/visitboard/`, commits |
 
