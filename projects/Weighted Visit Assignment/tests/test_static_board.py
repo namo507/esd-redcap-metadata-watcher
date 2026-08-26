@@ -174,6 +174,57 @@ def test_the_snapshot_never_ships_evidence_from_the_future():
            f"the clock when it was baked.")
 
 
+def test_the_public_build_refuses_a_real_participant_id():
+    """The published copy goes on the open web. A study id must never be in it.
+
+    The demo's families are invented, but they have to satisfy the manual's id
+    rule -- four digits starting with five -- so they are shaped exactly like
+    real NANO ids. They used to start in the block the study itself uses,
+    which meant twelve "invented" families were real participant ids and
+    the published board displayed them.
+
+    Two things are checked. The demo build is allowed, because a guard that
+    blocks every build gets switched off. And a payload carrying an id from
+    the study sync is refused.
+    """
+    import json as _json
+    import os as _os
+    import tempfile as _tf
+
+    from backend import build_static
+
+    cache_dir = _os.path.join("data", "redcap")
+    cache = _os.path.join(cache_dir, "nano-families.json")
+    had_cache = _os.path.exists(cache)
+    if not had_cache:
+        _os.makedirs(cache_dir, exist_ok=True)
+        with open(cache, "w", encoding="utf-8") as fh:
+            _json.dump({"families": [{"family_id": "5000"}]}, fh)
+    try:
+        with open(cache, encoding="utf-8") as fh:
+            real = [f["family_id"] for f in _json.load(fh)["families"]][:1]
+        expect(real, "the sync cache holds no ids, so this proves nothing")
+
+        # A payload with a real id in it must be refused.
+        raised = False
+        try:
+            build_static._refuse_real_participants(
+                {"visits": [{"family_id": f"F{real[0]}"}]})
+        except SystemExit:
+            raised = True
+        expect(raised,
+               f"a payload carrying study id {real[0][0]}... was allowed into "
+               f"a public build")
+
+        # A payload of purely demo ids must be allowed.
+        build_static._refuse_real_participants(
+            {"visits": [{"family_id": "F5901"}, {"family_id": "F5902"}]})
+    finally:
+        if not had_cache:
+            _os.remove(cache)
+
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

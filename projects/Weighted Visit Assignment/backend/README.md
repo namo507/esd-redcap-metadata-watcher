@@ -15,6 +15,7 @@ python3 backend/tests/test_api.py    # 12 end-to-end tests
 |---|---|
 | `server.py` | Routing, JSON responses, static file serving, path-traversal guard |
 | `session.py` | One `LabState` plus its audit store; translates engine output into what a screen needs |
+| `nano.py` | The NANO study's participants and windows, as the dropdowns need them |
 | `settings.py` | The tunables, their allowed values, and what applying one does |
 | `build_static.py` | Freezes the board into `dist-static/` so the page works with no API |
 | `export_snapshot.py` | Writes the board out for the exports the queue offers |
@@ -52,6 +53,9 @@ Calendars:
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/nano/families` | Every NANO participant and the one window that matters |
+| GET | `/api/nano/family` | `?id=5901` — all eight checkpoints for one family |
+| POST | `/api/nano/plan` | `{family_id, checkpoint}` — put it on the board and rank who takes it |
 | GET | `/api/settings` | Every knob the lab may turn, with its value and its allowed choices |
 | POST | `/api/settings` | `{key, value}` — set one, applied at once. Returns what moved plus the whole catalogue |
 | GET | `/api/calendar/read-table` | What the last upload read, one row per calendar, ready to correct |

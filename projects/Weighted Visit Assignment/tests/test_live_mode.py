@@ -46,7 +46,7 @@ def _week_pdf() -> bytes:
 
 
 A_VISIT = {
-    "family_id": "5031",
+    "family_id": "5901",
     "protocol": "NANO",
     "checkpoint": "6m",
     "window_start": "2026-08-20T09:00:00",
@@ -99,7 +99,7 @@ def test_an_entered_visit_survives_a_restart():
     again = live_session("persist.db")
     expect(vid in again.visits,
            f"visit {vid} did not come back after a restart")
-    expect(again.state.families.get("5031") is not None,
+    expect(again.state.families.get("5901") is not None,
            "the family did not come back with it")
 
 
@@ -131,22 +131,22 @@ def test_a_visit_the_engine_cannot_use_is_refused():
 def test_the_protocol_clock_believes_what_the_lab_says_was_done():
     """A family seen up to 3m is not overdue for their first visit."""
     s = live_session("history.db")
-    s.add_visit(dict(A_VISIT, family_id="5031"))
-    s.add_visit(dict(A_VISIT, family_id="5042", completed_through="3m"))
+    s.add_visit(dict(A_VISIT, family_id="5901"))
+    s.add_visit(dict(A_VISIT, family_id="5912", completed_through="3m"))
     rows = {r["family_id"]: r for r in s.schedule_rows()["rows"]}
-    expect(rows["5031"]["checkpoint"] == "1m",
+    expect(rows["5901"]["checkpoint"] == "1m",
            "a family with no history should owe their first checkpoint")
-    expect(rows["5042"]["checkpoint"] == "6m",
-           f"a family seen to 3m should owe 6m, not {rows['5042']['checkpoint']}")
-    expect(rows["5042"]["completed"] == 3,
-           f"expected 3 completed, got {rows['5042']['completed']}")
+    expect(rows["5912"]["checkpoint"] == "6m",
+           f"a family seen to 3m should owe 6m, not {rows['5912']['checkpoint']}")
+    expect(rows["5912"]["completed"] == 3,
+           f"expected 3 completed, got {rows['5912']['completed']}")
 
 
 def test_seeded_history_credits_nobody_with_the_visit():
     """Continuity rewards whoever ran the last visit, so it cannot be guessed."""
     s = live_session("credit.db")
     s.add_visit(dict(A_VISIT, completed_through="3m"))
-    seeded = [h for h in s.state.history if h.family_id == "5031"]
+    seeded = [h for h in s.state.history if h.family_id == "5901"]
     expect(seeded, "no history was seeded")
     expect(all(h.coordinator_id == "" for h in seeded),
            "a seeded past visit named a coordinator who was never recorded")
@@ -281,7 +281,7 @@ def test_a_participant_id_that_is_not_a_nano_id_is_refused():
     the doorstep costs a visit.
     """
     s = live_session("ids.db")
-    for good, expected in (("5031", "5031"), ("F5031", "5031"), (" 5042 ", "5042")):
+    for good, expected in (("5901", "5901"), ("F5901", "5901"), (" 5912 ", "5912")):
         out = s.add_visit(dict(A_VISIT, family_id=good, visit_id=f"V{good.strip()}"))
         expect(out["family_id"] == expected,
                f"{good!r} was stored as {out['family_id']!r}")
@@ -294,17 +294,17 @@ def test_a_participant_id_that_is_not_a_nano_id_is_refused():
 
 
 def test_the_family_label_shows_the_whole_participant_id():
-    """"Family 031" is a different participant from family 5031.
+    """"Family 031" is a different participant from family 5901.
 
     The label used to drop the first character, which was right while ids
-    were written F5031 and wrong the moment the lab's own four-digit form
+    were written F5901 and wrong the moment the lab's own four-digit form
     arrived. A scheduler reading a truncated id looks up the wrong child.
     """
     s = live_session("labels.db")
-    s.add_visit(dict(A_VISIT, family_id="5031"))
+    s.add_visit(dict(A_VISIT, family_id="5901"))
     summary = s.visit_summary(s.order[0])
-    expect("5031" in summary["family_label"],
-           f"the label is {summary['family_label']!r}, which is not family 5031")
+    expect("5901" in summary["family_label"],
+           f"the label is {summary['family_label']!r}, which is not family 5901")
 
 
 if __name__ == "__main__":

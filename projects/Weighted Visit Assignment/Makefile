@@ -2,7 +2,7 @@ PY ?= python3
 
 .PHONY: help init demo test week drift debrief calibrate sensitivity sync verify-graph \
         import-calendar inbox audit doctor deps \
-        serve serve-quiet static publish simulate smoke ocr-accuracy \
+        redcap-sync serve serve-scratch serve-quiet static publish simulate smoke ocr-accuracy \
         install-automation uninstall-automation deck clean
 
 help:
@@ -51,6 +51,7 @@ test:
 	$(PY) tests/test_settings.py
 	$(PY) tests/test_ocr_accuracy.py
 	$(PY) tests/test_neural_reader.py
+	$(PY) tests/test_redcap.py
 	$(PY) tests/test_review_gate.py
 	$(PY) tests/test_deployment.py
 	$(PY) tests/test_frontend.py
@@ -62,6 +63,26 @@ test:
 	$(PY) -m backend.build_static >/dev/null && $(PY) tests/test_static_board.py
 
 serve:
+	$(PY) -m backend.server
+
+# The board for a demo. Every config file it can write to is copied into
+# config-scratch/ first, so changing a weight or matching a colour in front of
+# an audience cannot edit the lab's real numbers. That has happened twice.
+# Pull the NANO participants and their anchor dates from REDCap into
+# data/redcap/, which is gitignored. The token lives in config/redcap.env and
+# is never read by anything a browser can reach.
+redcap-sync:
+	$(PY) -m esd_scheduler.redcap_sync
+
+serve-scratch:
+	@$(PY) automation/scratch_config.py >/dev/null
+	@echo "Serving against config-scratch/. The lab's config/ is untouched."
+	ESD_ENGINE_PATH=config-scratch/engine.json \
+	ESD_ROSTER_PATH=config-scratch/roster.json \
+	ESD_RESOURCES_PATH=config-scratch/lab-resources.json \
+	ESD_COLOR_MAP_PATH=config-scratch/calendar-colors.json \
+	ESD_CALENDAR_ROLES_PATH=config-scratch/calendar-roles.json \
+	ESD_DB=data/scratch.db \
 	$(PY) -m backend.server
 
 static:

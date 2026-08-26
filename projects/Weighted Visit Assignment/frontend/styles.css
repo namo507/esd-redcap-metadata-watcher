@@ -830,6 +830,21 @@ body.is-scrolled .hero-sub { display: none; }
   }
 }
 
+/* --- the study picker ----------------------------------------------------
+   Two dropdowns in the order the question is asked: which family, then which
+   of that family's time points. The second is disabled until the first is
+   answered, because a time point means nothing without a family. */
+.nanopick { display: grid; gap: .8rem; margin-top: .4rem; }
+.nanopick select { min-width: 22rem; }
+.nanopick select:disabled { opacity: .5; }
+.nanowindow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1.2rem; flex-wrap: wrap; margin-top: 1rem; padding: .9rem 1rem;
+  border: 1px solid var(--line); border-left: 3px solid var(--esd-discovery-blue);
+  border-radius: 12px; background: var(--esd-cool-blue);
+}
+.nanowindow h3 { margin: .15rem 0 .2rem; }
+
 /* --- the decision tree ---------------------------------------------------
    Columns left to right: the window, its three branches, the leaves of the
    open branch, and the detail of the open leaf. Connectors are drawn with

@@ -87,6 +87,53 @@ def _demo_calendar(session) -> dict:
     }
 
 
+def _refuse_real_participants(payload) -> None:
+    """Stop a public build that would carry real participant IDs.
+
+    The static copy is published to the open web. The demo board's families
+    are invented and safe to publish; a board synced with REDCap holds real
+    NANO participant IDs, and a participant ID identifies a person in a study.
+    Publishing one is a disclosure, and it would happen silently, because the
+    build looks exactly the same either way.
+
+    The check is on the payload about to be written, not on whether a cache
+    file exists somewhere. The first version tested for the file and refused
+    every build on a synced checkout -- including the demo build the test
+    suite runs, which quietly stopped nine tests from running at all. What
+    matters is whether a real id is actually in what is about to be
+    published.
+
+    Set ESD_ALLOW_REAL_IDS=1 only for a build nobody outside the lab reaches.
+    """
+    if os.environ.get("ESD_ALLOW_REAL_IDS") == "1":
+        return
+    cache = os.path.join("data", "redcap", "nano-families.json")
+    if not os.path.exists(cache):
+        return
+    try:
+        with open(cache, encoding="utf-8") as fh:
+            real = {str(f.get("family_id", "")).strip()
+                    for f in (json.load(fh).get("families") or [])}
+    except (OSError, ValueError):
+        return
+    real.discard("")
+    if not real:
+        return
+
+    published = json.dumps(payload)
+    found = sorted(fid for fid in real if f'"{fid}"' in published
+                   or f"F{fid}" in published)
+    if not found:
+        return
+    raise SystemExit(
+        f"REFUSING TO BUILD THE PUBLIC COPY.\n\n"
+        f"{len(found)} real NANO participant ID(s) from the study sync are in "
+        f"the board about to be published, and a participant ID identifies a "
+        f"person in a study.\n\n"
+        f"Build from a demo board, or set ESD_ALLOW_REAL_IDS=1 if this build "
+        f"is going somewhere nobody outside the lab can reach.")
+
+
 def build() -> str:
     session = LabSession(os.path.join(ROOT, "data", "static-build.db"))
 
@@ -129,6 +176,8 @@ def build() -> str:
         detail = session.candidates(visit_id)
         detail.pop("assigned", None)
         payload["visits"].append(detail)
+
+    _refuse_real_participants(payload)
 
     with open(os.path.join(OUT, "board.json"), "w", encoding="utf-8") as fh:
         json.dump(payload, fh, separators=(",", ":"), default=str)

@@ -14,6 +14,7 @@ js/core.js          state, fetch, routing, page chrome
 js/team.js          the team table and the protocol clock
 js/assign.js        the queue, the pair, entering a visit
 js/calendars.js     uploads, what came back, exports
+js/nano.js          the study picker: family, time point, then a pair
 js/mindmap.js       the visit window, opened one level at a time
 js/logic.js         the decision map
 js/settings.js      the tuning dropdowns

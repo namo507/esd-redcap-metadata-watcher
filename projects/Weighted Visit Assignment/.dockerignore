@@ -10,3 +10,25 @@ dashboard/
 **/__pycache__/
 *.pyc
 .DS_Store
+
+# CREDENTIALS AND PARTICIPANT DATA. An image is pushed to a registry, pulled
+# by whoever can reach it, and its layers keep whatever was copied in even if
+# a later layer deletes it. None of this may ever be inside one.
+#
+# config/redcap.env holds the NANO study's API token. `COPY . .` was copying
+# it: data/ was excluded, so the *export* never got in, and the credential
+# that fetches the export did.
+config/*.env
+config/calendar-map.json
+
+# Holds real NANO participant ids and birth dates. Gitignored, which is a
+# different list from this one -- a file can be absent from git and still be
+# baked into an image.
+*.xlsx
+
+# A local interpreter and a demo's throwaway config. Neither belongs in an
+# image, and .venv alone is several hundred megabytes.
+.venv/
+config-scratch/
+.claude/
+.netlify/

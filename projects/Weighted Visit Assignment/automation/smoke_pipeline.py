@@ -193,7 +193,7 @@ def run(files=None) -> int:
 
     window = _window_inside(covered)
     status, created = call("POST", "/api/visits", {
-        "family_id": "5031", "protocol": "NANO", "checkpoint": "9m",
+        "family_id": "5901", "protocol": "NANO", "checkpoint": "9m",
         "window_start": window[0], "window_end": window[1],
         "participant_status": "TD", "birth_date": "2025-11-17",
         "completed_through": "6m",
@@ -215,7 +215,7 @@ def run(files=None) -> int:
           f"{len(queue)} visit(s) on the board")
     row = next((v for v in queue if v["id"] == visit_id), {})
     check(16, "the queue shows the whole participant id",
-          "5031" in str(row.get("family_label")),
+          "5901" in str(row.get("family_label")),
           f"label={row.get('family_label')!r}")
     check(17, "the visit length came from the protocol, not a default",
           row.get("duration_hours") == 2.0,
@@ -312,7 +312,7 @@ def run(files=None) -> int:
     head("The timepoint that needs nobody")
 
     status, remote = call("POST", "/api/visits", {
-        "family_id": "5042", "protocol": "NANO", "checkpoint": "24m",
+        "family_id": "5912", "protocol": "NANO", "checkpoint": "24m",
         "window_start": window[0], "window_end": window[1],
         "participant_status": "TD", "birth_date": "2024-08-20"})
     remote_id = (remote.get("visit") or {}).get("visit_id")

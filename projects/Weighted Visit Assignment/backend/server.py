@@ -200,6 +200,71 @@ def r_board(params, body):
     }
 
 
+@get("/api/nano/families")
+def r_nano_families(params, body):
+    """The NANO participants and each one's next window, for the dropdown."""
+    from backend import nano
+    return 200, nano.summary()
+
+
+@get("/api/nano/family")
+def r_nano_family(params, body):
+    """Every checkpoint for one family, for the second dropdown."""
+    from backend import nano
+    # params holds plain strings, the way every other route here reads them.
+    # Indexing [0] on it took the first character and looked up family "5".
+    family_id = (params.get("id") or "").strip()
+    if not family_id:
+        return 400, {"error": "which family? pass ?id=5901"}
+    out = nano.family_windows(family_id)
+    if not out.get("found"):
+        return 404, {"error": f"no NANO family {family_id} in the last sync"}
+    return 200, out
+
+
+@post("/api/nano/plan")
+def r_nano_plan(params, body):
+    """Put one family's checkpoint on the board and rank who should take it.
+
+    The whole point of the two dropdowns: pick a family, pick a time point,
+    and the same engine that ranks everything else answers with a pair. No
+    separate scoring path -- a second one would drift from the first.
+    """
+    from backend import nano
+
+    family_id = (body or {}).get("family_id") or ""
+    checkpoint = (body or {}).get("checkpoint") or ""
+    if not family_id or not checkpoint:
+        return 400, {"error": "send {family_id, checkpoint}"}
+
+    windows = nano.family_windows(family_id)
+    if not windows.get("found"):
+        return 404, {"error": f"no NANO family {family_id} in the last sync"}
+    window = next((w for w in windows["windows"]
+                   if w["checkpoint"] == checkpoint), None)
+    if window is None:
+        return 404, {"error": f"{family_id} has no {checkpoint} checkpoint"}
+    if not window.get("window_start"):
+        return 400, {"error": (f"{family_id} has no anchor date on file, so "
+                               f"there is no window to schedule in")}
+    try:
+        out = SESSION.add_visit({
+            "family_id": family_id,
+            "protocol": "NANO",
+            "checkpoint": checkpoint,
+            "window_start": window["window_start"],
+            "window_end": window["window_end"],
+            "participant_status": windows.get("participant_status", "TD"),
+        })
+    except (ValueError, KeyError) as exc:
+        return 400, {"error": str(exc)}
+    visit_id = (out.get("visit") or {}).get("id") or out.get("visit_id")
+    if not visit_id:
+        return 500, {"error": "the visit was accepted but has no id"}
+    return 200, {"visit_id": visit_id, "window": window,
+                 "detail": SESSION.candidates(visit_id)}
+
+
 @get("/api/settings")
 def r_settings(params, body):
     """Every knob the lab may turn, with its current value and its choices."""

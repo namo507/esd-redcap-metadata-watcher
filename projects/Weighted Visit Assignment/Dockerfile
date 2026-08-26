@@ -43,4 +43,11 @@ EXPOSE 8080
 # --port and --no-browser are the flags backend/server.py actually defines, and
 # --port already defaults to $PORT, so the platform can move the port without
 # this line changing.
+# Whether the board is actually serving, not merely whether the process is
+# alive. A container that has booted but cannot answer /api/health is exactly
+# the state an orchestrator needs to see, and a bare process check hides it.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python3 -c "import urllib.request,os,sys; \
+sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8080')+'/api/health', timeout=4).status==200 else 1)"
+
 CMD ["python3", "-m", "backend.server", "--no-browser"]

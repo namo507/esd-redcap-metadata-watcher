@@ -1467,8 +1467,8 @@ class LabSession:
             "checkpoint": v.checkpoint,
             "title": f"{v.checkpoint} {v.protocol} visit",
             # Strip a leading F if the id carries one, rather than dropping the
-            # first character whatever it is. The demo writes F5031 and the lab
-            # writes 5031; blind slicing turned the second into "Family 031",
+            # first character whatever it is. The demo writes F5901 and the lab
+            # writes 5901; blind slicing turned the second into "Family 031",
             # which is a different participant to go looking for.
             "family_label": f"Family {v.family_id.lstrip('Ff')}",
             "date": v.window_start.strftime("%Y-%m-%d"),

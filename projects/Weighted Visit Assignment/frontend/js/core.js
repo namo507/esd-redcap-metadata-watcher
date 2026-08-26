@@ -103,11 +103,13 @@ const SECTIONS = {
            "Pick a visit. The board rules out who cannot go and suggests a clinician and a tech."],
   sync:   ["Calendars", "Calendars.",
            "Upload an Outlook print. Nothing counts until it has been checked."],
+  nano:   ["The study", "NANO visits.",
+           "Pick a participant and a time point. The board works out the window and who should take it."],
   logic:  ["The workings", "How it decides.",
            "Every step from an uploaded calendar to two named people."],
 };
 
-const SECTION_NAMES = ["team", "assign", "sync", "logic"];
+const SECTION_NAMES = ["team", "assign", "nano", "sync", "logic"];
 
 /* ------------------------------------------------------------------ routing
    The board is one page, but its four views are places. Reflecting them in the
@@ -194,6 +196,7 @@ function setSection(name, opts) {
   $("hero-sub").textContent = sub;
   if (name === "team") { drawTeam(); drawDue(); }
   if (name === "sync") { drawSync(); drawData(); drawReadTable(); }
+  if (name === "nano") drawNano();
   if (name === "logic") { drawLogic(); drawSettings(); }
   if (!fromRoute) syncRoute(false);
 }

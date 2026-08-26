@@ -24,6 +24,9 @@ recommend on its own.
 
 ## Reading a calendar
 
+    redcap.py               the NANO study record: participants, anchor
+                            dates, and the windows derived from them
+    redcap_sync.py          `make redcap-sync`, which fills the cache
     ingest_outlook_pdf.py   vector extraction from a printed Outlook PDF
     ingest_image.py         the same from a screenshot, measured in pixels
     ingest_image_neural.py  optional: reads an event's own printed time

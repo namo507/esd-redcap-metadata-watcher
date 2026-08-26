@@ -52,3 +52,13 @@ config/PowerBI-Theme-ESD.json
 # `python3.12 -m venv .venv && .venv/bin/python -m pip install -r requirements.txt`,
 # matched to the version CI runs rather than whatever python3 happens to be.
 .venv/
+
+# A throwaway copy of config/ for demos. The board writes here instead of
+# the lab's real numbers. Rebuilt by `make serve-scratch`.
+config-scratch/
+
+# REDCap API token. A credential for a study with participant data: it
+# belongs in this file on one machine and nowhere in git.
+config/redcap.env
+config/*.env
+data/redcap/

@@ -85,7 +85,14 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
 
     # --- families -----------------------------------------------------------
     for i in range(12):
-        fid = f"F{5030 + i}"
+        # 5900 upwards. The demo's ids have to satisfy the manual's rule
+        # -- four digits starting with five -- which makes them shaped
+        # exactly like real NANO ids. They used to start at 5900, and
+        # the study's real participants occupy the low 5000s, so twelve of
+        # the demo's "invented" families were real participant ids and the
+        # published board displayed them. This block is unallocated, and
+        # `make static` now refuses a build carrying a real id anyway.
+        fid = f"F{5900 + i}"
         protocol = "NICO" if i % 2 == 0 else "NANO"
         state.families[fid] = Family(
             family_id=fid,
@@ -100,15 +107,15 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
             anchor_date=(None if i == 11 else (now - timedelta(days=90)).date()),
         )
     # The twins case: a family comfort issue became a hard exclusion.
-    state.families["F5034"].hard_exclusions = {"C04"}   # Sofia Tous excluded
-    state.families["F5035"].hard_exclusions = {"C04"}
+    state.families["F5904"].hard_exclusions = {"C04"}   # Sofia Tous excluded
+    state.families["F5905"].hard_exclusions = {"C04"}
     # One family wants a fresh face after a difficult visit.
-    state.families["F5037"].sigma = -1
+    state.families["F5907"].sigma = -1
     # One family asked for someone by name, one has a soft avoid.
-    state.families["F5031"].preferred_coordinators = {"C01"}
-    state.families["F5033"].soft_avoid = {"C02"}
+    state.families["F5901"].preferred_coordinators = {"C01"}
+    state.families["F5903"].soft_avoid = {"C02"}
     # One family needs a Spanish-speaking coordinator.
-    state.families["F5039"].required_attributes = {"spanish"}
+    state.families["F5909"].required_attributes = {"spanish"}
 
     # --- Master prompt §6/§7 participant detail ------------------------------
     # Contact method, drive time and free-text notes are what a scheduler reads
@@ -117,17 +124,17 @@ def build_lab(now: datetime, seed: int = SEED) -> Tuple[LabState, List[Visit]]:
     for i, (fid, fam) in enumerate(sorted(state.families.items())):
         fam.preferred_contact_method = contact_cycle[i % 3]
         fam.drive_time_minutes = round(12 + 9 * fam.zone + rng.uniform(-4, 8), 1)
-    state.families["F5032"].scheduling_notes = (
+    state.families["F5902"].scheduling_notes = (
         "Fragrance sensitivity: no scented products, please.")
-    state.families["F5036"].scheduling_notes = (
+    state.families["F5906"].scheduling_notes = (
         "Weekends only until mid-September; father works nights.")
-    state.families["F5030"].scheduling_notes = (
+    state.families["F5900"].scheduling_notes = (
         "Street parking is tight after 4pm. Park on the cross street.")
     # One NDD cross-collaboration visit, to exercise the override and the
     # 60-minute duration extension.
-    state.families["F5038"].is_ndd_cross_collab = True
-    state.families["F5041"].van_inaccessible = True
-    state.families["F5035"].childcare_needed = True
+    state.families["F5908"].is_ndd_cross_collab = True
+    state.families["F5911"].van_inaccessible = True
+    state.families["F5905"].childcare_needed = True
 
     # --- travel: correlated with zone distance ------------------------------
     # The zone comes off the roster rather than a table of ids written here.

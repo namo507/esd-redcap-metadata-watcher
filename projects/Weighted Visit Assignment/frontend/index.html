@@ -29,6 +29,7 @@
   <nav class="nav" id="nav" aria-label="Sections">
     <button class="navbtn is-on" data-section="team" type="button">The team</button>
     <button class="navbtn" data-section="assign" type="button">Assign a visit</button>
+    <button class="navbtn" data-section="nano" type="button">NANO visits</button>
     <button class="navbtn" data-section="sync" type="button">Calendars</button>
     <button class="navbtn" data-section="logic" type="button">How it decides</button>
   </nav>
@@ -136,6 +137,21 @@
   </section>
 
   <!-- ======================================================= WORKLOAD -->
+  <!-- =========================================================== NANO -->
+  <section id="sec-nano" hidden>
+    <div class="card" id="nano-card">
+      <div class="card-head"><div>
+        <p class="eyebrow">From the study record</p>
+        <h2>Pick a participant, pick a time point</h2>
+        <p class="note">Windows are worked out here from each family's anchor
+          date and the protocol schedule. The study record holds the dates; the
+          manual decides what they mean.</p>
+      </div></div>
+      <div id="nano-status"></div>
+      <div id="nano-pickers"></div>
+    </div>
+  </section>
+
   <!-- =========================================================== SYNC -->
   <section id="sec-sync" hidden>
     <div class="card">
@@ -253,6 +269,7 @@
 <script src="js/mindmap.js"></script>
 <script src="js/assign.js"></script>
 <script src="js/calendars.js"></script>
+<script src="js/nano.js"></script>
 <script src="js/logic.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/boot.js"></script>

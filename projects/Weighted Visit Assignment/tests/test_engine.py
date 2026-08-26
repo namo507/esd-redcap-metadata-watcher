@@ -181,7 +181,7 @@ def test_ranking_is_a_permutation_of_the_feasible_pool():
 
 def test_layer1_failures_are_never_rescued_by_score():
     state, visits = build_lab(NOW)
-    visit = next(v for v in visits if v.family_id == "F5034")
+    visit = next(v for v in visits if v.family_id == "F5904")
     pool = score_visit(visit, state, CFG, NOW)
     assert "C04" not in {c.coordinator_id for c in pool.candidates}
     excluded = next(c for c in pool.rejected if c.coordinator_id == "C04")

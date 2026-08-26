@@ -135,6 +135,59 @@ def test_the_page_uses_no_root_relative_paths():
     expect(not bad, f"these would 404 under a project subpath: {bad}")
 
 
+def test_no_credential_or_participant_file_can_reach_the_image():
+    """An image is pushed, pulled, and keeps every layer it was built from.
+
+    .dockerignore is a different list from .gitignore, and it was missing the
+    two files that matter most: config/redcap.env, which holds the NANO
+    study's API token, and the spreadsheet of real participant ids and birth
+    dates. `COPY . .` was copying both. data/ was excluded, so the *export*
+    stayed out and the credential that fetches it went in.
+
+    Deleting a file in a later layer does not remove it from the image, so
+    this is checked at the ignore list rather than at the end of the build.
+    """
+    import fnmatch
+
+    patterns = [line.strip() for line in _read(".dockerignore").splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+
+    def excluded(path):
+        return any(fnmatch.fnmatch(path, pat)
+                   or path.startswith(pat.rstrip("/") + "/")
+                   for pat in patterns)
+
+    for path, why in (
+        ("config/redcap.env", "the NANO study's API token"),
+        ("config/calendar.env", "calendar credentials"),
+        ("ESD-Weighted-Visit-Engine.xlsx", "real participant ids and birth dates"),
+        ("data/redcap/nano-families.json", "the study export"),
+        (".venv/bin/python", "a local interpreter, hundreds of megabytes"),
+    ):
+        expect(excluded(path),
+               f"{path} would be copied into the container image, and it holds "
+               f"{why}")
+
+    # And the things that must be there, or the image does not run.
+    for path in ("backend/server.py", "config/engine.json", "frontend/index.html"):
+        expect(not excluded(path),
+               f"{path} is excluded from the image, which will not start")
+
+
+def test_the_container_reports_whether_it_is_serving():
+    """A process that is alive but cannot answer is the state worth catching.
+
+    Without a HEALTHCHECK an orchestrator restarts on process death and
+    nothing else, so a board that booted and cannot serve looks healthy.
+    """
+    dockerfile = _read("Dockerfile")
+    expect("HEALTHCHECK" in dockerfile,
+           "the image declares no healthcheck, so a running-but-broken board "
+           "reads as healthy")
+    expect("/api/health" in dockerfile,
+           "the healthcheck does not ask the board whether it is serving")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

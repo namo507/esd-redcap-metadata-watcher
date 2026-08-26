@@ -137,6 +137,8 @@ view means opening `team.js`.
                             was given, scored against known-drawn events
     test_neural_reader.py   the optional neural pass: what it may read out of
                             an event's text, and that selecting it loses nothing
+    test_redcap.py          the NANO study join: which ids are accepted, which
+                            date a window counts from, what reaches a browser
     test_review_gate.py     holding a pixel read until somebody settles it:
                             confirming applies, rejecting does not
     test_automation.py      the scheduled jobs
