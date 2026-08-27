@@ -3975,6 +3975,98 @@ def _demographic_signal_audit(
     return summary, enrichment
 
 
+def _tier1_rule_overlap_tables(
+    features: pd.DataFrame, rules: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Build record-level and aggregate Tier-1 overlap tables for R1/R2/R5/R8/R9."""
+
+    tier1_rules = ["rule_R1", "rule_R2", "rule_R5", "rule_R8", "rule_R9"]
+    required_from_features = ["source_project", "project_id", "record_id"]
+    missing_from_features = [
+        column for column in required_from_features if column not in features.columns
+    ]
+    missing_from_rules = [column for column in tier1_rules if column not in rules.columns]
+    if missing_from_features or missing_from_rules:
+        missing = missing_from_features + missing_from_rules
+        raise RuntimeError(f"Tier-1 overlap table missing required columns: {missing}")
+
+    overlap = pd.concat(
+        [
+            features[required_from_features].copy(),
+            rules[tier1_rules].copy(),
+        ],
+        axis=1,
+    )
+    overlap[tier1_rules] = overlap[tier1_rules].fillna(False).astype(bool)
+    overlap["record_id"] = overlap["record_id"].astype(str)
+    overlap["tier1_hit_count"] = overlap[tier1_rules].sum(axis=1)
+    overlap["tier1_any_hit"] = overlap["tier1_hit_count"].ge(1)
+    overlap["tier1_hard_candidate_ge2"] = overlap["tier1_hit_count"].ge(2)
+    overlap["tier1_hard_candidate_ge3"] = overlap["tier1_hit_count"].ge(3)
+    overlap["tier1_all_5_hits"] = overlap["tier1_hit_count"].eq(len(tier1_rules))
+
+    rule_names = {
+        "rule_R1": "R1",
+        "rule_R2": "R2",
+        "rule_R5": "R5",
+        "rule_R8": "R8",
+        "rule_R9": "R9",
+    }
+    overlap["tier1_rule_combo"] = overlap[tier1_rules].apply(
+        lambda row: "+".join(
+            rule_names[column] for column in tier1_rules if bool(row[column])
+        )
+        if bool(row.any())
+        else "none",
+        axis=1,
+    )
+
+    combo_summary = (
+        overlap.groupby(
+            ["source_project", "tier1_rule_combo", "tier1_hit_count"],
+            as_index=False,
+        )
+        .size()
+        .rename(columns={"size": "n_records"})
+        .sort_values(
+            ["source_project", "n_records", "tier1_rule_combo"],
+            ascending=[True, False, True],
+        )
+        .reset_index(drop=True)
+    )
+    combo_summary["pct_within_project"] = combo_summary.groupby("source_project")[
+        "n_records"
+    ].transform(lambda values: values / values.sum() * 100)
+
+    project_summary = (
+        overlap.groupby("source_project", as_index=False)
+        .agg(
+            n_records=("record_id", "size"),
+            tier1_any_hit_n=("tier1_any_hit", "sum"),
+            tier1_ge2_n=("tier1_hard_candidate_ge2", "sum"),
+            tier1_ge3_n=("tier1_hard_candidate_ge3", "sum"),
+            tier1_all5_n=("tier1_all_5_hits", "sum"),
+        )
+        .sort_values("source_project")
+        .reset_index(drop=True)
+    )
+    for numerator, denominator in [
+        ("tier1_any_hit_n", "tier1_any_hit_pct"),
+        ("tier1_ge2_n", "tier1_ge2_pct"),
+        ("tier1_ge3_n", "tier1_ge3_pct"),
+        ("tier1_all5_n", "tier1_all5_pct"),
+    ]:
+        project_summary[denominator] = (
+            project_summary[numerator] / project_summary["n_records"] * 100
+        )
+
+    overlap = overlap.sort_values(
+        ["source_project", "tier1_hit_count", "record_id"],
+        ascending=[True, False, True],
+    ).reset_index(drop=True)
+    return overlap, combo_summary, project_summary
+
+
 def _export_tables(
     project_dir: Path,
     tables: dict[str, pd.DataFrame],
@@ -4093,6 +4185,9 @@ def run_upgrade(project_dir: Path) -> dict:
     demographic_signal_summary, demographic_signal_enrichment = _demographic_signal_audit(
         bundle, features, rules
     )
+    tier1_record_overlap, tier1_combo_summary, tier1_project_summary = (
+        _tier1_rule_overlap_tables(features, rules)
+    )
     data_quality = _data_quality_summary(
         bundle,
         features,
@@ -4206,6 +4301,9 @@ def run_upgrade(project_dir: Path) -> dict:
         "table_34_branching_logic_audit.csv": branching_audit,
         "table_35_demographic_signal_summary.csv": demographic_signal_summary,
         "table_35b_demographic_signal_enrichment.csv": demographic_signal_enrichment,
+        "table_36_tier1_record_overlap.csv": tier1_record_overlap,
+        "table_36b_tier1_rule_combo_summary.csv": tier1_combo_summary,
+        "table_36c_tier1_project_summary.csv": tier1_project_summary,
     }
     manifest = _export_tables(
         project_dir, tables, record_flags.reset_index(drop=True), chart_map
@@ -4246,6 +4344,9 @@ def run_upgrade(project_dir: Path) -> dict:
         "branching_audit": branching_audit,
         "demographic_signal_summary": demographic_signal_summary,
         "demographic_signal_enrichment": demographic_signal_enrichment,
+        "tier1_record_overlap": tier1_record_overlap,
+        "tier1_combo_summary": tier1_combo_summary,
+        "tier1_project_summary": tier1_project_summary,
         "detector_context": detector_context,
         "latent_context": latent_context,
     }

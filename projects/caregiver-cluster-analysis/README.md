@@ -47,7 +47,7 @@ verified-human timing reference moves off 131 completed 4797 records.
 
 `Caregiver Outputs/` contains the original six figures plus fraud-facing and
 cluster-validation figures through `figure_20`, each as 300-DPI PNG and PDF.
-Tables `table_1` through `table_35b` cover the original analysis, API provenance,
+Tables `table_1` through `table_36c` cover the original analysis, API provenance,
 field differences, R1–R10, false-positive rates, tier counts, detector
 concordance, five inclusion definitions, Firth logistic models, Gaussian-mixture
 diagnostics, bootstrap LRT, BCH correction, tipping points, power/precision,
@@ -55,6 +55,12 @@ data quality, figure QA, the branching-logic audit table keyed to the
 generalized R8 rule, and a demographic signal audit table pair
 (`table_35_demographic_signal_summary.csv`,
 `table_35b_demographic_signal_enrichment.csv`).
+
+Tier-1 overlap reporting is now explicit in three additional outputs:
+`table_36_tier1_record_overlap.csv` (record-level R1/R2/R5/R8/R9 hits plus
+all/some thresholds), `table_36b_tier1_rule_combo_summary.csv` (per-project
+combination frequencies), and `table_36c_tier1_project_summary.csv`
+(project-level percentages for any-hit, >=2 hits, >=3 hits, and all 5 hits).
 
 The demographic signal audit is an anomaly-concentration check, not a labeling
 rule. It reports project-level prevalence with Wilson intervals, clean-vs-dirty

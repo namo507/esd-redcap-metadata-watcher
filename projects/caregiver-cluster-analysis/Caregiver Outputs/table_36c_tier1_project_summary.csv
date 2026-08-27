@@ -1,0 +1,3 @@
+source_project,n_records,tier1_any_hit_n,tier1_ge2_n,tier1_ge3_n,tier1_all5_n,tier1_any_hit_pct,tier1_ge2_pct,tier1_ge3_pct,tier1_all5_pct
+clean_4797,177,2,0,0,0,1.1299435028248588,0.0,0.0,0.0
+dirty_4581,1779,489,282,3,0,27.48735244519393,15.851602023608768,0.16863406408094433,0.0
