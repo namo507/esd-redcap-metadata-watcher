@@ -1,0 +1,10 @@
+Source project [from table_36b_tier1_rule_combo_summary.source_project],Tier 1 rule combo case [from table_36b_tier1_rule_combo_summary.tier1_rule_combo],Tier 1 hits in combo [count of R1/R2/R5/R8/R9 in combo],Cases n [from table_36b_tier1_rule_combo_summary.n_records],Cases % within source project [n_records / source project total x 100; source: table_36b_tier1_rule_combo_summary]
+Source Project 4581,none,0,1290,72.51264755480608
+Source Project 4581,R1+R2,2,276,15.51433389544688
+Source Project 4581,R2,1,165,9.27487352445194
+Source Project 4581,R8,1,38,2.1360314783586283
+Source Project 4581,R1,1,4,0.2248454187745924
+Source Project 4581,R1+R2+R8,3,3,0.1686340640809443
+Source Project 4581,R2+R8,2,3,0.1686340640809443
+Source Project 4797,none,0,175,98.87005649717514
+Source Project 4797,R9,1,2,1.1299435028248588

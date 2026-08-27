@@ -1,3 +1,3 @@
-project,provisional_real_n,manual_review_n,hold_n,provisional_real_pct
-clean_4797,172,5,0,97.2
-dirty_4581,730,1043,6,41.0
+Source project [from record_flags.source_project],Provisionally eligible for gift card n [auto_eligible + eligible_low_risk_review; source: decision_frame.giftcard_decision],Needs manual review n [giftcard_decision == manual_review; source: decision_frame],Payment hold pending adjudication n [giftcard_decision == do_not_pay_pending_adjudication; source: decision_frame],Provisionally eligible % [provisional_eligible_n / total source project records x 100; source: decision_frame]
+Source Project 4581,730,1043,6,41.0
+Source Project 4797,172,5,0,97.2
