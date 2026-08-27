@@ -3,6 +3,21 @@
    Start-up and the once-a-minute refresh. Loaded last.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN B  --  START
+  
+     before  core.js defined the helpers
+     here    fetches the board once, wires the nav, starts the refresh
+             loop and the scroll watcher, then hands over to whichever
+             section the URL names
+     after   the section files draw themselves
+  
+     worked example
+       boot() -> refresh() -> render() -> the section's own draw function
+       a failure here used to be swallowed into a hidden pane, so the page
+       came up blank with a clean console. It reports instead
+   ----------------------------------------------------------------------- */
+
 const REFRESH_MS = 60000;
 
 let refreshTimer = null;

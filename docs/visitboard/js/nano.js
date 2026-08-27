@@ -18,6 +18,21 @@
    screens would disagree about who should take a visit.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN C  --  PICK A PARTICIPANT
+  
+     before  /api/nano/families answered with the study's participants
+     here    two dropdowns in the order the question is asked: which
+             family, then which of that family's eight time points
+     after   assign.js shows the decision for the window that was chosen
+  
+     worked example
+       filter chips: window closed 124, open now 36, not open yet 44
+       the time-point dropdown stays disabled until a family is chosen:
+         a time point means nothing without one
+       'Who should take it?' -> POST /api/nano/plan -> the assign screen
+   ----------------------------------------------------------------------- */
+
 const NANO_STATE_ORDER = ["missed", "open", "upcoming", "done"];
 
 function drawNano() {

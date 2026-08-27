@@ -3,6 +3,20 @@
    The team view. One row per coordinator, one column per day.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN C  --  WHO IS FREE
+  
+     before  /api/board carried the week's grid
+     here    each coordinator's week, their roles and the assessments they
+             may run
+     after   nothing -- this is a view, not a step in the decision
+  
+     worked example
+       Morgan Soto (Makenzie)   coordinator clinician tech  6m-12m  van
+       one person shown under both names they appear under, because the
+       export and the manual disagree and two labels read as two people
+   ----------------------------------------------------------------------- */
+
 const DUE_TONE = {
   overdue: "attn", closing: "attn", open: "todo",
   upcoming: "route", unknown: "route", complete: "done",

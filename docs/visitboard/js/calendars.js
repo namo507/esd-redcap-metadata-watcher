@@ -3,6 +3,22 @@
    Uploading calendars, reading what came back, and exports.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN C  --  UPLOAD A CALENDAR
+  
+     before  somebody printed an Outlook week
+     here    the upload, what came back as a table of overlaid calendars,
+             and the dropdowns for anything the board could not name
+     after   confirming redraws every section from the board's own answer
+  
+     worked example
+       one row per overlaid calendar, because that is what an export is
+       rows needing a decision lead the table and carry a dropdown
+       redrawEverything() is the single place that knows what 'everything'
+         is -- a mapping change moves whose time is whose, which moves the
+         availability, which moves the ranking
+   ----------------------------------------------------------------------- */
+
 const TIER_WORD = {
   1: "Live Outlook feed",
   2: "Timed export",

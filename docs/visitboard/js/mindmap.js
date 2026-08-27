@@ -16,6 +16,24 @@
    A deep tree should not turn the document into something you scroll past.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN E  --  OPEN THE WINDOW
+  
+     before  assign.js has the ranked pairs and the per-rule eligibility
+     here    the same answer as a tree you walk: the window, then its
+             branches, then a leaf's detail. Only the level you opened is
+             on screen
+     after   nothing -- this is the end of the path a coordinator follows
+  
+     worked example
+       Family 5901  ->  Pairs that work  4
+                        Who can go       4
+                        Ruled out        0
+         -> Lauren Puttock + Sanjana Oak  0.263  Mon 9:00 AM  best match
+       clicking an open branch closes it: a tree you can only open ends up
+       fully open, which is the layout this replaced
+   ----------------------------------------------------------------------- */
+
 /* Which branch and which leaf are open. Reset whenever the visit changes,
    because "the second pair" means nothing once you are looking at a different
    family. */

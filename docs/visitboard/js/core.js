@@ -4,6 +4,22 @@
    Loaded first: everything else assumes these exist.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN A  --  SHARED GROUND
+  
+     before  the page loaded and index.html declared the sections
+     here    state, the fetch helper, routing and section switching.
+             Loaded first, so everything below assumes these exist
+     after   boot.js starts the board and draws the first section
+  
+     worked example
+       S       the one state object every file reads and writes
+       api()   one entry point; the published copy answers the same routes
+               from a snapshot, and no drawing code knows which it is talking to
+       setSection() shows a section AND draws it -- both, or a section renders
+               on some routes into it and not others
+   ----------------------------------------------------------------------- */
+
 const S = { board: null, detail: null, selected: null, status: "all", search: "",
             section: "team", assignments: {}, lastImport: null,
             syncTab: "availability", logicNode: null, dueOpen: null, batch: null,
