@@ -2556,6 +2556,7 @@ def generate_upgrade_figures(
     detector_importance: pd.DataFrame,
     detector_context: dict,
     demographic_signal_enrichment: pd.DataFrame,
+    tier1_record_overlap: pd.DataFrame,
     sensitivity: pd.DataFrame,
     logistic_table: pd.DataFrame,
     fits: dict[str, ClusterFit],
@@ -3559,6 +3560,79 @@ def generate_upgrade_figures(
         "this is anomaly concentration evidence, not a demographic label.",
     )
 
+    # Figure 22: Tier 1 rule co-occurrence heatmap for meeting slides.
+    # This shows how often each pair of the five Tier 1 rules (R1, R2, R5, R8,
+    # R9) co-fires within dirty_4581 records, to help the team see which rule
+    # combinations dominate the confirmed-invalid tier.
+    tier1_rules = ["rule_R1", "rule_R2", "rule_R5", "rule_R8", "rule_R9"]
+    rule_short = {"rule_R1": "R1", "rule_R2": "R2", "rule_R5": "R5", "rule_R8": "R8", "rule_R9": "R9"}
+    dirty_overlap = tier1_record_overlap.loc[
+        tier1_record_overlap["source_project"].eq("dirty_4581")
+    ].copy()
+    # Build the 5×5 co-occurrence matrix: diagonal = single-rule count,
+    # off-diagonal = pairwise co-fire count.
+    cooccurrence = np.zeros((len(tier1_rules), len(tier1_rules)), dtype=int)
+    for i, rule_i in enumerate(tier1_rules):
+        for j, rule_j in enumerate(tier1_rules):
+            if i == j:
+                cooccurrence[i, j] = int(dirty_overlap[rule_i].sum())
+            else:
+                cooccurrence[i, j] = int(
+                    (dirty_overlap[rule_i] & dirty_overlap[rule_j]).sum()
+                )
+    rule_labels = [rule_short[r] for r in tier1_rules]
+    cooccurrence_df = pd.DataFrame(
+        cooccurrence, index=rule_labels, columns=rule_labels
+    )
+    n_dirty = len(dirty_overlap)
+    pct_matrix = cooccurrence / max(n_dirty, 1) * 100
+
+    fig, ax = plt.subplots(figsize=(8.5, 7.0), constrained_layout=True)
+    # Use a sequential colormap so the heatmap reads well in slides.
+    cmap = LinearSegmentedColormap.from_list(
+        "esd_heat", ["#F8FAFC", palette["gold"], palette["orange"], palette["pink"]]
+    )
+    sns.heatmap(
+        cooccurrence_df,
+        annot=True,
+        fmt="d",
+        cmap=cmap,
+        linewidths=1.5,
+        linecolor="white",
+        square=True,
+        cbar_kws={"label": "Co-occurrence count", "shrink": 0.75},
+        ax=ax,
+    )
+    # Overlay percentages as smaller text below the counts.
+    for i in range(len(tier1_rules)):
+        for j in range(len(tier1_rules)):
+            ax.text(
+                j + 0.5,
+                i + 0.72,
+                f"{pct_matrix[i, j]:.1f}%",
+                ha="center",
+                va="center",
+                fontsize=8,
+                color=palette["ink"],
+                alpha=0.7,
+            )
+    ax.set(
+        title="Tier 1 rule co-occurrence within dirty_4581 (n={:,})".format(n_dirty),
+        xlabel="",
+        ylabel="",
+    )
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+
+    chart_rows += _save_figure(
+        fig,
+        output_dir,
+        "figure_22_tier1_overlap_heatmap",
+        "Pairwise co-occurrence of the five Tier 1 rules (R1, R2, R5, R8, R9) among "
+        f"dirty_4581 records (n={n_dirty:,}). Diagonal = single-rule hit count; "
+        "off-diagonal = how often two rules co-fire on the same record.",
+    )
+
     chart_map = pd.DataFrame(chart_rows).drop_duplicates("file")
     chart_map["analytical_role"] = chart_map["file"].str.extract(
         r"(figure_\d+[a-z]?)", expand=False
@@ -4067,6 +4141,287 @@ def _tier1_rule_overlap_tables(
     return overlap, combo_summary, project_summary
 
 
+def _bot_declaration_policy_table(
+    rules: pd.DataFrame,
+    features: pd.DataFrame,
+    tier1_record_overlap: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build a decision table that maps tier × hit-count combinations to
+    operational actions (auto-exclude, review-queue, conditional-pass, pass)
+    and gift-card eligibility.
+
+    The policy encodes these principles:
+    - Never auto-declare bot from a single Tier 1 hit alone.
+    - Send to review queue when >=2 Tier 1 hits (timing-only combos may be
+      legitimate fast respondents).
+    - Auto-exclude only when >=3 Tier 1 hits, OR >=2 Tier 1 hits that include
+      at least one logic-based impossibility rule (R8 or R9).
+    - Tier 2 records with >=2 suspicion rules go to review queue.
+    - Tier 3 and Tier 4 records pass with conditional or full clearance.
+    """
+
+    # Step 1: Define the decision rows that cover every meaningful
+    #         tier × hit-count × rule-mix scenario.
+    policy_rows = [
+        # ---- Tier 1: Confirmed invalid (any of R1/R2/R5/R8/R9 fired) ----
+        {
+            "tier": 1,
+            "tier_label": "Confirmed invalid",
+            "tier1_hit_count_range": ">=3",
+            "suspicion_rule_count_range": "any",
+            "rule_mix_requirement": "any combination of R1/R2/R5/R8/R9",
+            "action": "auto_exclude",
+            "gift_card_eligible": "no",
+            "rationale": (
+                "Three or more independent hard-evidence rules co-fired. "
+                "False-positive probability is negligible at this overlap level."
+            ),
+        },
+        {
+            "tier": 1,
+            "tier_label": "Confirmed invalid",
+            "tier1_hit_count_range": "2",
+            "suspicion_rule_count_range": "any",
+            "rule_mix_requirement": "must include R8 or R9 (logic-based)",
+            "action": "auto_exclude",
+            "gift_card_eligible": "no",
+            "rationale": (
+                "Two Tier 1 hits with at least one logic impossibility (R8: branching "
+                "contradiction, R9: impossible demographics). Logic rules have zero "
+                "false-positive tolerance."
+            ),
+        },
+        {
+            "tier": 1,
+            "tier_label": "Confirmed invalid",
+            "tier1_hit_count_range": "2",
+            "suspicion_rule_count_range": "any",
+            "rule_mix_requirement": "timing-only (R1+R2, R1+R5, R2+R5)",
+            "action": "review_queue",
+            "gift_card_eligible": "pending_review",
+            "rationale": (
+                "Two timing/fingerprint rules co-fired but no logic impossibility. "
+                "R1 and R2 co-fire frequently (276 records). Could be very fast but "
+                "legitimate respondents. Manual review required before exclusion."
+            ),
+        },
+        {
+            "tier": 1,
+            "tier_label": "Confirmed invalid",
+            "tier1_hit_count_range": "1",
+            "suspicion_rule_count_range": "any",
+            "rule_mix_requirement": "single hit (any of R1/R2/R5/R8/R9)",
+            "action": "conditional_pass",
+            "gift_card_eligible": "yes_unless_override",
+            "rationale": (
+                "Single Tier 1 rule alone does not justify auto-exclusion. "
+                "The record enters the trust screen but retains gift-card eligibility "
+                "unless a supervisor flags it during batch review."
+            ),
+        },
+        # ---- Tier 2: High suspicion (>=2 suspicion rules from R3/R4/R6/R7) ----
+        {
+            "tier": 2,
+            "tier_label": "High suspicion",
+            "tier1_hit_count_range": "0",
+            "suspicion_rule_count_range": ">=2",
+            "rule_mix_requirement": "none (no Tier 1 rules, multiple soft signals)",
+            "action": "review_queue",
+            "gift_card_eligible": "pending_review",
+            "rationale": (
+                "Multiple soft-evidence rules co-fired (fast instruments, straightlining, "
+                "burst submissions, near-duplicate text). Pattern is suspicious but not "
+                "individually conclusive. Hold for batch review."
+            ),
+        },
+        # ---- Tier 3: Uncertain (exactly 1 suspicion rule) ----
+        {
+            "tier": 3,
+            "tier_label": "Uncertain",
+            "tier1_hit_count_range": "0",
+            "suspicion_rule_count_range": "1",
+            "rule_mix_requirement": "none (single soft signal)",
+            "action": "conditional_pass",
+            "gift_card_eligible": "yes",
+            "rationale": (
+                "One soft-evidence rule fired. Insufficient to suspect bot behavior; "
+                "could be normal variation. Included in analysis with a note in the "
+                "trust-screen audit trail."
+            ),
+        },
+        # ---- Tier 4: Pass (no rules fired) ----
+        {
+            "tier": 4,
+            "tier_label": "Pass",
+            "tier1_hit_count_range": "0",
+            "suspicion_rule_count_range": "0",
+            "rule_mix_requirement": "none",
+            "action": "pass",
+            "gift_card_eligible": "yes",
+            "rationale": (
+                "No fraud rules triggered. Record passes all trust checks and is "
+                "fully eligible for gift-card compensation and inclusion."
+            ),
+        },
+    ]
+
+    # Step 2: Count how many actual records fall into each policy bucket
+    #         so the table doubles as a prevalence summary.
+    logic_rules = {"rule_R8", "rule_R9"}
+    tier1_cols = ["rule_R1", "rule_R2", "rule_R5", "rule_R8", "rule_R9"]
+
+    def _count_matching(row: dict) -> int:
+        """Count records matching a single policy row."""
+        tier_val = row["tier"]
+        mask = rules["tier"].eq(tier_val)
+        if tier_val == 1:
+            hit_range = row["tier1_hit_count_range"]
+            overlap_dirty = tier1_record_overlap.loc[
+                tier1_record_overlap["source_project"].eq("dirty_4581")
+            ]
+            if hit_range == ">=3":
+                matching_ids = set(
+                    overlap_dirty.loc[
+                        overlap_dirty["tier1_hit_count"].ge(3), "record_id"
+                    ].astype(str)
+                )
+            elif hit_range == "2":
+                two_hit = overlap_dirty.loc[
+                    overlap_dirty["tier1_hit_count"].eq(2)
+                ]
+                if "must include R8 or R9" in row["rule_mix_requirement"]:
+                    has_logic = two_hit[list(logic_rules & set(two_hit.columns))].any(
+                        axis=1
+                    )
+                    matching_ids = set(two_hit.loc[has_logic, "record_id"].astype(str))
+                else:
+                    has_logic = two_hit[list(logic_rules & set(two_hit.columns))].any(
+                        axis=1
+                    )
+                    matching_ids = set(
+                        two_hit.loc[~has_logic, "record_id"].astype(str)
+                    )
+            elif hit_range == "1":
+                matching_ids = set(
+                    overlap_dirty.loc[
+                        overlap_dirty["tier1_hit_count"].eq(1), "record_id"
+                    ].astype(str)
+                )
+            else:
+                matching_ids = set()
+            return len(matching_ids)
+        elif tier_val == 2:
+            return int(mask.sum())
+        elif tier_val == 3:
+            return int(mask.sum())
+        elif tier_val == 4:
+            return int(mask.sum())
+        return 0
+
+    for row in policy_rows:
+        row["dirty_4581_n"] = _count_matching(row)
+
+    return pd.DataFrame(policy_rows)
+
+
+def _dirty4581_review_queue(
+    features: pd.DataFrame,
+    rules: pd.DataFrame,
+    tier1_record_overlap: pd.DataFrame,
+    bot_policy: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build a focused review CSV containing only dirty_4581 records with >=2
+    Tier 1 hits.
+
+    This CSV includes minimal audit columns for manual adjudication and
+    gift-card exclusion decisions. The empty adjudication columns are designed
+    to be filled in by the research team during review meetings.
+    """
+
+    # Step 1: Filter to dirty_4581 records with >=2 Tier 1 rule hits.
+    overlap = tier1_record_overlap.copy()
+    review_mask = (
+        overlap["source_project"].eq("dirty_4581")
+        & overlap["tier1_hit_count"].ge(2)
+    )
+    review = overlap.loc[review_mask].copy()
+
+    # Step 2: Determine whether the combo includes a logic-based rule
+    #         (R8 = branching contradiction, R9 = impossible demographics).
+    logic_rules = {"rule_R8", "rule_R9"}
+    available_logic = list(logic_rules & set(review.columns))
+    review["has_logic_rule"] = review[available_logic].any(axis=1)
+
+    # Step 3: Pull in the overall tier and suspicion count.
+    # All records with >=2 Tier 1 hits are tier=1 by construction (any of
+    # R1/R2/R5/R8/R9 fired makes the record Tier 1). For suspicion_rule_count,
+    # merge via project_id + record_id because tier1_record_overlap uses a
+    # reset RangeIndex that does not match the rules frame's composite index.
+    review["tier"] = 1
+    if "suspicion_rule_count" in rules.columns:
+        suspicion_lookup = pd.DataFrame({
+            "project_id": features["project_id"],
+            "record_id": features["record_id"].astype(str),
+            "suspicion_rule_count": rules["suspicion_rule_count"],
+        })
+        review = review.merge(
+            suspicion_lookup,
+            on=["project_id", "record_id"],
+            how="left",
+            suffixes=("", "_lookup"),
+        )
+        if "suspicion_rule_count_lookup" in review.columns:
+            review["suspicion_rule_count"] = review["suspicion_rule_count_lookup"]
+            review.drop(columns=["suspicion_rule_count_lookup"], inplace=True)
+
+    # Step 4: Assign the policy action and gift-card eligibility based on
+    #         the decision table logic.
+    def _assign_action(row: pd.Series) -> tuple[str, str]:
+        hit_count = int(row["tier1_hit_count"])
+        has_logic = bool(row["has_logic_rule"])
+        if hit_count >= 3:
+            return "auto_exclude", "no"
+        if hit_count == 2 and has_logic:
+            return "auto_exclude", "no"
+        if hit_count == 2 and not has_logic:
+            return "review_queue", "pending_review"
+        return "conditional_pass", "yes_unless_override"
+
+    actions = review.apply(_assign_action, axis=1, result_type="expand")
+    actions.columns = ["policy_action", "gift_card_eligible"]
+    review = pd.concat([review, actions], axis=1)
+
+    # Step 5: Add empty adjudication columns for manual fill-in.
+    review["adjudication_decision"] = ""
+    review["adjudication_notes"] = ""
+    review["adjudicator"] = ""
+
+    # Step 6: Select and order the final columns for a clean, printable CSV.
+    output_columns = [
+        "record_id",
+        "tier",
+        "tier1_hit_count",
+        "tier1_rule_combo",
+        "has_logic_rule",
+        "suspicion_rule_count",
+        "policy_action",
+        "gift_card_eligible",
+        "adjudication_decision",
+        "adjudication_notes",
+        "adjudicator",
+    ]
+    available_output = [col for col in output_columns if col in review.columns]
+    review = (
+        review[available_output]
+        .sort_values(
+            ["tier1_hit_count", "has_logic_rule", "record_id"],
+            ascending=[False, False, True],
+        )
+        .reset_index(drop=True)
+    )
+    return review
+
+
 def _export_tables(
     project_dir: Path,
     tables: dict[str, pd.DataFrame],
@@ -4235,6 +4590,14 @@ def run_upgrade(project_dir: Path) -> dict:
     )
     latent_quality = _aggregate_latent_quality(posterior_table, latent_context)
     color_accessibility = _color_accessibility_table(config)
+    # Step: Build the bot declaration policy decision table and the focused
+    #       review CSV for dirty_4581 manual adjudication.
+    bot_policy = _bot_declaration_policy_table(
+        rules, features, tier1_record_overlap
+    )
+    review_queue = _dirty4581_review_queue(
+        features, rules, tier1_record_overlap, bot_policy
+    )
     chart_map = generate_upgrade_figures(
         project_dir=project_dir,
         bundle=bundle,
@@ -4245,6 +4608,7 @@ def run_upgrade(project_dir: Path) -> dict:
         detector_importance=detector_importance,
         detector_context=detector_context,
         demographic_signal_enrichment=demographic_signal_enrichment,
+        tier1_record_overlap=tier1_record_overlap,
         sensitivity=sensitivity,
         logistic_table=logistic_table,
         fits=fits,
@@ -4304,6 +4668,8 @@ def run_upgrade(project_dir: Path) -> dict:
         "table_36_tier1_record_overlap.csv": tier1_record_overlap,
         "table_36b_tier1_rule_combo_summary.csv": tier1_combo_summary,
         "table_36c_tier1_project_summary.csv": tier1_project_summary,
+        "table_37_bot_declaration_policy.csv": bot_policy,
+        "table_38_dirty4581_review_queue.csv": review_queue,
     }
     manifest = _export_tables(
         project_dir, tables, record_flags.reset_index(drop=True), chart_map
@@ -4347,6 +4713,8 @@ def run_upgrade(project_dir: Path) -> dict:
         "tier1_record_overlap": tier1_record_overlap,
         "tier1_combo_summary": tier1_combo_summary,
         "tier1_project_summary": tier1_project_summary,
+        "bot_policy": bot_policy,
+        "review_queue": review_queue,
         "detector_context": detector_context,
         "latent_context": latent_context,
     }

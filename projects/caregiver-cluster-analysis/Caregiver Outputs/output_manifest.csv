@@ -1,34 +1,36 @@
 file,rows,columns,sha256_12,caption
-figure_10_behavioral_feature_space.pdf,,,d5f3cde141e9,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment."
-figure_10_behavioral_feature_space.png,,,c0cc4546c35d,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment."
+figure_10_behavioral_feature_space.pdf,,,dcfe887e7bdd,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment."
+figure_10_behavioral_feature_space.png,,,1e94eb35a1c9,"Behavioral features only for all 1,956 records; no screening, knowledge, values, or demographic outcomes enter the embeddings or tier assignment."
 figure_11_detector_scores_and_agreement.pdf,,,d9b44714c082,"All 1,956 records. Cuts are the clean Tier-4 95th percentiles. The prior lab LightGBM artifact was unavailable, so the PU two-sample classifier is shown instead."
-figure_11_detector_scores_and_agreement.png,,,79c59c33cf2e,"All 1,956 records. Cuts are the clean Tier-4 95th percentiles. The prior lab LightGBM artifact was unavailable, so the PU two-sample classifier is shown instead."
+figure_11_detector_scores_and_agreement.png,,,228dd09a629a,"All 1,956 records. Cuts are the clean Tier-4 95th percentiles. The prior lab LightGBM artifact was unavailable, so the PU two-sample classifier is shown instead."
 figure_11b_pu_feature_importance.pdf,,,baab986d90e5,Gradient-boosted 4797-versus-4581 classifier on behavioral features only (SHAP status: computed). Importance is not proof of fraud.
-figure_11b_pu_feature_importance.png,,,5d530e0872e7,Gradient-boosted 4797-versus-4581 classifier on behavioral features only (SHAP status: computed). Importance is not proof of fraud.
+figure_11b_pu_feature_importance.png,,,ccfb9be36f04,Gradient-boosted 4797-versus-4581 classifier on behavioral features only (SHAP status: computed). Importance is not proof of fraud.
 figure_12_tfa_clustermap.pdf,,,7bd96c8872d9,Pooled sensitivity definition; n=177 clusterable records. Ten TFA domains are standardized exactly once; all outcomes are held out.
-figure_12_tfa_clustermap.png,,,33a5d8605300,Pooled sensitivity definition; n=177 clusterable records. Ten TFA domains are standardized exactly once; all outcomes are held out.
+figure_12_tfa_clustermap.png,,,36bbdcade67f,Pooled sensitivity definition; n=177 clusterable records. Ten TFA domains are standardized exactly once; all outcomes are held out.
 figure_13_tfa_pca_biplot.pdf,,,0a6a68153c34,"4797 status-quo clusterable cohort, n=131. The centroid is valid in linear PCA space; screening, knowledge, values, and demographics are held out."
-figure_13_tfa_pca_biplot.png,,,483193324d86,"4797 status-quo clusterable cohort, n=131. The centroid is valid in linear PCA space; screening, knowledge, values, and demographics are held out."
-figure_14_umap_tsne_sensitivity.pdf,,,e1834cfe4258,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out."
-figure_14_umap_tsne_sensitivity.png,,,45dba7b4ff69,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out."
-figure_15_consensus_matrix.pdf,,,f368b96b9604,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out."
-figure_15_consensus_matrix.png,,,940aadd1e9fb,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out."
+figure_13_tfa_pca_biplot.png,,,bcbf9afd5bff,"4797 status-quo clusterable cohort, n=131. The centroid is valid in linear PCA space; screening, knowledge, values, and demographics are held out."
+figure_14_umap_tsne_sensitivity.pdf,,,f93207bdb4b5,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out."
+figure_14_umap_tsne_sensitivity.png,,,897a44d17690,"4797 status-quo clusterable cohort, n=131. The actual medoid, not an invalid transformed-space centroid, is marked in t-SNE panels; outcomes are held out."
+figure_15_consensus_matrix.pdf,,,e6d6bc9940d8,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out."
+figure_15_consensus_matrix.png,,,58ff326f0cd5,"4797 status-quo clusterable cohort, n=131; 1000 seeded bootstrap fits. Outcomes are held out."
 figure_16_case_silhouette.pdf,,,bd2f72e88fe6,"4797 status-quo clusterable cohort, n=131. Negative values remain visible; screening, knowledge, values, and demographics are held out."
-figure_16_case_silhouette.png,,,25c64fba563d,"4797 status-quo clusterable cohort, n=131. Negative values remain visible; screening, knowledge, values, and demographics are held out."
+figure_16_case_silhouette.png,,,8a961e5b013f,"4797 status-quo clusterable cohort, n=131. Negative values remain visible; screening, knowledge, values, and demographics are held out."
 figure_17_tfa_domain_distributions.pdf,,,322f557ed847,"4797 status-quo clusterable cohort, n=131. Violin and box summaries show full distribution shape; outcomes are held out."
-figure_17_tfa_domain_distributions.png,,,f59db3ace9c7,"4797 status-quo clusterable cohort, n=131. Violin and box summaries show full distribution shape; outcomes are held out."
+figure_17_tfa_domain_distributions.png,,,95c36d84c62b,"4797 status-quo clusterable cohort, n=131. Violin and box summaries show full distribution shape; outcomes are held out."
 figure_18_logistic_forest.pdf,,,1a93b6aa59b8,"4797 status-quo cluster-assigned records with complete model variables, n=127. Screening is held out of clustering; sparse-data inference uses Firth profile intervals."
-figure_18_logistic_forest.png,,,173c2c826648,"4797 status-quo cluster-assigned records with complete model variables, n=127. Screening is held out of clustering; sparse-data inference uses Firth profile intervals."
+figure_18_logistic_forest.png,,,426b34b665ae,"4797 status-quo cluster-assigned records with complete model variables, n=127. Screening is held out of clustering; sparse-data inference uses Firth profile intervals."
 figure_19_tier_to_cluster_alluvial.pdf,,,a028d75a4187,"4797 status-quo clusterable cohort, n=131. Flows describe filtering sensitivity only; screening and all characterization outcomes are held out."
-figure_19_tier_to_cluster_alluvial.png,,,ee39ec270c11,"4797 status-quo clusterable cohort, n=131. Flows describe filtering sensitivity only; screening and all characterization outcomes are held out."
+figure_19_tier_to_cluster_alluvial.png,,,0c2fd52ebb47,"4797 status-quo clusterable cohort, n=131. Flows describe filtering sensitivity only; screening and all characterization outcomes are held out."
 figure_1_cluster_count_diagnostics.pdf,,,d8740d016c58,
 figure_1_cluster_count_diagnostics.png,,,e13548a81717,
 figure_20_tier_sensitivity.pdf,,,3f21ff42c809,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.
-figure_20_tier_sensitivity.png,,,1916b40b97d2,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.
+figure_20_tier_sensitivity.png,,,44ea9a4478c2,All five pre-specified inclusion definitions; each point uses its cluster-assigned records with valid screening outcomes. Screening remains held out of profile formation.
 figure_21_demographic_signal_enrichment.pdf,,,80773283ffca,"Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; this is anomaly concentration evidence, not a demographic label."
-figure_21_demographic_signal_enrichment.png,,,d7e86910c38c,"Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; this is anomaly concentration evidence, not a demographic label."
+figure_21_demographic_signal_enrichment.png,,,5e35f9e43cb4,"Concentration audit for demo_maternalrace___1 subgroup within dirty_4581. Shows co-enrichment against deterministic trust tiers/rules and exact-test p-values; this is anomaly concentration evidence, not a demographic label."
+figure_22_tier1_overlap_heatmap.pdf,,,6314db6b92a6,"Pairwise co-occurrence of the five Tier 1 rules (R1, R2, R5, R8, R9) among dirty_4581 records (n=1,779). Diagonal = single-rule hit count; off-diagonal = how often two rules co-fire on the same record."
+figure_22_tier1_overlap_heatmap.png,,,2853906d62fa,"Pairwise co-occurrence of the five Tier 1 rules (R1, R2, R5, R8, R9) among dirty_4581 records (n=1,779). Diagonal = single-rule hit count; off-diagonal = how often two rules co-fire on the same record."
 figure_2_primary_cluster_profiles.pdf,,,d9ea69b7e353,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out."
-figure_2_primary_cluster_profiles.png,,,5c493a01c681,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out."
+figure_2_primary_cluster_profiles.png,,,494079ea495c,"4797 status-quo clusterable cohort, n=131; 500 bootstrap repeats. Dashed ticks are overall domain means; outcomes are held out."
 figure_3_screening_outcome.pdf,,,9b9e1c497db3,
 figure_3_screening_outcome.png,,,f69ffed7d36c,
 figure_4_autism_knowledge.pdf,,,4377f09f126c,
@@ -38,14 +40,14 @@ figure_5_values_characterization.png,,,932b14b46923,
 figure_6_demographic_characterization.pdf,,,374c3f23ea82,
 figure_6_demographic_characterization.png,,,96892febe6bc,
 figure_7_timing_ecdf.pdf,,,4576cb0c8ac0,"Completed timing blocks only; 4797 is the human reference and 4581 is unverified. Screening, knowledge, values, and demographics are held out of clustering."
-figure_7_timing_ecdf.png,,,241e976dcac1,"Completed timing blocks only; 4797 is the human reference and 4581 is unverified. Screening, knowledge, values, and demographics are held out of clustering."
-figure_8_response_fingerprint_heatmap.pdf,,,78df3dd93a13,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.
-figure_8_response_fingerprint_heatmap.png,,,8de59718be36,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.
-figure_9_rule_cooccurrence.pdf,,,1b7532e504b7,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule."
-figure_9_rule_cooccurrence.png,,,243115c5a392,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule."
+figure_7_timing_ecdf.png,,,0176962482da,"Completed timing blocks only; 4797 is the human reference and 4581 is unverified. Screening, knowledge, values, and demographics are held out of clustering."
+figure_8_response_fingerprint_heatmap.pdf,,,dc9efc237435,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.
+figure_8_response_fingerprint_heatmap.png,,,27c608a1f81a,Rows with at least 80% of shared Likert items answered; the same zero-centered blue–white–orange scale is used in both panels. Held-out outcomes are excluded.
+figure_9_rule_cooccurrence.pdf,,,35be219803bf,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule."
+figure_9_rule_cooccurrence.png,,,bcf43e631923,"Rules R1–R10 on all 1,956 records; false-positive rates use the 131 completed 4797 caregivers. Outcomes are held out of every fraud rule."
 table_10_sensitivity_checks.csv,4.0,9.0,ce05647b5a24,
 table_11_asd_family_context.csv,9.0,7.0,9e44e30981a3,
-table_12_api_cache_inventory.csv,6.0,8.0,cf69d03e24f0,
+table_12_api_cache_inventory.csv,6.0,8.0,589c48adfb66,
 table_13_field_intersection.csv,328.0,2.0,b4d1a1934c57,
 table_13b_shared_field_range_mismatches.csv,56.0,9.0,c804d82b5e61,
 table_14_fraud_rule_definitions.csv,10.0,4.0,ce6f7a0066b3,
@@ -70,13 +72,15 @@ table_2_data_quality_summary.csv,6.0,3.0,3b0a2f35fee8,
 table_30_decision_summary.csv,5.0,4.0,9bec7b9dc32d,
 table_31_upgrade_data_quality.csv,8.0,4.0,17a13033be70,
 table_32_color_accessibility_check.csv,3.0,5.0,ec216f07e982,
-table_33_figure_map.csv,34.0,3.0,a144d7650691,
+table_33_figure_map.csv,36.0,3.0,a5ac072a323a,
 table_34_branching_logic_audit.csv,44.0,12.0,c8283e984e3e,
 table_35_demographic_signal_summary.csv,3.0,13.0,4801343d9f11,
 table_35b_demographic_signal_enrichment.csv,12.0,12.0,04fc6288f63b,
 table_36_tier1_record_overlap.csv,1956.0,14.0,578d6f9dbe90,
 table_36b_tier1_rule_combo_summary.csv,9.0,5.0,cb5d0fbab838,
 table_36c_tier1_project_summary.csv,2.0,10.0,dd3922bb63e2,
+table_37_bot_declaration_policy.csv,7.0,9.0,730b0472cc96,
+table_38_dirty4581_review_queue.csv,282.0,11.0,d0f86036f796,
 table_3_cluster_diagnostics.csv,5.0,9.0,1517ae00862e,
 table_4_cluster_defining_profiles.csv,10.0,6.0,38f501979b04,
 table_5_screening_outcome.csv,2.0,14.0,76afa5fe3b9c,

@@ -15,7 +15,7 @@ from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
 from pptx.dml.color import RGBColor
 from esd_deck_lib import *
 
-OUTDIR = "/sessions/trusting-cool-heisenberg/mnt/caregiver-cluster-analysis"
+OUTDIR = os.path.dirname(OUT)
 F = lambda n: f"{OUT}/{n}"
 
 # ── ground truth, re-read and asserted (same anchors as the full deck) ────────
@@ -45,7 +45,19 @@ def head2(s, title, sub):
 
 
 from PIL import ImageFont
-_FT = ImageFont.truetype(f"{SK}/assets/fonts/LibreFranklin-Medium.ttf", 200)
+
+for _font_path in [
+    f"{SK}/assets/fonts/LibreFranklin-Medium.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+]:
+    try:
+        _FT = ImageFont.truetype(_font_path, 200)
+        break
+    except Exception:
+        continue
+else:
+    _FT = ImageFont.load_default()
 
 def n_lines(text, width_in, pt):
     """Exact wrapped-line count, measured with the real Libre Franklin metrics."""
@@ -121,7 +133,8 @@ def simple_fig_slide(prs, title, sub, fig, points, src, notes, caut=None):
 # 1. TITLE
 # ═════════════════════════════════════════════════════════════════════════════
 s = blank(prs, bg=DISCOVERY)
-s.shapes.add_picture(PATTERN_BAND, Inches(-0.6), Inches(5.55), width=Inches(14.5), height=Inches(2.4))
+if os.path.exists(PATTERN_BAND):
+    s.shapes.add_picture(PATTERN_BAND, Inches(-0.6), Inches(5.55), width=Inches(14.5), height=Inches(2.4))
 plate(s, M, 0.46, 5.95, 0.92, fill=WHITE, radius=0.28)
 logo_pair(s, M + 0.32, 0.66, 0.46)
 txt(s, M, 2.20, 11.6, 1.6, "Caregiver Screening Attitudes\nand Data Quality",

@@ -21,6 +21,10 @@ def tagged_code(source: str):
     return cell
 
 
+if not NOTEBOOK_PATH.exists():
+    print(f"Target notebook {NOTEBOOK_PATH.name} not found. Skipping integration.")
+    raise SystemExit(0)
+
 notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
 notebook.cells = [
     cell
