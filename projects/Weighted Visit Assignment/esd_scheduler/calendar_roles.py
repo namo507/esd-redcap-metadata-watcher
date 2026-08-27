@@ -14,6 +14,24 @@ Roles are guessed from the calendar's name and can be corrected in
 downgrades a calendar to "unknown", which is inert.
 """
 
+# -------------------------------------------------------------------------
+# STEP 2 OF 9  --  WHAT IS THIS CALENDAR
+#
+#   before  a printed name for every overlaid calendar
+#   here    each name is classified: a person, the lab room, "Offered
+#           Times", a clinician shift, or unrecognised. Polarity is the
+#           thing to get right
+#   after   calendar_import.py, which only attributes the person
+#           calendars
+#
+#   worked example
+#     "Puttock, Lauren"      -> coordinator, time TAKEN
+#     "Offered Times ESD"    -> offered window, time a visit MAY use
+#     "PSYCHOLOGY, ESDI LAB" -> lab room, not a person
+#     reading a positive calendar as busy would rule out exactly the slots
+#     the lab set aside for visits
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

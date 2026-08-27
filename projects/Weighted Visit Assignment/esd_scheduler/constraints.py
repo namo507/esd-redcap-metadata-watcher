@@ -22,6 +22,23 @@ take the whole visit out of the pipeline, so they are checked before any
 candidate is considered.
 """
 
+# -------------------------------------------------------------------------
+# STEP 6 OF 9  --  WHO CAN GO AT ALL
+#
+#   before  everyone on the roster
+#   here    eight hard gates in order, first failure wins. A hard rule is
+#           not something a good score is allowed to argue with
+#   after   engine.py scores whoever survives
+#
+#   worked example
+#     the gates, in order:
+#       1 NDD override   2 assessments   3 in-training buddy   4 solo range
+#       5 closed day      6 availability  7 tech kits          8 capacity
+#     gates 2 and 3 are about the CLINICIAN's seat and are skipped for a
+#     tech: the manual asks the clinician to run the assessments and asks
+#     nothing of the tech
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

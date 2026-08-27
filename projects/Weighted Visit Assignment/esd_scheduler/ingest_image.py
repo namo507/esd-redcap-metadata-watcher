@@ -20,6 +20,22 @@ whatever route it took. Vector extraction is measurement; this is inference,
 and the difference should be visible to whoever is trusting the result.
 """
 
+# -------------------------------------------------------------------------
+# STEP 1 OF 9  --  READ THE FILE (the pixel path)
+#
+#   before  somebody uploaded a screenshot instead of a PDF
+#   here    OpenCV finds the coloured rectangles and measures each one
+#           against the ruled grid. Below 75 pixels per hour it refuses
+#           rather than guessing
+#   after   calendar_roles.py, exactly as for a PDF
+#
+#   worked example
+#     `make ocr-accuracy` scores this against events whose times are known:
+#       132 px/hour   every visible block found, 0.00 min error
+#        63 px/hour   one block found, and it was 135 minutes out -> refused
+#     an event painted over by another calendar is not in the pixels at all
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import os

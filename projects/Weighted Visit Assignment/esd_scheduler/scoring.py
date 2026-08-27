@@ -21,6 +21,23 @@ Two design rules run through all of it:
     what made new coordinators score 1.0 on workload.
 """
 
+# -------------------------------------------------------------------------
+# STEP 7 OF 9  --  HOW GOOD A FIT
+#
+#   before  the candidates that passed every hard gate
+#   here    four criteria, each 0 to 1: continuity, family preference,
+#           burden relief, protocol continuity. Weighted and added
+#   after   ranking.py sorts them and flags the close calls
+#
+#   worked example
+#     S = 0.45*phi + 0.15*omega + 0.30*psi + 0.10*p
+#     family 5901, 9m, Lauren Puttock:
+#       knows the family  0.000 x 0.45 = 0.000
+#       family's choice   0.500 x 0.15 = 0.075
+#       has room          0.665 x 0.30 = 0.200
+#       did the last one  0.000 x 0.10 = 0.000   total 0.275
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import math

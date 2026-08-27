@@ -16,6 +16,22 @@ a due date: those are what the windows were *derived from*, the derivation
 happens here, and a screen that never receives them cannot leak them.
 """
 
+# -------------------------------------------------------------------------
+# STEP 4 OF 9  --  THE STUDY, AS TWO DROPDOWNS
+#
+#   before  redcap.py's cached export
+#   here    one row per participant with the single window that matters,
+#           and every checkpoint for whichever family is chosen
+#   after   the NANO screen renders it; /api/nano/plan puts it on the
+#           board
+#
+#   worked example
+#     206 participants sorted by urgency, not by id:
+#       124 window closed, 36 open now, 44 not open yet
+#     a participant id and a window reach the browser.
+#     a date of birth never does -- the windows are derived here
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 from datetime import date

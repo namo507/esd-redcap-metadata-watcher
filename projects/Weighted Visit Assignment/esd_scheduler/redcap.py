@@ -28,6 +28,24 @@ this adds no dependency -- and a dependency that carries a study token is one
 worth not having.
 """
 
+# -------------------------------------------------------------------------
+# STEP 4 OF 9  --  WHICH FAMILIES, AND WHEN ARE THEY DUE
+#
+#   before  nothing -- this is the other input, and the only external
+#           service used
+#   here    the NANO study's participants and their anchor dates, then
+#           the window for every checkpoint worked out from the protocol
+#           schedule
+#   after   backend/nano.py shapes it for the two dropdowns
+#
+#   worked example
+#     206 enrolled participants: 83 PT, 70 ASIB, 53 TD
+#     REDCap holds no window fields, and should not:
+#       PT, 1m-24m  -> count from the due date
+#       everyone else, and everyone at 36m -> count from the birthday
+#     born 1 Jun, due 1 Jul  ->  1m visit ideal date 1 Aug
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

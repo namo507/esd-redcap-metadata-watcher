@@ -26,6 +26,22 @@ this module deliberately produces a different, weaker type so a day-level
 signal can never be mistaken for a verified free/busy block.
 """
 
+# -------------------------------------------------------------------------
+# STEP 1 OF 9  --  READ THE FILE
+#
+#   before  somebody printed an Outlook work week to PDF and uploaded it
+#   here    PyMuPDF pulls the rectangles, the header legend and the all-
+#           day banners straight out of the file. Nothing is measured, so
+#           the times are exact
+#   after   calendar_roles.py decides what each named calendar means
+#
+#   worked example
+#     a real print, 17-21 Aug 2026:
+#       345 vector drawings, 209 text lines
+#       legend: "Bell, Margaret", "Puttock, Lauren", "Offered Times ESD", ...
+#       one rectangle -> Wed 26 Aug 10:00-12:00, exact to the minute
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

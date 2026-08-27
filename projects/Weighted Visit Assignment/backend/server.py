@@ -10,6 +10,22 @@ Every route is a thin translation of ``backend.session``; no scheduling
 decision is made here.
 """
 
+# -------------------------------------------------------------------------
+# STEP 9 OF 9  --  THE ROUTES
+#
+#   before  session.py holding the answer
+#   here    HTTP: JSON in, JSON out, static files, and a path-traversal
+#           guard. No logic lives here -- a second implementation would
+#           drift from the first
+#   after   the browser
+#
+#   worked example
+#     GET  /api/nano/families   the first dropdown
+#     GET  /api/nano/family     the second, for one participant
+#     POST /api/nano/plan       put it on the board and rank who takes it
+#     POST /api/calendar/upload a print goes in, blocks come out
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import argparse

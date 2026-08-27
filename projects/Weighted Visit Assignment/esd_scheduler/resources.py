@@ -17,6 +17,23 @@ told the holidays*, not *there are none*. The manual gives the rule but not the
 dates, so the board says it cannot check rather than scheduling through them.
 """
 
+# -------------------------------------------------------------------------
+# STEP 6 OF 9  --  THE LAB'S PHYSICAL LIMITS
+#
+#   before  a proposed pair and a slot
+#   here    the things that stop a visit whatever it scores: two NANO
+#           tech kits, Fridays, university holidays, out-of-hours and
+#           which vehicle
+#   after   pairing.py, which will not offer a slot these rules forbid
+#
+#   worked example
+#     Fri 21 Aug 2026  -> closed, lab meetings (overridable)
+#     Thu 26 Nov 2026  -> closed, university holiday (NOT overridable)
+#     two NANO visits at once and no more: there is no third kit
+#     27 USC holidays are on file; an empty list would mean the board
+#     cannot check the rule, not that there are none
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

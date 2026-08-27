@@ -12,6 +12,22 @@ place that decides who may run a visit. Saying it in two places is how the two
 end up disagreeing.
 """
 
+# -------------------------------------------------------------------------
+# STEP 5 OF 9  --  WHO EXISTS
+#
+#   before  a visit that needs staffing
+#   here    the roster as data: roles, the manual's solo range, van
+#           training, and the name each document uses for the same person
+#   after   constraints.py asks whether each of them may go
+#
+#   worked example
+#     the export prints "Soto, Morgan"; the manual says "Makenzie"
+#       one person, one row, both names resolve to C05
+#     they were two rows once, and the same human held competencies under
+#     one name and none under the other
+#     active: false takes somebody out of scheduling without deleting them
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

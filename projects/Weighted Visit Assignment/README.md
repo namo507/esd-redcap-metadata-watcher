@@ -1,5 +1,7 @@
 # ESD Weighted Visit Assignment
 
+**Start with [WORKFLOW.md](WORKFLOW.md)** if you are trying to follow one visit from a printed calendar to two named people. It is the whole path in one page, and every file on that path carries a banner saying what runs before it and what runs after.
+
 Fair and efficient assignment of coordinators to home visits, for the NICO and
 NANO protocols. Three-layer policy, four-criterion score, and a full audit trail
 so the weights can be validated rather than asserted.

@@ -23,6 +23,22 @@ to 1, so setting one rescales the other three in proportion. The catalogue
 says so on the control, and the response reports where the other three landed.
 """
 
+# -------------------------------------------------------------------------
+# STEP 9 OF 9  --  THE KNOBS
+#
+#   before  a config file somebody may want to change
+#   here    every tunable, its current value and the values it accepts.
+#           Applying one rewrites the file and reloads it without
+#           resetting the board
+#   after   the tuning dropdowns under How it decides
+#
+#   worked example
+#     setting continuity to 0.70 rescales the other three:
+#       0.700 + 0.164 + 0.082 + 0.055 = 1.000
+#     the weights must sum to 1, so setting one moves the rest, and the
+#     response says where all four landed
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

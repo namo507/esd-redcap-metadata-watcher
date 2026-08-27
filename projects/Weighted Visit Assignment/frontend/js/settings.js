@@ -17,6 +17,22 @@
      controls.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN F  --  CHANGE THE NUMBERS
+  
+     before  /api/settings listed every knob and its allowed values
+     here    the tuning dropdowns. This file knows no setting's name --
+             the catalogue carries its own labels, so a knob added on the
+             server appears here with no change
+     after   a change redraws every section from the board's answer
+  
+     worked example
+       groups start closed: somebody after one number should meet three
+         headings, not eighteen controls
+       setting a weight rescales the other three, so the page redraws from
+         the response rather than patching the control that was touched
+   ----------------------------------------------------------------------- */
+
 function drawSettings() {
   const card = $("settings-card");
   if (!card) return;

@@ -29,6 +29,22 @@ Selected by ``image_reader`` in config/lab-resources.json, or from the board's
 tuning controls. The default stays "classical".
 """
 
+# -------------------------------------------------------------------------
+# STEP 1 OF 9  --  READ THE FILE (optional second pass)
+#
+#   before  ingest_image.py measured every block's position
+#   here    tesseract's LSTM reads each block's own text and prefers a
+#           time the event prints over a time measured off pixels. Off by
+#           default
+#   after   calendar_roles.py, with the corrected times
+#
+#   worked example
+#     on the lab's own prints it read text in 14 blocks and corrected 0:
+#       Outlook's work-week view prints the title, not the time
+#     so it is selected by config and left off. It cannot lose a block --
+#     it only ever overwrites a time already read
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import re

@@ -8,6 +8,22 @@ Nothing here invents scheduling logic. Every judgement comes from
 ``esd_scheduler``; this module only decides what the screen needs to see.
 """
 
+# -------------------------------------------------------------------------
+# STEP 9 OF 9  --  ONE BOARD, ONE ANSWER
+#
+#   before  everything above, as separate pieces
+#   here    holds the live state and translates engine output into what a
+#           screen needs. Every route goes through here, so both paths
+#           agree
+#   after   server.py serves it; the audit store records what was decided
+#
+#   worked example
+#     the same visit asked twice must answer twice the same:
+#       /api/visit  and  /api/assign  share one eligible pool
+#     when only the screen applied the gates, the board showed somebody as
+#     ineligible and then accepted an assignment to them
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import os

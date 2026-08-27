@@ -26,6 +26,22 @@ constraints and the special rules. No name and no assessment appears in a
 conditional in this file.
 """
 
+# -------------------------------------------------------------------------
+# STEP 6 OF 9  --  WHO CAN GO, PER SEAT
+#
+#   before  the visit profile and the roster
+#   here    the same question as constraints.py, answered per seat and
+#           per rule so the screen can say which rule stopped somebody
+#   after   pairing.py, which needs to know who may take which seat
+#
+#   worked example
+#     Margaret Bell, 9m visit:
+#       role ok, solo_range ok, assessments FAIL (no Bayley 9-12m)
+#       -> cannot be the clinician, CAN be the tech
+#     being signed off on an assessment and being able to run the visit are
+#     separate questions, and the board asks both
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import json

@@ -21,6 +21,23 @@ flagged as unverified, because the chart not covering a visit is not the same
 as anybody being allowed to run it.
 """
 
+# -------------------------------------------------------------------------
+# STEP 8 OF 9  --  TWO PEOPLE AND A SLOT
+#
+#   before  a scored list of individuals
+#   here    the manual staffs a visit with one clinician and one tech, so
+#           the pair is the thing being chosen. Finds a slot both can
+#           make
+#   after   session.py hands the ranked pairs to the screen
+#
+#   worked example
+#     family 5901, 9m, window 25 Jul - 5 Sep:
+#       Lauren Puttock + Sanjana Oak    0.263   Mon 9:00 AM   best match
+#       Lauren Puttock + Margaret Bell  0.201   Wed 9:00 AM
+#     the slot chooser honours Fridays, in-lab days and university holidays
+#     itself, because it picks its own slot rather than using a gate's
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

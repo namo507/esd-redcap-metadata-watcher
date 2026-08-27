@@ -182,6 +182,86 @@ def test_the_pipeline_check_still_holds_every_seam():
     expect("every seam held" in out, "the run did not reach its own conclusion")
 
 
+def test_every_main_path_file_says_where_it_sits():
+    """A file that explains itself but not its position is hard to audit.
+
+    Tracing one visit used to mean opening twelve files and inferring the
+    order from the imports. Each file on the main path now carries a banner
+    naming what runs before it and what runs after, so the path can be walked
+    from any point in it.
+
+    The check is that the banner exists and names a file that exists -- a
+    pointer to a module somebody deleted is worse than no pointer, because it
+    reads as authoritative.
+    """
+    import re
+
+    banded = {
+        "esd_scheduler": ["ingest_outlook_pdf.py", "ingest_image.py",
+                          "calendar_roles.py", "calendar_import.py",
+                          "redcap.py", "schedule.py", "roster.py",
+                          "constraints.py", "eligibility.py", "resources.py",
+                          "scoring.py", "pairing.py"],
+        "backend": ["session.py", "server.py", "nano.py", "settings.py"],
+    }
+    for folder, names in banded.items():
+        for name in names:
+            text = read(folder, name)
+            head = text[:4000]
+            expect("# STEP " in head,
+                   f"{folder}/{name} has no pipeline banner, so nothing in it "
+                   f"says what runs before or after it")
+            for label in ("before", "here", "after", "worked example"):
+                expect(label in head,
+                       f"{folder}/{name}'s banner has no {label!r} line")
+            # Any .py it points at has to be real.
+            for referenced in set(re.findall(r"\b([a-z_]+\.py)\b", head)):
+                exists = (os.path.exists(os.path.join(ROOT, folder, referenced))
+                          or os.path.exists(os.path.join(ROOT, "backend", referenced))
+                          or os.path.exists(os.path.join(ROOT, "esd_scheduler", referenced)))
+                expect(exists,
+                       f"{folder}/{name} points at {referenced}, which does "
+                       f"not exist")
+
+
+def test_every_screen_file_says_where_it_sits():
+    """The same, for the frontend."""
+    root = os.path.join(ROOT, "frontend", "js")
+    for name in sorted(f for f in os.listdir(root) if f.endswith(".js")):
+        head = read("frontend", "js", name)[:4000]
+        expect("SCREEN " in head,
+               f"frontend/js/{name} has no banner saying which screen it draws")
+        for label in ("before", "here", "after", "worked example"):
+            expect(label in head,
+                   f"frontend/js/{name}'s banner has no {label!r} line")
+
+
+def test_the_workflow_map_names_files_that_exist():
+    """WORKFLOW.md is the one place the whole path is written down.
+
+    A map is worth having only while it is true, and this one names modules
+    by path. If somebody renames a module and not the map, the map sends the
+    next person to a file that is not there.
+    """
+    import re
+
+    text = read("WORKFLOW.md")
+    referenced = set(re.findall(r"`([a-z_]+/[a-z_]+\.(?:py|js))`", text))
+    referenced |= {f"frontend/js/{m}" for m in
+                   re.findall(r"`([a-z_]+\.js)`", text)}
+    expect(referenced, "WORKFLOW.md names no files at all")
+    missing = sorted(r for r in referenced
+                     if not os.path.exists(os.path.join(ROOT, r)))
+    expect(not missing, f"WORKFLOW.md points at files that do not exist: {missing}")
+
+    # And every make target it tells somebody to run.
+    makefile = read("Makefile")
+    for target in re.findall(r"^make ([a-z-]+)", text, re.M):
+        expect(f"\n{target}:" in makefile,
+               f"WORKFLOW.md says to run `make {target}`, which the Makefile "
+               f"does not define")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

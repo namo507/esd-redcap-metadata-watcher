@@ -3,6 +3,20 @@
    Picking a visit and staffing it with a clinician and a tech.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN D  --  THE QUEUE AND THE DECISION
+  
+     before  a visit exists, from the queue or from the NANO screen
+     here    draws the visit queue, the visit's own facts, and the assign
+             action. The ranked answer itself is drawn by mindmap.js
+     after   mindmap.js opens the reasoning one level at a time
+  
+     worked example
+       selectVisit() -> /api/visit -> drawDetail()
+       choosing anyone other than the best match records a reason,
+       which is what separates 'the data was wrong' from 'I disagreed'
+   ----------------------------------------------------------------------- */
+
 function visibleQueue() {
   const q = S.search.trim().toLowerCase();
   return S.board.queue.filter((v) => {

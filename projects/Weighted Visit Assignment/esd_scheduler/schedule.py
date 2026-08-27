@@ -15,6 +15,22 @@ Two rules keep it honest:
   the study team confirms them, every derived date says so.
 """
 
+# -------------------------------------------------------------------------
+# STEP 4 OF 9  --  THE PROTOCOL CLOCK
+#
+#   before  a family's anchor dates
+#   here    the manual's checkpoint table: how many months after the
+#           anchor, how wide the window is, how long the visit runs, and
+#           whether anyone attends
+#   after   session.py puts the visit on the board
+#
+#   worked example
+#     9m NANO: 9 months after the anchor, 42 days either side, 2 hours
+#     24m NANO: remote. The manual says the lab does not see the family,
+#       so no staff are offered, no vehicle and no tech kit
+#     36m: on the third birthday, whatever the participant's status
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import calendar as _calendar

@@ -3,6 +3,20 @@
    The decision map: how a calendar becomes two named people.
 */
 
+/* -----------------------------------------------------------------------
+   SCREEN F  --  SHOW THE WORKINGS
+  
+     before  a decision exists
+     here    the pipeline as a diagram, and the arithmetic behind the top
+             choice
+     after   settings.js, below it, lets the numbers be changed
+  
+     worked example
+       every step is a button; tapping one shows what it did
+       the worked example is the board's own arithmetic, not a retelling:
+         0.000 + 0.075 + 0.200 + 0.000 = 0.275
+   ----------------------------------------------------------------------- */
+
 const LOGIC_NODES = [
   { id: "upload", art: "assets/icons/upload.png",   x: 20,  y: 16,  w: 250, h: 62, title: "Upload a calendar",
     sub: "Outlook PDF or image", icon: "\u2601" },

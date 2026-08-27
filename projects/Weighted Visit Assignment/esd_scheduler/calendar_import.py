@@ -21,6 +21,21 @@ guessed attribution is worse than an absent one: it moves the wrong person's
 workload.
 """
 
+# -------------------------------------------------------------------------
+# STEP 3 OF 9  --  WHOSE TIME IS THIS
+#
+#   before  rectangles, a legend, and a role for each calendar
+#   here    the legend maps each colour to a person; anything it cannot
+#           name is reported rather than guessed. Blocks become busy time
+#   after   session.py applies the confirmed blocks to the board
+#
+#   worked example
+#     from the combined print of 26 Aug:
+#       10 overlaid calendars, 0 needing a human to identify
+#       Bell 13 blocks, Oak 9, Puttock 10, Soto 20, Tous 6  = 58
+#       Lucas-Mariano recognised, not attributed: he is active: false
+# -------------------------------------------------------------------------
+
 from __future__ import annotations
 
 import hashlib
