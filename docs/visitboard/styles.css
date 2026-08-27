@@ -918,7 +918,10 @@ body.is-scrolled .hero-sub { display: none; }
 .mm-tag.is-warn { background: var(--state-warn-bg); color: var(--ink-on-yellow); }
 .mm-none { color: var(--muted); font-size: .88rem; max-width: 20rem; padding: .5rem 0; }
 
-.mm-detailcol { flex: 1 1 14rem; min-width: 13rem; max-width: 25rem; }
+/* Wide enough that the score bars and the assign button are legible. It is
+   the last column, so when four do not fit this is the one that overflows --
+   and the container scrolls, with the leaf handler bringing it into view. */
+.mm-detailcol { flex: 0 0 17rem; min-width: 17rem; max-width: 25rem; }
 .mm-detail {
   border: 1px solid var(--line); border-left: 3px solid var(--esd-discovery-blue);
   border-radius: 12px; padding: .9rem 1rem; background: var(--bg);
