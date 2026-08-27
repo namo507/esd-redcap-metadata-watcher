@@ -1,8 +1,8 @@
-tier,tier_label,tier1_hit_count_range,suspicion_rule_count_range,rule_mix_requirement,action,gift_card_eligible,rationale,dirty_4581_n
-1,Confirmed invalid,>=3,any,any combination of R1/R2/R5/R8/R9,auto_exclude,no,Three or more independent hard-evidence rules co-fired. False-positive probability is negligible at this overlap level.,3
-1,Confirmed invalid,2,any,must include R8 or R9 (logic-based),auto_exclude,no,"Two Tier 1 hits with at least one logic impossibility (R8: branching contradiction, R9: impossible demographics). Logic rules have zero false-positive tolerance.",3
-1,Confirmed invalid,2,any,"timing-only (R1+R2, R1+R5, R2+R5)",review_queue,pending_review,Two timing/fingerprint rules co-fired but no logic impossibility. R1 and R2 co-fire frequently (276 records). Could be very fast but legitimate respondents. Manual review required before exclusion.,276
-1,Confirmed invalid,1,any,single hit (any of R1/R2/R5/R8/R9),conditional_pass,yes_unless_override,Single Tier 1 rule alone does not justify auto-exclusion. The record enters the trust screen but retains gift-card eligibility unless a supervisor flags it during batch review.,207
-2,High suspicion,0,>=2,"none (no Tier 1 rules, multiple soft signals)",review_queue,pending_review,"Multiple soft-evidence rules co-fired (fast instruments, straightlining, burst submissions, near-duplicate text). Pattern is suspicious but not individually conclusive. Hold for batch review.",563
-3,Uncertain,0,1,none (single soft signal),conditional_pass,yes,One soft-evidence rule fired. Insufficient to suspect bot behavior; could be normal variation. Included in analysis with a note in the trust-screen audit trail.,679
-4,Pass,0,0,none,pass,yes,No fraud rules triggered. Record passes all trust checks and is fully eligible for gift-card compensation and inclusion.,223
+source_project,giftcard_decision,records_n,pct_within_project
+clean_4797,auto_eligible,153,86.4406779661017
+clean_4797,eligible_low_risk_review,19,10.734463276836157
+clean_4797,manual_review,5,2.824858757062147
+dirty_4581,manual_review,1043,58.62844294547499
+dirty_4581,eligible_low_risk_review,660,37.09949409780776
+dirty_4581,auto_eligible,70,3.934794828555368
+dirty_4581,do_not_pay_pending_adjudication,6,0.33726812816188867
