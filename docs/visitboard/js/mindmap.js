@@ -314,6 +314,17 @@ function bindMindmap() {
       const id = b.dataset.mmLeaf;
       S.mm.leaf = S.mm.leaf === id ? null : id;
       drawDetail();
+      /* Opening a leaf adds a fourth column, and four do not fit the card at
+         most widths -- the detail is the one that ends up half off the right
+         edge, taking the assign button with it. The columns scroll sideways
+         by design, so bring the thing that was just opened into view rather
+         than leaving somebody to discover the scrollbar. */
+      const tree = $("mindmap");
+      const detail = tree && tree.querySelector(".mm-detailcol");
+      if (detail) {
+        detail.scrollIntoView({ inline: "end", block: "nearest",
+                                behavior: "smooth" });
+      }
     }));
   const rootBtn = root.querySelector("[data-mm-root]");
   if (rootBtn) rootBtn.addEventListener("click", () => { resetMindmap(); drawDetail(); });
