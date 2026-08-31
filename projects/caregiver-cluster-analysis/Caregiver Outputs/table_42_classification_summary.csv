@@ -1,0 +1,9 @@
+Classification,Project,Count,% of Project
+Real Caregiver (send gift card),Verified (4797),153,86.4
+Real Caregiver (send gift card),Legacy (4581),70,3.9
+Likely Real (approve for gift card),Verified (4797),19,10.7
+Likely Real (approve for gift card),Legacy (4581),660,37.1
+Needs Review (hold gift card),Verified (4797),5,2.8
+Needs Review (hold gift card),Legacy (4581),1043,58.6
+Confirmed Bot (do not pay),Verified (4797),0,0.0
+Confirmed Bot (do not pay),Legacy (4581),6,0.3

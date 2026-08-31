@@ -1,0 +1,6 @@
+classification,action,clean_4797_n,clean_4797_pct,dirty_4581_n,dirty_4581_pct,total_n,total_pct
+Real Caregivers,Send Gift Card Now,153,86.4%,70,3.9%,223,11.4%
+Likely Real Caregivers,Approve for Gift Card,19,10.7%,660,37.1%,679,34.7%
+Needs Human Review,Hold Pending Adjudication,5,2.8%,1043,58.6%,1048,53.6%
+Confirmed Bots,Withhold Payment / Block,0,0.0%,6,0.3%,6,0.3%
+Total,,177,100.0%,1779,100.0%,1956,100.0%

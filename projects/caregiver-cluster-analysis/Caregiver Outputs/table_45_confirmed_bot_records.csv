@@ -1,0 +1,7 @@
+record_id,project_id,tier_1_rules_fired,soft_rules_fired,total_rules_fired,confirmed_reason
+120,4581,"R1, R2, R8","R3, R4, R6",6/10,Impossibly fast (<11.57 min) + Branching logic contradiction (R8)
+571,4581,"R1, R2, R8","R3, R4, R6",6/10,Impossibly fast (<11.57 min) + Branching logic contradiction (R8)
+1026,4581,"R1, R2, R8","R3, R4, R6",6/10,Impossibly fast (<11.57 min) + Branching logic contradiction (R8)
+182,4581,"R2, R8","R3, R4, R6",5/10,Fast TFA section (<7.85 min) + Branching logic contradiction (R8)
+1774,4581,"R2, R8","R3, R4, R6",5/10,Fast TFA section (<7.85 min) + Branching logic contradiction (R8)
+1678,4581,"R2, R8","R3, R6",4/10,Fast TFA section (<7.85 min) + Branching logic contradiction (R8)

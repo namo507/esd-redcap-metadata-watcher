@@ -1,0 +1,13 @@
+classification,sub_category_reason,rules_fired,clean_4797_n,dirty_4581_n,total_n,recommended_action
+Real Caregiver,Tier 4 - Clean pass,None (0 rules),153,70,223,Immediate disbursement
+Likely Real,Tier 3 - Rapid burst submission only,R6 only,4,641,645,Safe to release
+Likely Real,Tier 3 - Low response variance only,R4 only,10,13,23,Safe to release
+Likely Real,Tier 3 - Single fast instrument section,R3 only,5,6,11,Safe to release
+Needs Review,Tier 1 - Multiple Hard Flags (Timing-only),R1 + R2,0,276,276,Check if genuine fast reader
+Needs Review,Tier 1 - Single Hard Flag: Fast TFA section,R2 only,0,165,165,Check TFA engagement
+Needs Review,Tier 1 - Single Hard Flag: Family logic issue,R8 only,0,38,38,Check branching consistency
+Needs Review,Tier 1 - Single Hard Flag: Fast total survey,R1 only,0,4,4,Check survey duration
+Needs Review,Tier 1 - Single Hard Flag: Demographic flag,R9 only,2,0,2,Check age / ZIP format
+Needs Review,Tier 2 - Multiple soft suspicion flags,>=2 of R3/R4/R6/R7,3,560,563,Batch review soft signals
+Confirmed Bot,Hard logic violation + Speed flags,R1+R2+R8 or R2+R8,0,6,6,Reject and block gift card
+Total,,,177,1779,1956,
