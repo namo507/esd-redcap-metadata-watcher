@@ -74,6 +74,7 @@ python3 -m pytest tests/ -v
 |------|---------|
 | `caregiver_cluster_simple_metrics.ipynb` | **Start here.** The reader-facing summary notebook that runs the full pipeline and displays all results. |
 | `caregiver_analysis_pipeline.py` | The 4,600-line reusable pipeline: API ingestion, trust screen, clustering, modeling, and figure generation. All analysis logic lives here. |
+| `bot_analysis.py` | Stakeholder-facing bot-analysis helpers used by the notebook to generate simplified workflow charts, review tables, and the Excel workbook. |
 | `config.yaml` | Seeds, thresholds, tiers, and modeling configuration. Change parameters here, not in the code. |
 | `requirements.txt` | Pinned Python dependencies. |
 
@@ -85,38 +86,21 @@ python3 -m pytest tests/ -v
 | `cleaned_autism_study_data.csv` | Analysis-ready dataset (direct identifiers blanked). |
 | `InfantAutismScreenin-FullDataset_DATA_2026-01-20_0940.csv` | Clean 4797 fallback CSV (coded). Used as a validated regression reference. |
 | `InfantAutismScreenin-FullDataset_DATA_LABELS_2026-01-20_0940.csv` | Clean 4797 fallback CSV (labeled). |
-| `Analysis questions - Sheet3.csv` | Original analysis questions from the research team. |
 
 ### Generated outputs
 
 | Directory / File | Purpose |
 |------------------|---------|
 | `Caregiver Outputs/` | All generated figures (PNG + PDF) and tables (CSV). See the output guide below. |
+| `Caregiver Outputs/ESD_Bot_Analysis_Stakeholder_Summary.xlsx` | Stakeholder-ready workbook with separate sheets for overview, workflow, all records, cleared-now cases, low-risk approvals, review queue, extreme-fast records, confirmed bots, demographics, and rule definitions. |
 | `Caregiver Outputs/record_flags.parquet` | **Git-ignored.** Row-level audit artifact with per-record rule flags, tier assignments, and detector scores. No PII. |
 | `Caregiver Outputs/output_manifest.csv` | Auto-generated inventory of every output file with row/column counts and SHA-256 hashes. |
 
-### Presentation decks
+### Archived presentation materials
 
 | File | Purpose |
 |------|---------|
-| `ESD_Bot_Detection_Review.pptx / .pdf` | Bot detection methodology review deck. |
-| `ESD_Caregiver_Cluster_Analysis.pptx / .key` | Primary cluster analysis presentation. |
-| `ESD_Caregiver_Cluster_Analysis_10.pptx` | 10-slide condensed version. |
-| `ESD_Caregiver_Cluster_and_Trust_Screen.pptx / .pdf` | Combined cluster + trust screen deck. |
-| `ESD_Caregiver_Findings_Plain_Language.pptx / .pdf` | Plain-language summary for non-technical audiences. |
-| `ESD_Caregiver_Robustness_Update.pptx` | Robustness analysis update deck. |
-| `BOT_DETECTION_SLIDE_UPDATE_2026-08-25.md` | Slide content for the demographic signal addendum. |
-
-### Build scripts (for deck generation)
-
-| File | Purpose |
-|------|---------|
-| `build_deck.py` | Python-pptx script for the full analysis deck. |
-| `build_deck.js` | JavaScript equivalent for the full deck. |
-| `build_deck_10slide.js` | JavaScript script for the 10-slide version. |
-| `build_simple_deck.py` | Simplified deck builder. |
-| `build_notebook.py` | Idempotent notebook integration utility. |
-| `esd_deck_lib.py` | Shared deck construction helpers (brand colors, layout). |
+| `archive/2026-09-03-cleanup/` | Archived slide decks, deck-generation scripts, and older meeting artifacts that are no longer part of the active notebook-first workflow. |
 
 ### Utilities and maintenance
 
@@ -138,6 +122,7 @@ python3 -m pytest tests/ -v
 | File | Purpose |
 |------|---------|
 | `archive/2026-08-27-tier1-implementation/` | Historical prompts and proposals that led to the current tier system. Reference only. |
+| `archive/2026-09-03-cleanup/` | Archived presentation files and retired deck builders moved out of the active project surface. |
 
 ---
 
@@ -215,6 +200,11 @@ Each figure is saved as both 300-DPI PNG and vector PDF.
 | `table_36` / `36b` / `36c` | Tier 1 record overlap / combo summary / project summary |
 | `table_37` | **NEW** — Bot declaration policy decision table |
 | `table_38` | **NEW** — Dirty_4581 review queue (≥2 Tier 1 hits, for manual adjudication) |
+| `table_39` | Dirty_4581 provisional gift-card eligible list |
+| `table_40` / `40b` / `40c` | Final showcase summary / flagged inference panel / Tier 1 combo showcase |
+| `table_41` / `42` | Distinct record classification / stakeholder classification summary |
+| `table_43` / `44` / `45` | Stakeholder master summary / detailed sub-category breakdown / confirmed bot records |
+| `ESD_Bot_Analysis_Stakeholder_Summary.xlsx` | Simplified stakeholder workbook written by the notebook section `A.8`. |
 
 ---
 
