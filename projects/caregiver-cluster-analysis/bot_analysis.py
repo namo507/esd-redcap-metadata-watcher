@@ -8,7 +8,9 @@ caches without duplicating computation logic.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import tempfile
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -16,6 +18,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import yaml
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 
@@ -140,6 +144,73 @@ WORKBOOK_EXPORT_COLUMNS = [
     "Race",
     "Ethnicity",
     "Status-Quo Cluster",
+]
+
+WORKBOOK_GROUP_LABELS: dict[str, str] = {
+    "Cleared for payment now": "Pay now",
+    "Low-risk provisional approval": "Low-risk approval",
+    "Needs human review": "Review",
+    "Confirmed bot / reject": "Do not pay",
+}
+
+WORKBOOK_GROUP_ORDER = [
+    "Pay now",
+    "Low-risk approval",
+    "Review",
+    "Do not pay",
+]
+
+WORKBOOK_GROUP_COLORS: dict[str, str] = {
+    "Pay now": CATEGORY_COLORS["Real Caregivers"],
+    "Low-risk approval": CATEGORY_COLORS["Likely Real Caregivers"],
+    "Review": CATEGORY_COLORS["Needs Human Review"],
+    "Do not pay": CATEGORY_COLORS["Confirmed Bot"],
+}
+
+WORKBOOK_ACTION_LABELS: dict[str, str] = {
+    "Pay now": "Send gift card now",
+    "Low-risk approval": "Approve after quick check",
+    "Review": "Hold for human review",
+    "Do not pay": "Do not pay",
+}
+
+WORKBOOK_REASON_LABELS: dict[str, str] = {
+    "No rule violations": "No issue found",
+    "One soft check only": "One mild signal only",
+    "Single hard-check flag": "One major issue was found",
+    "Multiple hard-check flags": "Multiple major issues were found",
+    "Two or more soft-check flags": "Several milder issues were found",
+    "Hard logic contradiction with speed flags": "Very strong invalid-response pattern",
+}
+
+PAYMENT_READY_COLUMNS = [
+    "Study",
+    "Record ID",
+    "Action group",
+    "Action",
+    "Why included",
+    "Survey time (min)",
+    "Attitudes time (min)",
+    "Gender",
+    "Race",
+    "Ethnicity",
+]
+
+REVIEW_NEEDED_COLUMNS = [
+    "Study",
+    "Record ID",
+    "Action group",
+    "Action",
+    "Why flagged",
+    "Survey too fast",
+    "Attitudes too fast",
+    "Both time limits",
+    "Bursty",
+    "Repeated answers",
+    "Family logic",
+    "Demographic issue",
+    "Survey time (min)",
+    "Attitudes time (min)",
 ]
 
 
@@ -385,10 +456,17 @@ def build_stakeholder_record_view(
     merged["Hard Check Violations"] = merged["tier1_hit_count"].fillna(0).astype(int)
     merged["Soft Check Violations"] = merged["suspicion_rule_count"].fillna(0).astype(int)
     merged["Total Rules Fired"] = merged["total_rules_fired"].fillna(0).astype(int)
+    merged["Full survey too fast"] = _yes_no(merged["rule_R1"])
+    merged["Attitudes section too fast"] = _yes_no(merged["rule_R2"])
+    merged["Broke both time limits"] = _yes_no(merged["rule_R1"] & merged["rule_R2"])
     merged["Duplicate Response Pattern"] = _yes_no(merged["rule_R5"])
     merged["Bursty Submission Timing"] = _yes_no(merged["rule_R6"])
     merged["Branching / Family Logic Issue"] = _yes_no(merged["rule_R8"])
     merged["Impossible Demographics"] = _yes_no(merged["rule_R9"])
+    merged["Repeated answer pattern"] = merged["Duplicate Response Pattern"]
+    merged["Bursty submissions"] = merged["Bursty Submission Timing"]
+    merged["Family answers did not line up"] = merged["Branching / Family Logic Issue"]
+    merged["Demographic answers did not line up"] = merged["Impossible Demographics"]
     merged["Extreme Fast (R1 + R2)"] = _yes_no(merged["rule_R1"] & merged["rule_R2"])
     merged["Status-Quo Cluster"] = merged["cluster_status_quo"].fillna("Not clustered")
     merged["Study"] = merged["source_project"].map(PROJECT_LABELS).fillna(merged["source_project"])
@@ -401,7 +479,21 @@ def build_stakeholder_record_view(
         }
     ).fillna(merged["classification"])
 
-    stakeholder_records = merged[WORKBOOK_EXPORT_COLUMNS + ["Category", "source_project", "classification"]].copy()
+    stakeholder_records = merged[
+        WORKBOOK_EXPORT_COLUMNS
+        + [
+            "Full survey too fast",
+            "Attitudes section too fast",
+            "Broke both time limits",
+            "Repeated answer pattern",
+            "Bursty submissions",
+            "Family answers did not line up",
+            "Demographic answers did not line up",
+            "Category",
+            "source_project",
+            "classification",
+        ]
+    ].copy()
     stakeholder_records["Record ID"] = stakeholder_records["Record ID"].astype(str)
     return stakeholder_records
 
@@ -679,6 +771,243 @@ def build_stakeholder_views(
         "workflow_diagram": format_workflow_pipeline(stakeholder_records),
         "demographic_comparison": build_demographic_comparison(stakeholder_records),
     }
+
+
+def build_compact_workbook_records(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Create a simplified record table for the workbook export."""
+    df = stakeholder_records.copy()
+    df["Action group"] = df["Payment Decision"].map(WORKBOOK_GROUP_LABELS).fillna(
+        df["Payment Decision"]
+    )
+    df["Action"] = df["Action group"].map(WORKBOOK_ACTION_LABELS).fillna(
+        df["Action group"]
+    )
+    short_reason = df["Reason for Bucket"].map(WORKBOOK_REASON_LABELS).fillna(df["Reason for Bucket"])
+    df["Why included"] = short_reason
+    df["Why flagged"] = short_reason
+    df["Survey too fast"] = df["Full survey too fast"]
+    df["Attitudes too fast"] = df["Attitudes section too fast"]
+    df["Both time limits"] = df["Broke both time limits"]
+    df["Bursty"] = df["Bursty submissions"]
+    df["Repeated answers"] = df["Repeated answer pattern"]
+    df["Family logic"] = df["Family answers did not line up"]
+    df["Demographic issue"] = df["Demographic answers did not line up"]
+    df["Survey time (min)"] = df["Total Survey Time (min)"]
+    df["Attitudes time (min)"] = df["Attitudes Section Time (min)"]
+    return df
+
+
+def build_workbook_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Summarize the four stakeholder action groups in plain language."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    total_records = len(compact)
+    rows = []
+    for group in WORKBOOK_GROUP_ORDER:
+        subset = compact.loc[compact["Action group"].eq(group)]
+        rows.append(
+            {
+                "Action group": group,
+                "Records": int(len(subset)),
+                "Share of all responses": f"{len(subset) / total_records * 100:.1f}%",
+                "What to do": WORKBOOK_ACTION_LABELS[group],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_key_metrics(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Return a concise set of meeting-ready metrics."""
+    counts = _workflow_counts(stakeholder_records)
+    total_records = len(stakeholder_records)
+    review_total = int(
+        stakeholder_records["Payment Decision"].isin(
+            ["Needs human review", "Confirmed bot / reject"]
+        ).sum()
+    )
+    rows = [
+        {
+            "Metric": "All responses reviewed",
+            "Value": f"{total_records:,}",
+            "Why it matters": "Both studies combined.",
+        },
+        {
+            "Metric": "Study 2 responses",
+            "Value": f"{counts['study2_total']:,}",
+            "Why it matters": "Main focus of the stakeholder bot review.",
+        },
+        {
+            "Metric": "Need manual review or do not pay",
+            "Value": f"{review_total:,}",
+            "Why it matters": "Highest-priority records for next-step review.",
+        },
+        {
+            "Metric": "Broke both time limits",
+            "Value": f"{counts['extreme_fast']:,}",
+            "Why it matters": "Records under both speed cutoffs.",
+        },
+        {
+            "Metric": "Broke both time limits only",
+            "Value": f"{counts['extreme_fast_only_speed']:,}",
+            "Why it matters": "These 276 had no other major issue flagged.",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def build_workbook_timing_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Summarize Study 2 timing by decision group."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
+
+    rows = []
+    for group in WORKBOOK_GROUP_ORDER:
+        subset = study2.loc[study2["Action group"].eq(group)]
+        total_time = subset["Survey time (min)"].dropna()
+        attitudes_time = subset["Attitudes time (min)"].dropna()
+        rows.append(
+            {
+                "Action group": group,
+                "Study 2 records": int(len(subset)),
+                "Median full survey time": f"{total_time.median():.2f} min" if len(total_time) else "n/a",
+                "Median attitudes time": f"{attitudes_time.median():.2f} min" if len(attitudes_time) else "n/a",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_issue_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Count the most visible Study 2 issues in plain language."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
+    total = len(study2)
+
+    issue_specs = [
+        ("Full survey too fast", "Full survey too fast"),
+        ("Attitudes section too fast", "Attitudes section too fast"),
+        ("Broke both time limits", "Broke both time limits"),
+        ("Bursty submissions", "Bursty submissions"),
+        ("Repeated answer pattern", "Repeated answer pattern"),
+        ("Family answers did not line up", "Family answers did not line up"),
+        ("Demographic answers did not line up", "Demographic answers did not line up"),
+    ]
+
+    rows = []
+    for label, column in issue_specs:
+        count = int(study2[column].eq("Yes").sum())
+        rows.append(
+            {
+                "Issue seen in Study 2": label,
+                "Records": count,
+                "Share of Study 2": f"{count / total * 100:.1f}%",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_decision_guide(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Explain the four workbook decision groups without jargon."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    rows = []
+    for group in WORKBOOK_GROUP_ORDER:
+        count = int(compact["Action group"].eq(group).sum())
+        explanation = {
+            "Pay now": "No problem was found by the screen.",
+            "Low-risk approval": "Only one softer issue was found.",
+            "Review": "A reviewer should check the record before payment.",
+            "Do not pay": "Strongest evidence of invalid participation.",
+        }[group]
+        rows.append(
+            {
+                "Action group": group,
+                "Current records": count,
+                "What it means": explanation,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_workflow_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Condense the workflow into a short stakeholder table."""
+    counts = _workflow_counts(stakeholder_records)
+    rows = [
+        {
+            "Step": "Study 2 responses received",
+            "Count": counts["study2_total"],
+            "What it means": "Starting pool for the main bot review.",
+        },
+        {
+            "Step": "Major issue found",
+            "Count": counts["hard_failed"],
+            "What it means": "At least one strong timing, duplicate, or logic concern.",
+        },
+        {
+            "Step": "Do not pay",
+            "Count": counts["confirmed_bots"],
+            "What it means": "Strongest evidence concentration.",
+        },
+        {
+            "Step": "Manual review",
+            "Count": counts["hard_review"] + counts["soft_review"],
+            "What it means": "Hold for human review before payment.",
+        },
+        {
+            "Step": "Low-risk approval",
+            "Count": counts["low_risk"],
+            "What it means": "One softer issue, but no major issue.",
+        },
+        {
+            "Step": "Pay now",
+            "Count": counts["cleared"],
+            "What it means": "No issue found in Study 2.",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def build_workbook_demographic_snapshot(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Return a small, plain-language demographic comparison table."""
+    demo = build_demographic_comparison(stakeholder_records).copy()
+    demo.columns = [
+        "Demographic signal",
+        "Cleared now (223)",
+        "Review queue (1048)",
+        "Difference",
+    ]
+    return demo
+
+
+def build_payment_ready_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Create the compact payment-ready record sheet."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    payment_ready = compact.loc[
+        compact["Action group"].isin(["Pay now", "Low-risk approval"]),
+        PAYMENT_READY_COLUMNS,
+    ].copy()
+    payment_ready["Action group"] = pd.Categorical(
+        payment_ready["Action group"],
+        categories=["Pay now", "Low-risk approval"],
+        ordered=True,
+    )
+    payment_ready = payment_ready.sort_values(["Action group", "Study", "Record ID"])
+    payment_ready["Action group"] = payment_ready["Action group"].astype(str)
+    return payment_ready
+
+
+def build_review_needed_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Create the compact review-focused record sheet."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    review_needed = compact.loc[
+        compact["Action group"].isin(["Review", "Do not pay"]),
+        REVIEW_NEEDED_COLUMNS,
+    ].copy()
+    review_needed["Action group"] = pd.Categorical(
+        review_needed["Action group"],
+        categories=["Do not pay", "Review"],
+        ordered=True,
+    )
+    review_needed = review_needed.sort_values(["Action group", "Study", "Record ID"])
+    review_needed["Action group"] = review_needed["Action group"].astype(str)
+    return review_needed
 
 
 # ── Plotting functions ──────────────────────────────────────────────────────
@@ -1035,6 +1364,120 @@ def plot_clear_vs_review_demographics(
     return fig
 
 
+def plot_workbook_action_summary(
+    stakeholder_records: pd.DataFrame,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Bar chart of the four decision groups for the workbook dashboard."""
+    summary = build_workbook_action_summary(stakeholder_records)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7.5, 4.8))
+    else:
+        fig = ax.get_figure()
+
+    bars = ax.barh(
+        summary["Action group"],
+        summary["Records"],
+        color=[WORKBOOK_GROUP_COLORS[group] for group in summary["Action group"]],
+        edgecolor="white",
+        linewidth=0.5,
+    )
+    for bar, value in zip(bars, summary["Records"]):
+        ax.text(
+            bar.get_width() + max(summary["Records"]) * 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{int(value):,}",
+            va="center",
+            fontsize=10,
+            fontweight="bold",
+        )
+    ax.set_xlabel("Records")
+    ax.set_title("How the records are grouped")
+    ax.invert_yaxis()
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_workbook_timing_histogram(
+    stakeholder_records: pd.DataFrame,
+    time_col: str,
+    threshold_min: float,
+    title: str,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Histogram of Study 2 timing using workbook-friendly action groups."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
+    study2 = study2.dropna(subset=[time_col])
+    study2 = study2.loc[study2[time_col] <= 120].copy()
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(7.5, 4.8))
+    else:
+        fig = ax.get_figure()
+
+    for group in WORKBOOK_GROUP_ORDER:
+        subset = study2.loc[study2["Action group"].eq(group), time_col].dropna()
+        if len(subset) == 0:
+            continue
+        ax.hist(
+            subset,
+            bins=30,
+            alpha=0.65,
+            label=f"{group} (n={len(subset)})",
+            color=WORKBOOK_GROUP_COLORS[group],
+            edgecolor="white",
+            linewidth=0.3,
+        )
+    ax.axvline(
+        threshold_min,
+        color="#DC2626",
+        linestyle="--",
+        linewidth=2,
+        label=f"Time limit: {threshold_min} min",
+    )
+    ax.set_xlabel("Minutes")
+    ax.set_ylabel("Records")
+    ax.set_title(title)
+    ax.legend(frameon=False, fontsize=8)
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def build_workbook_dashboard_figure(stakeholder_records: pd.DataFrame) -> plt.Figure:
+    """Create one compact dashboard figure with a bar chart and two histograms."""
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5.2))
+    plot_workbook_action_summary(stakeholder_records, ax=axes[0])
+    plot_workbook_timing_histogram(
+        stakeholder_records,
+        time_col="Survey time (min)",
+        threshold_min=11.57,
+        title="Study 2 full survey time",
+        ax=axes[1],
+    )
+    plot_workbook_timing_histogram(
+        stakeholder_records,
+        time_col="Attitudes time (min)",
+        threshold_min=7.85,
+        title="Study 2 attitudes time",
+        ax=axes[2],
+    )
+    fig.suptitle("Stakeholder bot-analysis dashboard", fontsize=16, fontweight="bold", y=1.03)
+    fig.tight_layout()
+    return fig
+
+
+def _save_figure_image(fig: plt.Figure) -> str:
+    """Write a temporary PNG for workbook embedding and close the figure."""
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+        fig.savefig(temp_file.name, dpi=170, bbox_inches="tight", facecolor="white")
+        image_path = temp_file.name
+    plt.close(fig)
+    return image_path
+
+
 # ── Pipeline text diagram ───────────────────────────────────────────────────
 
 WORKFLOW_PIPELINE = """
@@ -1111,17 +1554,42 @@ def _friendly_rename(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=COLUMN_FRIENDLY_NAMES)
 
 
-def _autosize_sheet(worksheet, wrap_text: bool = False) -> None:
+def _autosize_sheet(
+    worksheet,
+    wrap_text: bool = False,
+    freeze_panes: Optional[str] = "A2",
+    apply_filter: bool = True,
+) -> None:
     for column_cells in worksheet.columns:
         column_letter = get_column_letter(column_cells[0].column)
         max_length = max(len(str(cell.value)) if cell.value is not None else 0 for cell in column_cells)
         worksheet.column_dimensions[column_letter].width = min(max(max_length + 2, 12), 42)
-    worksheet.freeze_panes = "A2"
-    worksheet.auto_filter.ref = worksheet.dimensions
+    if freeze_panes:
+        worksheet.freeze_panes = freeze_panes
+    if apply_filter:
+        worksheet.auto_filter.ref = worksheet.dimensions
     if wrap_text:
         for row in worksheet.iter_rows():
             for cell in row:
-                cell.alignment = cell.alignment.copy(wrap_text=True)
+                cell.alignment = Alignment(
+                    horizontal=cell.alignment.horizontal,
+                    vertical=cell.alignment.vertical,
+                    text_rotation=cell.alignment.text_rotation,
+                    wrap_text=True,
+                    shrink_to_fit=cell.alignment.shrink_to_fit,
+                    indent=cell.alignment.indent,
+                )
+
+
+def _style_sheet_heading(worksheet, cell: str, text: str, size: int = 14) -> None:
+    worksheet[cell] = text
+    worksheet[cell].font = Font(size=size, bold=True)
+    worksheet[cell].alignment = Alignment(wrap_text=True)
+
+
+def _style_sheet_note(worksheet, cell: str, text: str) -> None:
+    worksheet[cell] = text
+    worksheet[cell].alignment = Alignment(wrap_text=True)
 
 
 def export_stakeholder_excel(
@@ -1129,80 +1597,93 @@ def export_stakeholder_excel(
     cache_dir: Optional[Path] = None,
     excel_filename: str = "ESD_Bot_Analysis_Stakeholder_Summary.xlsx",
 ) -> Path:
-    """Write a multi-sheet Excel workbook for stakeholder review.
-
-    Sheets:
-        1. Overview — main counts used in meetings
-        2. Workflow Summary — step-by-step Study 2 screening flow
-        3. All Records — stakeholder-friendly record-level export
-        4. Cleared Now — 223 fully cleared records
-        5. Low-Risk Approval — one-soft-flag records
-        6. Needs Review — manual adjudication queue
-        7. Extreme Fast R1R2 — records that broke both timing rules
-        8. Confirmed Bots — the 6 strongest reject cases
-        9. 223 vs 1048 Demo — simple cleared-vs-review comparison
-        10. Rule Guide — plain-English rule definitions
-        11. Pipeline Diagram — text workflow diagram
-    """
+    """Write a compact stakeholder workbook with four action-oriented sheets."""
     views = build_stakeholder_views(output_dir, cache_dir)
-    rules = load_rule_definitions(output_dir)
+    stakeholder_records = views["stakeholder_records"]
+    dashboard_summary = build_workbook_action_summary(stakeholder_records)
+    key_metrics = build_workbook_key_metrics(stakeholder_records)
+    timing_summary = build_workbook_timing_summary(stakeholder_records)
+    review_sheet = build_review_needed_sheet(stakeholder_records)
+    payment_sheet = build_payment_ready_sheet(stakeholder_records)
+    issue_summary = build_workbook_issue_summary(stakeholder_records)
+    decision_guide = build_workbook_decision_guide(stakeholder_records)
+    workflow_summary = build_workbook_workflow_summary(stakeholder_records)
+    demographic_snapshot = build_workbook_demographic_snapshot(stakeholder_records)
 
     excel_path = output_dir / excel_filename
+    temp_images: list[str] = []
 
-    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
-        views["overview_summary"].to_excel(writer, sheet_name="Overview", index=False)
-        views["workflow_summary"].to_excel(writer, sheet_name="Workflow Summary", index=False)
-        views["stakeholder_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="All Records",
-            index=False,
-        )
-        views["cleared_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="Cleared Now",
-            index=False,
-        )
-        views["low_risk_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="Low-Risk Approval",
-            index=False,
-        )
-        views["review_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="Needs Review",
-            index=False,
-        )
-        views["extreme_fast_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="Extreme Fast R1R2",
-            index=False,
-        )
-        views["confirmed_bot_records"][WORKBOOK_EXPORT_COLUMNS].to_excel(
-            writer,
-            sheet_name="Confirmed Bots",
-            index=False,
-        )
-        views["demographic_comparison"].to_excel(writer, sheet_name="223 vs 1048 Demo", index=False)
+    try:
+        with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+            dashboard_summary.to_excel(writer, sheet_name="Summary", index=False, startrow=3, startcol=0)
+            key_metrics.to_excel(writer, sheet_name="Summary", index=False, startrow=3, startcol=6)
+            timing_summary.to_excel(writer, sheet_name="Summary", index=False, startrow=10, startcol=0)
 
-        rules_sheet = rules[["rule", "Friendly Name", "definition", "threshold", "justification"]].copy()
-        rules_sheet.columns = ["Rule ID", "Rule Name", "Description", "Threshold", "Justification"]
-        rules_sheet.to_excel(writer, sheet_name="Rule Guide", index=False)
+            payment_sheet.to_excel(writer, sheet_name="Pay Now", index=False, startrow=2)
+            review_sheet.to_excel(writer, sheet_name="Review Queue", index=False, startrow=2)
 
-        pipeline_df = pd.DataFrame({
-            "Screening Pipeline": views["workflow_diagram"].split("\n")
-        })
-        pipeline_df.to_excel(writer, sheet_name="Pipeline Diagram", index=False)
+            decision_guide.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=3, startcol=0)
+            issue_summary.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=3, startcol=5)
+            workflow_summary.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=12, startcol=0)
+            demographic_snapshot.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=12, startcol=5)
 
-        _autosize_sheet(writer.book["Overview"], wrap_text=True)
-        _autosize_sheet(writer.book["Workflow Summary"], wrap_text=True)
-        _autosize_sheet(writer.book["All Records"])
-        _autosize_sheet(writer.book["Cleared Now"])
-        _autosize_sheet(writer.book["Low-Risk Approval"])
-        _autosize_sheet(writer.book["Needs Review"])
-        _autosize_sheet(writer.book["Extreme Fast R1R2"])
-        _autosize_sheet(writer.book["Confirmed Bots"])
-        _autosize_sheet(writer.book["223 vs 1048 Demo"], wrap_text=True)
-        _autosize_sheet(writer.book["Rule Guide"], wrap_text=True)
-        writer.book["Pipeline Diagram"].column_dimensions["A"].width = 72
+            overview_ws = writer.book["Summary"]
+            _style_sheet_heading(overview_ws, "A1", "ESD Bot Analysis Summary")
+            _style_sheet_note(
+                overview_ws,
+                "A2",
+                "This sheet keeps only the main action counts, timing summaries, and simple charts for stakeholder review.",
+            )
+            _style_sheet_heading(overview_ws, "A3", "Action groups", size=12)
+            _style_sheet_heading(overview_ws, "G3", "Key metrics", size=12)
+            _style_sheet_heading(overview_ws, "A10", "Study 2 timing by action group", size=12)
+
+            methods_ws = writer.book["Screen Guide"]
+            _style_sheet_heading(methods_ws, "A1", "Screen Guide")
+            _style_sheet_note(
+                methods_ws,
+                "A2",
+                "Plain-language guide to the four action groups, the main Study 2 issues, and the simplest workflow and demographic context.",
+            )
+            _style_sheet_heading(methods_ws, "A3", "Action guide", size=12)
+            _style_sheet_heading(methods_ws, "F3", "Most common Study 2 issues", size=12)
+            _style_sheet_heading(methods_ws, "A12", "Workflow summary", size=12)
+            _style_sheet_heading(methods_ws, "F12", "Cleared now vs review queue", size=12)
+
+            payment_ws = writer.book["Pay Now"]
+            _style_sheet_heading(payment_ws, "A1", "Pay Now")
+            _style_sheet_note(
+                payment_ws,
+                "A2",
+                "Use this sheet for records that can be paid now or approved after a quick check.",
+            )
+
+            review_ws = writer.book["Review Queue"]
+            _style_sheet_heading(review_ws, "A1", "Review Queue")
+            _style_sheet_note(
+                review_ws,
+                "A2",
+                "Use this sheet for records that need manual review or should not be paid.",
+            )
+
+            dashboard_image = _save_figure_image(build_workbook_dashboard_figure(stakeholder_records))
+            temp_images.append(dashboard_image)
+            overview_ws.add_image(XLImage(dashboard_image), "A18")
+
+            _autosize_sheet(overview_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
+            _autosize_sheet(payment_ws, wrap_text=True, freeze_panes="A4")
+            _autosize_sheet(review_ws, wrap_text=True, freeze_panes="A4")
+            _autosize_sheet(methods_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
+            overview_ws.column_dimensions["B"].width = 18
+            overview_ws.column_dimensions["C"].width = 18
+            overview_ws.column_dimensions["D"].width = 22
+            methods_ws.column_dimensions["A"].width = 22
+            methods_ws.column_dimensions["F"].width = 28
+            payment_ws.freeze_panes = "A4"
+            review_ws.freeze_panes = "A4"
+    finally:
+        for image_path in temp_images:
+            if os.path.exists(image_path):
+                os.unlink(image_path)
 
     return excel_path
