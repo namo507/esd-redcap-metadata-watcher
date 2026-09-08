@@ -1,4 +1,4 @@
-"""Stakeholder-friendly bot analysis helpers for the caregiver study.
+"""Reader-friendly bot analysis helpers for the caregiver study.
 
 This module provides simple, presentation-ready visualisations, plain-English
 column names, and a multi-sheet Excel export targeted at non-technical reviewers
@@ -75,8 +75,8 @@ CATEGORY_ORDER = [
 
 
 PROJECT_LABELS: dict[str, str] = {
-    "clean_4797": "Study 1 - Verified (4797)",
-    "dirty_4581": "Study 2 - Legacy (4581)",
+    "clean_4797": "Study 1 - verified caregiver sample",
+    "dirty_4581": "Study 2 - online recruitment sample",
 }
 
 PAYMENT_DECISION_LABELS: dict[str, str] = {
@@ -249,6 +249,12 @@ def load_rule_definitions(output_dir: Path) -> pd.DataFrame:
     df["Friendly Name"] = df["rule"].map(
         {k.replace("rule_", ""): v for k, v in RULE_FRIENDLY_NAMES.items()}
     )
+    return df
+
+
+def load_branching_audit(output_dir: Path) -> pd.DataFrame:
+    df = pd.read_csv(output_dir / "table_34_branching_logic_audit.csv")
+    df["record_id"] = df["record_id"].astype(str)
     return df
 
 
@@ -777,6 +783,16 @@ def build_stakeholder_views(
     }
 
 
+def build_notebook_views(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> dict[str, object]:
+    """Notebook-facing alias with neutral naming for reader-visible cells."""
+    views = build_stakeholder_views(output_dir, cache_dir)
+    views["report_records"] = views["stakeholder_records"]
+    return views
+
+
 def build_compact_workbook_records(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
     """Create a simplified record table for the workbook export."""
     df = stakeholder_records.copy()
@@ -858,22 +874,22 @@ def build_workbook_key_metrics(stakeholder_records: pd.DataFrame) -> pd.DataFram
         {
             "Metric": "Study 2 responses",
             "Value": f"{counts['study2_total']:,}",
-            "Why it matters": "Main focus of the stakeholder bot review.",
+            "Why it matters": "Main focus of this notebook.",
         },
         {
-            "Metric": "Need manual review or do not pay",
+            "Metric": "Held for review or do not pay",
             "Value": f"{review_total:,}",
-            "Why it matters": "Highest-priority records for next-step review.",
+            "Why it matters": "Responses that still need a person to decide payment.",
         },
         {
             "Metric": "Broke both time limits",
             "Value": f"{counts['extreme_fast']:,}",
-            "Why it matters": "Records under both speed cutoffs.",
+            "Why it matters": "Responses that were faster than the verified sample on both timing views.",
         },
         {
             "Metric": "Broke both time limits only",
             "Value": f"{counts['extreme_fast_only_speed']:,}",
-            "Why it matters": "These 276 had no other major issue flagged.",
+            "Why it matters": "These responses were below both timing lines without another strong questionnaire mismatch.",
         },
     ]
     return pd.DataFrame(rows)
@@ -973,9 +989,9 @@ def build_workbook_review_signal_summary(stakeholder_records: pd.DataFrame) -> p
             continue
         rows.append(
             {
-                "Signal in Study 2 review queue": label,
+                "Pattern in the Study 2 review pile": label,
                 "Records": count,
-                "Share of review queue (%)": round(count / total * 100, 1) if total else 0.0,
+                "Share of review pile (%)": round(count / total * 100, 1) if total else 0.0,
                 "How to read it": interpretation,
             }
         )
@@ -994,32 +1010,32 @@ def build_workbook_flag_strength_summary(stakeholder_records: pd.DataFrame) -> p
     rows = []
     for label, mask, interpretation in [
         (
-            "Soft-only review",
+            "Timing or arrival only",
             review_queue["Hard Check Violations"].eq(0),
-            "No major issue; these records entered review because softer signals piled up.",
+            "No strong contradiction; these were held because milder timing or arrival patterns piled up.",
         ),
         (
-            "One major issue",
+            "One strong questionnaire concern",
             review_queue["Hard Check Violations"].eq(1),
-            "One strong signal is present, but not enough for an outright rejection.",
+            "One stronger issue is present, but not enough on its own for a do-not-pay decision.",
         ),
         (
-            "Two major issues",
+            "Two strong concerns",
             review_queue["Hard Check Violations"].eq(2),
-            "Two strong signals on the same record; this is the clearest review cluster.",
+            "Two stronger issues show up on the same record; this is the clearest part of the hold pile.",
         ),
         (
-            "Three or more major issues",
+            "Three or more strong concerns",
             review_queue["Hard Check Violations"].ge(3),
-            "Very concentrated concern; this is the most severe tail of the queue.",
+            "Very concentrated concern; this is the strongest end of the hold pile.",
         ),
     ]:
         count = int(mask.sum())
         rows.append(
             {
-                "Flag pattern in Study 2 queue": label,
+                "Pattern inside the Study 2 hold pile": label,
                 "Records": count,
-                "Share of review queue (%)": round(count / total * 100, 1) if total else 0.0,
+                "Share of hold pile (%)": round(count / total * 100, 1) if total else 0.0,
                 "How to read it": interpretation,
             }
         )
@@ -1514,7 +1530,7 @@ def plot_workbook_action_summary(
             fontweight="bold",
         )
     ax.set_xlabel("Records")
-    ax.set_title("How the records are grouped")
+    ax.set_title("How responses were grouped for payment")
     ax.invert_yaxis()
     _apply_stakeholder_style(ax)
     fig.tight_layout()
@@ -1547,7 +1563,7 @@ def plot_workbook_study_action_comparison(
         labels = [f"{int(bar.get_height()):,}" if bar.get_height() > 0 else "" for bar in container]
         ax.bar_label(container, labels=labels, padding=3, fontsize=9)
 
-    ax.set_title("How action groups differ by study")
+    ax.set_title("How payment decisions differ between the two studies")
     ax.set_xlabel("")
     ax.set_ylabel("Records")
     ax.legend(frameon=False, title="")
@@ -1617,13 +1633,13 @@ def plot_workbook_review_signal_summary(
 
     colors = sns.color_palette("blend:#DCEAF2,#1F5A7A", n_colors=len(summary))
     bars = ax.barh(
-        summary["Signal in Study 2 review queue"],
-        summary["Share of review queue (%)"],
+        summary["Pattern in the Study 2 review pile"],
+        summary["Share of review pile (%)"],
         color=colors,
         edgecolor="white",
         linewidth=0.5,
     )
-    for bar, count, pct in zip(bars, summary["Records"], summary["Share of review queue (%)"]):
+    for bar, count, pct in zip(bars, summary["Records"], summary["Share of review pile (%)"]):
         ax.text(
             bar.get_width() + 1,
             bar.get_y() + bar.get_height() / 2,
@@ -1632,9 +1648,9 @@ def plot_workbook_review_signal_summary(
             fontsize=10,
         )
 
-    ax.set_xlabel("Percent of Study 2 review + reject queue")
+    ax.set_xlabel("Percent of the Study 2 hold + do-not-pay pile")
     ax.set_ylabel("")
-    ax.set_title("What shows up most often in the flagged queue")
+    ax.set_title("What shows up most often in the review pile")
     ax.invert_yaxis()
     _apply_stakeholder_style(ax)
     fig.tight_layout()
@@ -1698,12 +1714,7 @@ def plot_workbook_timing_comparison(
         ax.legend(frameon=False, fontsize=9)
         _apply_stakeholder_style(ax)
 
-    fig.suptitle(
-        "Simple timing comparison: payment-ready vs flagged",
-        fontsize=15,
-        fontweight="bold",
-        y=1.03,
-    )
+    fig.suptitle("Simple timing comparison: payment-ready vs held", fontsize=15, fontweight="bold", y=1.03)
     fig.tight_layout()
     return fig
 
@@ -1726,7 +1737,7 @@ def build_workbook_dashboard_figure(stakeholder_records: pd.DataFrame) -> plt.Fi
         title="Study 2 attitudes time",
         ax=axes[2],
     )
-    fig.suptitle("Stakeholder bot-analysis dashboard", fontsize=16, fontweight="bold", y=1.03)
+    fig.suptitle("Caregiver response screen dashboard", fontsize=16, fontweight="bold", y=1.03)
     fig.tight_layout()
     return fig
 
@@ -1857,7 +1868,7 @@ def _style_sheet_note(worksheet, cell: str, text: str) -> None:
 def export_stakeholder_excel(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
-    excel_filename: str = "ESD_Bot_Analysis_Stakeholder_Summary.xlsx",
+    excel_filename: str = "ESD_Bot_Analysis_Simple_Summary.xlsx",
 ) -> Path:
     """Write a compact stakeholder workbook with action-oriented sheets and simple extra views."""
     views = build_stakeholder_views(output_dir, cache_dir)
@@ -1897,22 +1908,22 @@ def export_stakeholder_excel(
             flag_strength_summary.to_excel(writer, sheet_name="Extra Views", index=False, startrow=12, startcol=6)
 
             overview_ws = writer.book["Summary"]
-            _style_sheet_heading(overview_ws, "A1", "ESD Bot Analysis Summary")
+            _style_sheet_heading(overview_ws, "A1", "ESD response screen summary")
             _style_sheet_note(
                 overview_ws,
                 "A2",
-                "This sheet keeps only the main action counts, timing summaries, and simple charts for stakeholder review.",
+                "This sheet keeps the main payment groups, timing summaries, and simple charts in one place.",
             )
             _style_sheet_heading(overview_ws, "A3", "Action groups", size=12)
             _style_sheet_heading(overview_ws, "G3", "Key metrics", size=12)
             _style_sheet_heading(overview_ws, "A10", "Study 2 timing by action group", size=12)
 
             methods_ws = writer.book["Screen Guide"]
-            _style_sheet_heading(methods_ws, "A1", "Screen Guide")
+            _style_sheet_heading(methods_ws, "A1", "How the screen groups responses")
             _style_sheet_note(
                 methods_ws,
                 "A2",
-                "Plain-language guide to the four action groups, the main Study 2 issues, and the simplest workflow and demographic context.",
+                "Plain-language guide to the payment groups, the main Study 2 patterns, and the simplest workflow and demographic context.",
             )
             _style_sheet_heading(methods_ws, "A3", "Action guide", size=12)
             _style_sheet_heading(methods_ws, "F3", "Most common Study 2 issues", size=12)
@@ -1920,15 +1931,15 @@ def export_stakeholder_excel(
             _style_sheet_heading(methods_ws, "F12", "Cleared now vs review queue", size=12)
 
             extra_ws = writer.book["Extra Views"]
-            _style_sheet_heading(extra_ws, "A1", "Extra Stakeholder Views")
+            _style_sheet_heading(extra_ws, "A1", "Extra views")
             _style_sheet_note(
                 extra_ws,
                 "A2",
-                "This sheet mirrors the simplest stakeholder add-ons from the notebook: the study split, the flagged-queue mix, and one simple timing comparison.",
+                "This sheet keeps the study split as a table, then uses charts only for the hold-pile mix and timing comparison.",
             )
             _style_sheet_heading(extra_ws, "A3", "Action groups by study", size=12)
-            _style_sheet_heading(extra_ws, "G3", "What is driving the Study 2 flagged queue", size=12)
-            _style_sheet_heading(extra_ws, "G12", "How severe is the flagged queue", size=12)
+            _style_sheet_heading(extra_ws, "G3", "What is driving the Study 2 hold pile", size=12)
+            _style_sheet_heading(extra_ws, "G12", "How severe is the hold pile", size=12)
 
             payment_ws = writer.book["Pay Now"]
             _style_sheet_heading(payment_ws, "A1", "Pay Now")
@@ -1950,17 +1961,13 @@ def export_stakeholder_excel(
             temp_images.append(dashboard_image)
             overview_ws.add_image(XLImage(dashboard_image), "A18")
 
-            study_action_image = _save_figure_image(plot_workbook_study_action_comparison(stakeholder_records))
-            temp_images.append(study_action_image)
-            extra_ws.add_image(XLImage(study_action_image), "A16")
-
             review_signal_image = _save_figure_image(plot_workbook_review_signal_summary(stakeholder_records))
             temp_images.append(review_signal_image)
-            extra_ws.add_image(XLImage(review_signal_image), "J16")
+            extra_ws.add_image(XLImage(review_signal_image), "A16")
 
             timing_comparison_image = _save_figure_image(plot_workbook_timing_comparison(stakeholder_records))
             temp_images.append(timing_comparison_image)
-            extra_ws.add_image(XLImage(timing_comparison_image), "A45")
+            extra_ws.add_image(XLImage(timing_comparison_image), "A42")
 
             _autosize_sheet(overview_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
             _autosize_sheet(payment_ws, wrap_text=True, freeze_panes="A4")
@@ -1986,6 +1993,15 @@ def export_stakeholder_excel(
     return excel_path
 
 
+def export_simple_excel(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+    excel_filename: str = "ESD_Bot_Analysis_Simple_Summary.xlsx",
+) -> Path:
+    """Notebook-facing alias with neutral naming for the exported workbook."""
+    return export_stakeholder_excel(output_dir, cache_dir, excel_filename)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # Stakeholder screening-evidence views
 #
@@ -2005,7 +2021,7 @@ SHARED_RULES = SERIOUS_RULES + SUPPORTING_RULES
 # table cell and legend in the notebook.
 CHECK_PLAIN_NAMES: dict[str, str] = {
     "rule_R1": "Whole survey too fast",
-    "rule_R2": "Attitudes section too fast",
+    "rule_R2": "Thoughts, Feelings, and Attitudes section too fast",
     "rule_R3": "One section rushed",
     "rule_R4": "Same answer repeated down a block",
     "rule_R5": "Answer sheet identical to another response",
@@ -2018,6 +2034,18 @@ CHECK_PLAIN_NAMES: dict[str, str] = {
 CHECK_SEVERITY: dict[str, str] = {
     **{rule: "Serious" for rule in SERIOUS_RULES},
     **{rule: "Supporting" for rule in SUPPORTING_RULES},
+}
+
+CHECK_SURVEY_AREAS: dict[str, str] = {
+    "rule_R1": "Whole survey timing",
+    "rule_R2": "Thoughts, Feelings, and Attitudes timing",
+    "rule_R3": "Section timing across Family Information, Values, Thoughts/Feelings/Attitudes, or Demographics",
+    "rule_R4": "Repeated ratings within a survey block",
+    "rule_R5": "Full answer pattern across the questionnaire",
+    "rule_R6": "Response arrival time",
+    "rule_R7": "Open-text comment",
+    "rule_R8": "Family Information",
+    "rule_R9": "Demographics",
 }
 
 STUDY_SHORT_NAMES: dict[str, str] = {
@@ -2140,7 +2168,7 @@ def build_limit_origin_table(output_dir: Path) -> pd.DataFrame:
             "How that line was worked out": "The fastest verified caregiver who finished every section",
         },
         {
-            "What we check": "Attitudes section too fast",
+            "What we check": "Thoughts, Feelings, and Attitudes section too fast",
             "The line we drew": _minutes_to_words(threshold("R2")),
             "How that line was worked out": "The fastest verified caregiver on that section",
         },
@@ -2180,7 +2208,7 @@ def build_speed_reference_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
     rows = []
     specs = [
         ("whole survey", "Survey minutes", TOTAL_TIME_LIMIT_MIN, "Timed end to end"),
-        ("attitudes section", "Attitudes minutes", ATTITUDES_TIME_LIMIT_MIN, None),
+        ("Thoughts, Feelings, and Attitudes section", "Attitudes minutes", ATTITUDES_TIME_LIMIT_MIN, None),
     ]
     for label, column, limit, gate in specs:
         for group in ("Caregivers we verified", "Online sign-ups"):
@@ -2284,7 +2312,7 @@ def plot_speed_comparison(screen_inputs: pd.DataFrame) -> plt.Figure:
         ATTITUDES_TIME_LIMIT_MIN,
         ceiling=45,
         step=2.5,
-        title="Attitudes section: how long it took",
+        title="Thoughts, Feelings, and Attitudes: how long it took",
     )
     fig.suptitle(
         "Nobody we verified finished faster than the line - many online sign-ups did",
@@ -2375,8 +2403,8 @@ def plot_cutoff_sensitivity(sensitivity: pd.DataFrame) -> plt.Figure:
         ax.set_ylim(0, max(sensitivity[column]) * 1.18 + 1)
         _apply_stakeholder_style(ax)
 
-    axes[0].set_title("Moving the attitudes-section line: what it would catch")
-    axes[1].set_title("Moving the attitudes-section line: who it would catch by mistake")
+    axes[0].set_title("Moving the Thoughts/Feelings/Attitudes line: what it would catch")
+    axes[1].set_title("Moving the Thoughts/Feelings/Attitudes line: who it would catch by mistake")
     axes[1].set_xlabel("Where we draw the line (minutes)")
     fig.tight_layout()
     return fig
@@ -2400,9 +2428,9 @@ def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
                 "verified caregiver - so treat it as consistent, not as proof."
             )
         elif hits == 0:
-            reading = "This check has never fired on anyone, in either study."
+            reading = "This pattern has not shown up in either study."
         else:
-            reading = f"Fires on {hits} of {total} people we know are real."
+            reading = f"This pattern showed up in {hits} of {total} people we know are real."
 
         online_hits = int(
             screen_inputs.loc[screen_inputs["Group"].eq("Online sign-ups"), rule].sum()
@@ -2411,7 +2439,7 @@ def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
             advice = "Strong enough to act on with a quick spot check"
         elif online_hits == 0:
             advice = (
-                "Review this check - it has never fired on an online sign-up, "
+                "Review this pattern - it has never shown up in an online sign-up, "
                 "only on people we know are real"
             )
         else:
@@ -2419,11 +2447,12 @@ def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
 
         rows.append(
             {
-                "The check": CHECK_PLAIN_NAMES[rule],
+                "Pattern we look for": CHECK_PLAIN_NAMES[rule],
+                "Where it shows up": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                f"Verified caregivers it flagged (out of {total})": hits,
+                f"Verified caregivers showing this pattern (out of {total})": hits,
                 "What that tells us": reading,
-                "What to do with it": advice,
+                "How to use it": advice,
             }
         )
     table = pd.DataFrame(rows)
@@ -2439,20 +2468,176 @@ def build_decision_rule_table() -> pd.DataFrame:
     for rule in SERIOUS_RULES + SUPPORTING_RULES:
         rows.append(
             {
-                "What the check found": CHECK_PLAIN_NAMES[rule],
+                "What we look for": CHECK_PLAIN_NAMES[rule],
+                "Where it appears": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                "What it takes to hold a payment": (
-                    "Any one of these on its own holds the payment"
+                "How it affects payment": (
+                    "Any one of these on its own moves the response to review"
                     if CHECK_SEVERITY[rule] == "Serious"
-                    else "Two or more of these together hold the payment"
+                    else "Two or more of these together move the response to review"
                 ),
             }
         )
     return pd.DataFrame(rows)
 
 
+def _format_short_time(value: object) -> str:
+    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    if pd.isna(numeric):
+        return "not timed"
+    total_seconds = int(round(float(numeric) * 60))
+    minutes, seconds = divmod(total_seconds, 60)
+    if minutes == 0:
+        return f"{seconds} sec"
+    return f"{minutes}m {seconds:02d}s"
+
+
+def _plural_count(value: object, singular: str, plural: Optional[str] = None) -> str:
+    numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    if pd.isna(numeric):
+        noun = plural or f"{singular}s"
+        return f"{noun} not answered"
+    count = int(numeric)
+    word = singular if count == 1 else (plural or f"{singular}s")
+    return f"{count} {word}"
+
+
+def _count_phrase(count: int, singular: str, plural: str) -> str:
+    word = singular if count == 1 else plural
+    return f"{count} {word}"
+
+
+def _branching_note(rows: list[dict[str, object]]) -> str:
+    if not rows:
+        return "Family Information answers lined up."
+
+    family = str(rows[0].get("family", ""))
+    if family == "prenatal_not_tested_reason_without_prenatal_no":
+        return "Marked prenatal screening as yes, but still gave reasons for not doing prenatal screening."
+    if family == "prenatal_testing_mutually_exclusive_pair":
+        return "Filled prenatal follow-up items that should never appear together."
+    if family == "prenatal_tested_reason_without_prenatal_yes":
+        return "Gave prenatal testing reasons without first marking prenatal screening as yes."
+    if family == "earlier_diagnosis_yes_reason_without_yes_gate":
+        return "Gave earlier-diagnosis reasons without first marking that earlier diagnosis happened."
+    if family == "earlier_diagnosis_no_reason_without_no_gate":
+        return "Gave earlier-diagnosis reasons from the no-branch without first marking that branch."
+    return "Family Information follow-up answers did not match the earlier item."
+
+
+def _family_snapshot(record: Optional[pd.Series], branching_rows: list[dict[str, object]]) -> str:
+    if record is None:
+        return _branching_note(branching_rows)
+
+    pieces = [
+        _plural_count(record.get("fif_num_children"), "child", "children"),
+        _plural_count(record.get("fif_num_autistic"), "autistic child", "autistic children"),
+    ]
+    pregnancy = str(record.get("fif_pregnant", "")).strip()
+    if pregnancy == "1":
+        pieces.append("pregnancy item marked yes")
+    elif pregnancy == "0":
+        pieces.append("pregnancy item marked no")
+    pieces.append(_branching_note(branching_rows))
+    return "; ".join(pieces)
+
+
+def _tfa_snapshot(record: Optional[pd.Series], low_variation: bool) -> str:
+    if record is None:
+        return "Questionnaire timing and answer-pattern details are shown in the next column."
+
+    item_labels = [
+        ("happy", "tfa_happy"),
+        ("scared", "tfa_scared"),
+        ("difficult", "tfa_difficult"),
+        ("doable", "tfa_doable"),
+    ]
+    item_bits = []
+    for label, column in item_labels:
+        value = str(record.get(column, "")).strip()
+        if value:
+            item_bits.append(f"{label}={value}")
+
+    if item_bits:
+        summary = "Example item ratings: " + ", ".join(item_bits)
+    else:
+        summary = "Example item ratings were recorded"
+
+    if low_variation:
+        return summary + "; answers changed very little across one rating block."
+    return summary + "; answers moved across the scale rather than repeating one option."
+
+
+def _section_rush_text(record: Optional[pd.Series], section_limits: dict[str, float]) -> Optional[str]:
+    if record is None:
+        return None
+
+    section_labels = {
+        "get_time_fif": "Family Information",
+        "get_time_val": "Values",
+        "get_time_tfa": "Thoughts/Feelings/Attitudes",
+        "get_time_demo": "Demographics",
+    }
+    limit_lookup = {
+        "get_time_fif": float(section_limits["feat_time_fif"]),
+        "get_time_val": float(section_limits["feat_time_val"]),
+        "get_time_tfa": float(section_limits["feat_time_tfa"]),
+        "get_time_demo": float(section_limits["feat_time_demo"]),
+    }
+    hits = []
+    for column, label in section_labels.items():
+        value = pd.to_numeric(pd.Series([record.get(column)]), errors="coerce").iloc[0]
+        if pd.notna(value) and value < limit_lookup[column]:
+            hits.append(
+                f"{label} { _format_short_time(value) } versus { _format_short_time(limit_lookup[column]) }"
+            )
+    if not hits:
+        return None
+    return "Section below the verified-caregiver floor: " + "; ".join(hits)
+
+
+def _timing_snapshot(
+    record: pd.Series,
+    details: Optional[pd.Series],
+    section_limits: dict[str, float],
+) -> str:
+    pieces = [
+        f"Whole survey { _format_short_time(record['Survey minutes']) }",
+        f"Thoughts/Feelings/Attitudes { _format_short_time(record['Attitudes minutes']) }",
+    ]
+    rush_text = _section_rush_text(details, section_limits)
+    if rush_text:
+        pieces.append(rush_text)
+    if bool(record["rule_R6"]):
+        pieces.append("Arrived inside a 1-minute cluster of sign-ups")
+    return "; ".join(pieces)
+
+
+def _decision_summary(record: pd.Series) -> str:
+    serious = int(record["Serious checks"])
+    supporting = int(record["Supporting checks"])
+    decision = str(record["Payment Decision"])
+    if decision == "Cleared for payment now":
+        return "Nothing in the timings or answer pattern stood out, so this response stays in the pay-now group."
+    if decision == "Low-risk provisional approval":
+        return "Only one milder pattern showed up, so this response needs just a quick check before payment."
+    if decision == "Confirmed bot / reject":
+        return "Very fast timing plus answer-pattern or Family Information problems put this response in the strongest concern group."
+    if serious and supporting:
+        serious_text = _count_phrase(serious, "strong pattern", "strong patterns")
+        supporting_text = _count_phrase(supporting, "supporting pattern", "supporting patterns")
+        return f"{serious_text} and {supporting_text} showed up, so this response is held for review."
+    if serious:
+        serious_text = _count_phrase(serious, "strong pattern", "strong patterns")
+        return f"{serious_text} showed up, so this response is held for review."
+    supporting_text = _count_phrase(supporting, "milder pattern", "milder patterns")
+    return f"{supporting_text} showed up together, so this response is held for review."
+
+
 def build_worked_examples(
     screen_inputs: pd.DataFrame,
+    output_dir: Optional[Path] = None,
+    cache_dir: Optional[Path] = None,
     record_ids: Optional[list[str]] = None,
 ) -> pd.DataFrame:
     """Five real responses walked end to end through the decision rule."""
@@ -2460,27 +2645,45 @@ def build_worked_examples(
         record_ids = ["1779", "1243", "1276", "1355", "1026"]
 
     online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].set_index("record_id")
+    detail_lookup: Optional[pd.DataFrame] = None
+    section_limits = {
+        "feat_time_fif": 0.0,
+        "feat_time_val": 0.0,
+        "feat_time_tfa": 0.0,
+        "feat_time_demo": 0.0,
+    }
+    branching_lookup: dict[str, list[dict[str, object]]] = {}
+
+    if output_dir is not None:
+        if cache_dir is None:
+            cache_dir = output_dir.parent / "data_cache"
+        definitions = load_rule_definitions(output_dir).set_index("rule")
+        section_limits = json.loads(str(definitions.loc["R3", "threshold"]))
+        details = load_combined_records(cache_dir)
+        details = details.loc[details["source_project"].eq("dirty_4581")].copy()
+        details["record_id"] = details["record_id"].astype(str)
+        detail_lookup = details.set_index("record_id")
+        branching = load_branching_audit(output_dir)
+        branching = branching.loc[branching["source_project"].eq("dirty_4581")].copy()
+        if not branching.empty:
+            branching_lookup = (
+                branching.groupby("record_id")
+                .apply(lambda frame: frame.to_dict("records"), include_groups=False)
+                .to_dict()
+            )
+
     rows = []
     for record_id in record_ids:
         record = online.loc[record_id]
-        fired = [CHECK_PLAIN_NAMES[r] for r in SHARED_RULES if bool(record[r])]
-        serious = int(record["Serious checks"])
-        supporting = int(record["Supporting checks"])
-        if serious == 0 and supporting == 0:
-            reading = "No concerns"
-        elif serious == 0 and supporting == 1:
-            reading = "One supporting check on its own"
-        elif serious == 0:
-            reading = f"{supporting} supporting checks together"
-        else:
-            reading = f"{serious} serious and {supporting} supporting checks"
+        details = detail_lookup.loc[record_id] if detail_lookup is not None and record_id in detail_lookup.index else None
+        branching_rows = branching_lookup.get(record_id, [])
         rows.append(
             {
                 "Response": record_id,
-                "Whole survey (minutes)": record["Survey minutes"],
-                "Attitudes section (minutes)": record["Attitudes minutes"],
-                "Checks it set off": "; ".join(fired) if fired else "None",
-                "How the rule reads it": reading,
+                "Family Information": _family_snapshot(details, branching_rows),
+                "Thoughts, Feelings, and Attitudes": _tfa_snapshot(details, bool(record["rule_R4"])),
+                "Timing and arrival": _timing_snapshot(record, details, section_limits),
+                "Why this response landed here": _decision_summary(record),
                 "Decision": record["Payment Decision"],
             }
         )
@@ -2496,7 +2699,7 @@ def build_checks_set_off_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
         .reindex(columns=list(STUDY_COLORS), fill_value=0)
         .reindex(range(0, int(screen_inputs["Checks set off"].max()) + 1), fill_value=0)
     )
-    out = pd.DataFrame({"Number of checks set off": table.index})
+    out = pd.DataFrame({"Number of patterns on one response": table.index})
     for group in STUDY_COLORS:
         share = table[group] / table[group].sum() * 100
         out[group] = table[group].values
@@ -2549,11 +2752,11 @@ def plot_checks_set_off(screen_inputs: pd.DataFrame) -> plt.Figure:
     )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(table["Number of checks set off"])
-    ax.set_xlabel("Number of checks set off")
+    ax.set_xticklabels(table["Number of patterns on one response"])
+    ax.set_xlabel("Number of patterns on one response")
     ax.set_ylabel("Share of that group (%)")
     ax.set_ylim(0, 95)
-    ax.set_title("How many checks each response set off")
+    ax.set_title("How many unusual patterns each response showed")
     ax.legend(frameon=False)
     _apply_stakeholder_style(ax)
     fig.tight_layout()
@@ -2656,10 +2859,7 @@ def plot_arrival_pattern(screen_inputs: pd.DataFrame) -> plt.Figure:
         ax.tick_params(axis="x", rotation=30)
         _apply_stakeholder_style(ax)
 
-    fig.suptitle(
-        "The two panels use different scales - read each against its own total",
-        fontsize=11,
-    )
+    fig.suptitle("Each panel uses its own scale so the smaller verified sample stays visible", fontsize=11)
     fig.tight_layout()
     return fig
 
@@ -2688,16 +2888,17 @@ def build_check_impact_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
 
         rows.append(
             {
-                "The check": CHECK_PLAIN_NAMES[rule],
+                "Pattern": CHECK_PLAIN_NAMES[rule],
+                "Where it shows up": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                "Times it fired on online sign-ups": fired,
-                "Times it was the only concern on the response": only_concern,
-                "Payments it would release if we switched it off": released,
+                "Online sign-ups showing it": fired,
+                "Times it was the only issue on the response": only_concern,
+                "Responses released if we removed it": released,
             }
         )
     return (
         pd.DataFrame(rows)
-        .sort_values("Times it fired on online sign-ups", ascending=False)
+        .sort_values("Online sign-ups showing it", ascending=False)
         .reset_index(drop=True)
     )
 
@@ -2711,29 +2912,29 @@ def plot_check_impact(impact: pd.DataFrame) -> plt.Figure:
     fig, ax = plt.subplots(figsize=(11.5, 5.5))
     ax.barh(
         y + height / 2,
-        frame["Times it fired on online sign-ups"],
+        frame["Online sign-ups showing it"],
         height,
         color="#C67C2D",
-        label="Times it fired",
+        label="Times it showed up",
     )
     ax.barh(
         y - height / 2,
-        frame["Times it was the only concern on the response"],
+        frame["Times it was the only issue on the response"],
         height,
         color="#1F5A7A",
-        label="Times it was the only concern on the response",
+        label="Times it was the only issue",
     )
     for offset, column in (
-        (height / 2, "Times it fired on online sign-ups"),
-        (-height / 2, "Times it was the only concern on the response"),
+        (height / 2, "Online sign-ups showing it"),
+        (-height / 2, "Times it was the only issue on the response"),
     ):
         for index, value in enumerate(frame[column]):
             ax.text(value + 20, index + offset, f"{int(value):,}", va="center", fontsize=9)
 
     ax.set_yticks(y)
-    ax.set_yticklabels(frame["The check"])
+    ax.set_yticklabels(frame["Pattern"])
     ax.set_xlabel("Online sign-ups")
-    ax.set_title("Which checks are actually holding payments")
+    ax.set_title("Which patterns are doing most of the holding")
     ax.legend(frameon=False, loc="lower right")
     _apply_stakeholder_style(ax)
     fig.tight_layout()
@@ -2836,11 +3037,12 @@ def build_all_checks_frequency_table(screen_inputs: pd.DataFrame) -> pd.DataFram
         fired = int(online[rule].sum())
         rows.append(
             {
-                "The check": CHECK_PLAIN_NAMES[rule],
+                "Pattern": CHECK_PLAIN_NAMES[rule],
+                "Where it shows up": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                f"Online sign-ups it fired on (out of {len(online):,})": fired,
+                f"Online sign-ups showing it (out of {len(online):,})": fired,
                 "Share of online sign-ups": f"{fired / len(online) * 100:.1f}%",
-                f"Caregivers we verified it fired on (out of {len(verified):,})":
+                f"Verified caregivers showing it (out of {len(verified):,})":
                     int(verified[rule].sum()),
             }
         )
@@ -2858,13 +3060,13 @@ def plot_all_checks_frequency(screen_inputs: pd.DataFrame) -> plt.Figure:
         "#A85D75" if severity == "Serious" else "#C67C2D"
         for severity in table["How seriously we treat it"]
     ]
-    bars = ax.barh(table["The check"], table[count_col], color=colours)
+    bars = ax.barh(table["Pattern"], table[count_col], color=colours)
     for bar, value in zip(bars, table[count_col]):
         ax.text(value + 18, bar.get_y() + bar.get_height() / 2, f"{int(value):,}",
                 va="center", fontsize=10, fontweight="bold")
 
-    ax.set_xlabel("Online sign-ups it fired on")
-    ax.set_title("How often each check fired on the online sign-ups")
+    ax.set_xlabel("Online sign-ups showing the pattern")
+    ax.set_title("How often each pattern showed up in the online sign-up sample")
     ax.set_xlim(0, table[count_col].max() * 1.12)
     handles = [
         plt.Rectangle((0, 0), 1, 1, color="#A85D75"),
