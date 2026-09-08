@@ -8,6 +8,7 @@ caches without duplicating computation logic.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -1983,3 +1984,893 @@ def export_stakeholder_excel(
                 os.unlink(image_path)
 
     return excel_path
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stakeholder screening-evidence views
+#
+# Everything below answers four questions in plain language: does the screen
+# work, what did it catch, how severe is it, and what should we do next.  The
+# helpers deliberately re-derive the tier logic from the committed rule flags
+# so the notebook can show counterfactuals ("what if we moved the line?")
+# without re-running the full pipeline.
+# ══════════════════════════════════════════════════════════════════════════
+
+SERIOUS_RULES = ["rule_R1", "rule_R2", "rule_R5", "rule_R8", "rule_R9"]
+SUPPORTING_RULES = ["rule_R3", "rule_R4", "rule_R6", "rule_R7"]
+SHARED_RULES = SERIOUS_RULES + SUPPORTING_RULES
+
+# Plain-English name for every check, with no rule codes and no statistics
+# vocabulary.  These strings are what stakeholders read on every axis label,
+# table cell and legend in the notebook.
+CHECK_PLAIN_NAMES: dict[str, str] = {
+    "rule_R1": "Whole survey too fast",
+    "rule_R2": "Attitudes section too fast",
+    "rule_R3": "One section rushed",
+    "rule_R4": "Same answer repeated down a block",
+    "rule_R5": "Answer sheet identical to another response",
+    "rule_R6": "Arrived within a minute of two or more others",
+    "rule_R7": "Comment nearly identical to another",
+    "rule_R8": "Family answers contradict each other",
+    "rule_R9": "Age and location cannot both be true",
+}
+
+CHECK_SEVERITY: dict[str, str] = {
+    **{rule: "Serious" for rule in SERIOUS_RULES},
+    **{rule: "Supporting" for rule in SUPPORTING_RULES},
+}
+
+STUDY_SHORT_NAMES: dict[str, str] = {
+    "clean_4797": "Caregivers we verified",
+    "dirty_4581": "Online sign-ups",
+}
+
+STUDY_COLORS: dict[str, str] = {
+    "Caregivers we verified": "#1F5A7A",
+    "Online sign-ups": "#C67C2D",
+}
+
+TIME_FIELDS = ["get_time_fif", "get_time_val", "get_time_tfa", "get_time_demo"]
+
+TOTAL_TIME_LIMIT_MIN = 11.57
+ATTITUDES_TIME_LIMIT_MIN = 7.85
+
+
+def _minutes_to_words(minutes: float) -> str:
+    """Render 11.57 as '11 minutes 34 seconds' so it is never read as a clock time."""
+    whole = int(minutes)
+    seconds = int(round((minutes - whole) * 60))
+    if seconds == 60:
+        whole, seconds = whole + 1, 0
+    if whole == 0:
+        return f"{seconds} seconds"
+    minute_word = "minute" if whole == 1 else "minutes"
+    if seconds == 0:
+        return f"{whole} {minute_word}"
+    return f"{whole} {minute_word} {seconds} seconds"
+
+
+def build_screen_inputs(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """One tidy record-level frame behind every screening-evidence view.
+
+    The survey total here is deliberately stricter than the one in
+    ``build_stakeholder_record_view``: that column sums the four section times
+    with ``min_count=1``, so a half-answered record gets a small partial total
+    that never triggered the speed check.  Charting the partial total would put
+    verified caregivers below a line that no verified caregiver actually
+    crossed, so timing views use ``Timed end to end`` to select records and
+    ``Survey minutes`` for the value.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+
+    flags = load_record_flags(output_dir).copy()
+    flags["record_id"] = flags["record_id"].astype(str)
+
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+    for column in TIME_FIELDS:
+        records[column] = pd.to_numeric(records[column], errors="coerce")
+
+    keep = ["source_project", "record_id", "eligibility_timestamp"] + TIME_FIELDS
+    frame = flags.merge(
+        records[keep], on=["source_project", "record_id"], how="left", validate="one_to_one"
+    )
+
+    sections_timed = frame[TIME_FIELDS].notna().sum(axis=1)
+    frame["Sections timed"] = sections_timed
+    frame["Timed end to end"] = sections_timed.eq(len(TIME_FIELDS))
+    frame["Survey minutes"] = frame[TIME_FIELDS].sum(axis=1, min_count=len(TIME_FIELDS)).round(2)
+    frame["Attitudes minutes"] = frame["get_time_tfa"].round(2)
+    frame["Arrived"] = pd.to_datetime(frame["eligibility_timestamp"], errors="coerce")
+
+    frame["Group"] = frame["source_project"].map(STUDY_SHORT_NAMES)
+    frame["Study"] = frame["source_project"].map(PROJECT_LABELS)
+    frame["Checks set off"] = frame[SHARED_RULES].sum(axis=1).astype(int)
+    frame["Serious checks"] = frame[SERIOUS_RULES].sum(axis=1).astype(int)
+    frame["Supporting checks"] = frame[SUPPORTING_RULES].sum(axis=1).astype(int)
+    frame["Trust Tier"] = frame["tier_label"]
+    frame["Payment Decision"] = frame["tier_label"].map(
+        {
+            "Pass": "Cleared for payment now",
+            "Uncertain": "Low-risk provisional approval",
+            "High suspicion": "Needs human review",
+            "Confirmed invalid": "Needs human review",
+        }
+    )
+    confirmed = set(load_confirmed_bots(output_dir)["Record ID"].astype(str))
+    is_bot = frame["source_project"].eq("dirty_4581") & frame["record_id"].isin(confirmed)
+    frame.loc[is_bot, "Payment Decision"] = "Confirmed bot / reject"
+    return frame
+
+
+def _decide(serious: pd.Series, supporting: pd.Series) -> pd.Series:
+    """Re-apply the published rule: any serious check, or two supporting ones, holds a payment."""
+    decision = pd.Series("Cleared for payment now", index=serious.index)
+    decision[supporting.eq(1)] = "Low-risk provisional approval"
+    decision[supporting.ge(2)] = "Needs human review"
+    decision[serious.ge(1)] = "Needs human review"
+    return decision
+
+
+# ── 1. Where every time limit came from ─────────────────────────────────────
+
+def build_limit_origin_table(output_dir: Path) -> pd.DataFrame:
+    """Show that every cutoff was read off the verified caregivers, not chosen."""
+    definitions = load_rule_definitions(output_dir).set_index("rule")
+
+    def threshold(rule: str) -> float:
+        return float(definitions.loc[rule, "threshold"])
+
+    section_floors = json.loads(str(definitions.loc["R3", "threshold"]))
+    section_names = {
+        "feat_time_fif": "Family information section rushed",
+        "feat_time_val": "Values section rushed",
+        "feat_time_tfa": "Attitudes section rushed",
+        "feat_time_demo": "Demographics section rushed",
+    }
+
+    rows = [
+        {
+            "What we check": "Whole survey too fast",
+            "The line we drew": _minutes_to_words(threshold("R1")),
+            "How that line was worked out": "The fastest verified caregiver who finished every section",
+        },
+        {
+            "What we check": "Attitudes section too fast",
+            "The line we drew": _minutes_to_words(threshold("R2")),
+            "How that line was worked out": "The fastest verified caregiver on that section",
+        },
+    ]
+    for field, label in section_names.items():
+        rows.append(
+            {
+                "What we check": label,
+                "The line we drew": _minutes_to_words(float(section_floors[field])),
+                "How that line was worked out": "The fastest 1 in 100 verified caregivers on that section",
+            }
+        )
+    rows.append(
+        {
+            "What we check": "Same answer repeated down a block",
+            "The line we drew": "Answers varied less than 0.78 on a 1-4 block",
+            "How that line was worked out": "The 1 in 100 verified caregivers whose answers varied least",
+        }
+    )
+    rows.append(
+        {
+            "What we check": "Arrived within a minute of two or more others",
+            "The line we drew": "3 or more sign-ups inside 60 seconds",
+            "How that line was worked out": "The 1 in 100 shortest gaps between verified caregiver sign-ups",
+        }
+    )
+
+    table = pd.DataFrame(rows)
+    table["Whose answers set it"] = "The 131 verified caregivers who finished every section"
+    return table
+
+
+# ── 2. How fast can a real caregiver finish? ────────────────────────────────
+
+def build_speed_reference_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """Companion table for the speed histograms, counts before percentages."""
+    rows = []
+    specs = [
+        ("whole survey", "Survey minutes", TOTAL_TIME_LIMIT_MIN, "Timed end to end"),
+        ("attitudes section", "Attitudes minutes", ATTITUDES_TIME_LIMIT_MIN, None),
+    ]
+    for label, column, limit, gate in specs:
+        for group in ("Caregivers we verified", "Online sign-ups"):
+            frame = screen_inputs[screen_inputs["Group"].eq(group)]
+            if gate is not None:
+                frame = frame[frame[gate]]
+            values = frame[column].dropna()
+            under = int((values < limit).sum())
+            rows.append(
+                {
+                    "Group": f"{group} - {label}",
+                    "Responses we could time": f"{len(values):,}",
+                    "Middle time (minutes)": round(values.median(), 2),
+                    "Fastest time (minutes)": round(values.min(), 2),
+                    "Faster than the line": f"{under:,} of {len(values):,}",
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _clipped_histogram(
+    ax: plt.Axes,
+    screen_inputs: pd.DataFrame,
+    column: str,
+    gate: Optional[str],
+    limit: float,
+    ceiling: float,
+    step: float,
+    title: str,
+) -> None:
+    """Percent-of-group histogram with a catch-all final bar and the limit marked.
+
+    Survey times run to 1,383 minutes because people leave the form open, so
+    the axis is clipped and the tail is collected into one honest bar rather
+    than dropped.
+    """
+    edges = np.arange(0, ceiling + step, step)
+    centres = edges[:-1] + step / 2
+    # A visible gap keeps the catch-all bar from reading as just another bin.
+    extra = ceiling + step * 1.4
+
+    for group, colour in STUDY_COLORS.items():
+        frame = screen_inputs[screen_inputs["Group"].eq(group)]
+        if gate is not None:
+            frame = frame[frame[gate]]
+        values = frame[column].dropna()
+        counts, _ = np.histogram(values.clip(upper=ceiling - 1e-9), bins=edges)
+        over = int((values >= ceiling).sum())
+        heights = np.append(counts, over) / len(values) * 100
+        ax.bar(
+            np.append(centres, extra),
+            heights,
+            width=step * 0.9,
+            color=colour,
+            alpha=0.65,
+            label=f"{group} ({len(values):,})",
+        )
+
+    ax.axvline(limit, color="#A85D75", linestyle="--", linewidth=2)
+    ax.text(
+        limit,
+        ax.get_ylim()[1] * 0.94,
+        f"  the fastest verified caregiver\n  ({_minutes_to_words(limit)})",
+        color="#A85D75",
+        fontsize=9,
+        fontweight="bold",
+        va="top",
+        bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=2),
+    )
+    ax.set_title(title)
+    ax.set_xlabel("Minutes taken")
+    ax.set_ylabel("Share of that group (%)")
+    # Drop any tick that would collide with the catch-all label.
+    ticks = [e for e in edges[::2] if e < ceiling - step]
+    ax.set_xticks(ticks + [extra])
+    ax.set_xticklabels(
+        [f"{int(e)}" for e in ticks] + [f"{int(ceiling)}+"], fontsize=9
+    )
+    ax.legend(frameon=False, fontsize=9)
+    _apply_stakeholder_style(ax)
+
+
+def plot_speed_comparison(screen_inputs: pd.DataFrame) -> plt.Figure:
+    """Two histograms showing verified caregivers never fall below the speed lines."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    _clipped_histogram(
+        axes[0],
+        screen_inputs,
+        "Survey minutes",
+        "Timed end to end",
+        TOTAL_TIME_LIMIT_MIN,
+        ceiling=90,
+        step=5,
+        title="Whole survey: how long it took",
+    )
+    _clipped_histogram(
+        axes[1],
+        screen_inputs,
+        "Attitudes minutes",
+        None,
+        ATTITUDES_TIME_LIMIT_MIN,
+        ceiling=45,
+        step=2.5,
+        title="Attitudes section: how long it took",
+    )
+    fig.suptitle(
+        "Nobody we verified finished faster than the line - many online sign-ups did",
+        fontsize=14,
+        fontweight="bold",
+    )
+    fig.tight_layout()
+    return fig
+
+
+# ── 3. What happens if we move the speed line ───────────────────────────────
+
+def build_cutoff_sensitivity_table(
+    screen_inputs: pd.DataFrame,
+    column: str = "Attitudes minutes",
+    gate: Optional[str] = None,
+    current: float = ATTITUDES_TIME_LIMIT_MIN,
+    candidates: Optional[list[float]] = None,
+) -> pd.DataFrame:
+    """How many responses each candidate cutoff would catch, in both groups."""
+    if candidates is None:
+        candidates = [4, 5, 6, 7, current, 9, 10, 12, 15]
+
+    verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")]
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")]
+    if gate is not None:
+        verified, online = verified[verified[gate]], online[online[gate]]
+    verified_values = verified[column].dropna()
+    online_values = online[column].dropna()
+
+    rows = []
+    for cutoff in candidates:
+        caught = int((online_values < cutoff).sum())
+        wrong = int((verified_values < cutoff).sum())
+        if cutoff == current:
+            note = "Today's setting - the last one that catches nobody we know is real"
+        elif wrong == 0:
+            note = "Catches nobody we know is real, but holds fewer sign-ups"
+        else:
+            note = f"Moves {wrong} caregiver(s) we know are real into the hold pile"
+        rows.append(
+            {
+                "Where we draw the line": f"{cutoff:g} minutes"
+                + (" (today's setting)" if cutoff == current else ""),
+                f"Online sign-ups caught (out of {len(online_values):,})": caught,
+                f"Caregivers we know are real caught by mistake (out of {len(verified_values):,})": wrong,
+                "What this setting means": note,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def plot_cutoff_sensitivity(sensitivity: pd.DataFrame) -> plt.Figure:
+    """Two stacked panels: what a cutoff catches, and who it catches by mistake."""
+    caught_col = [c for c in sensitivity.columns if c.startswith("Online sign-ups")][0]
+    wrong_col = [c for c in sensitivity.columns if c.startswith("Caregivers we know")][0]
+    current = sensitivity["Where we draw the line"].str.contains("today")
+    # Short axis labels: the full sentence belongs in the table, not on the ticks.
+    labels = (
+        sensitivity["Where we draw the line"]
+        .str.replace(" (today's setting)", "\n(today)", regex=False)
+        .str.replace(" minutes", "", regex=False)
+    )
+    colours = ["#A85D75" if flag else "#C67C2D" for flag in current]
+
+    fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+    for ax, column, palette, ylabel in (
+        (axes[0], caught_col, colours, caught_col),
+        (
+            axes[1],
+            wrong_col,
+            ["#A85D75" if flag else "#1F5A7A" for flag in current],
+            wrong_col,
+        ),
+    ):
+        bars = ax.bar(labels, sensitivity[column], color=palette)
+        # Zero bars carry the good news here, so every value is labelled.
+        for bar, value in zip(bars, sensitivity[column]):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(sensitivity[column]) * 0.02,
+                f"{int(value):,}",
+                ha="center",
+                fontsize=10,
+                fontweight="bold",
+            )
+        ax.set_ylabel("\n".join(ylabel.split(" (out of ")[0].split(" caught")[0:1]) + "\ncaught")
+        ax.set_ylim(0, max(sensitivity[column]) * 1.18 + 1)
+        _apply_stakeholder_style(ax)
+
+    axes[0].set_title("Moving the attitudes-section line: what it would catch")
+    axes[1].set_title("Moving the attitudes-section line: who it would catch by mistake")
+    axes[1].set_xlabel("Where we draw the line (minutes)")
+    fig.tight_layout()
+    return fig
+
+
+# ── 4. Has any check ever flagged a verified caregiver? ─────────────────────
+
+def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """How often each check fires on people we know are real."""
+    verified = screen_inputs[
+        screen_inputs["Group"].eq("Caregivers we verified") & screen_inputs["Timed end to end"]
+    ]
+    total = len(verified)
+
+    rows = []
+    for rule in SHARED_RULES:
+        hits = int(verified[rule].sum())
+        if rule in ("rule_R1", "rule_R2"):
+            reading = (
+                "Zero here is partly guaranteed - this line was set at the fastest "
+                "verified caregiver - so treat it as consistent, not as proof."
+            )
+        elif hits == 0:
+            reading = "This check has never fired on anyone, in either study."
+        else:
+            reading = f"Fires on {hits} of {total} people we know are real."
+
+        online_hits = int(
+            screen_inputs.loc[screen_inputs["Group"].eq("Online sign-ups"), rule].sum()
+        )
+        if hits == 0:
+            advice = "Strong enough to act on with a quick spot check"
+        elif online_hits == 0:
+            advice = (
+                "Review this check - it has never fired on an online sign-up, "
+                "only on people we know are real"
+            )
+        else:
+            advice = "Use it to sort the queue, never on its own"
+
+        rows.append(
+            {
+                "The check": CHECK_PLAIN_NAMES[rule],
+                "How seriously we treat it": CHECK_SEVERITY[rule],
+                f"Verified caregivers it flagged (out of {total})": hits,
+                "What that tells us": reading,
+                "What to do with it": advice,
+            }
+        )
+    table = pd.DataFrame(rows)
+    count_col = [c for c in table.columns if c.startswith("Verified caregivers")][0]
+    return table.sort_values(count_col, ascending=False).reset_index(drop=True)
+
+
+# ── 5. How one response becomes one decision ────────────────────────────────
+
+def build_decision_rule_table() -> pd.DataFrame:
+    """The whole decision rule on one small page."""
+    rows = []
+    for rule in SERIOUS_RULES + SUPPORTING_RULES:
+        rows.append(
+            {
+                "What the check found": CHECK_PLAIN_NAMES[rule],
+                "How seriously we treat it": CHECK_SEVERITY[rule],
+                "What it takes to hold a payment": (
+                    "Any one of these on its own holds the payment"
+                    if CHECK_SEVERITY[rule] == "Serious"
+                    else "Two or more of these together hold the payment"
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_worked_examples(
+    screen_inputs: pd.DataFrame,
+    record_ids: Optional[list[str]] = None,
+) -> pd.DataFrame:
+    """Five real responses walked end to end through the decision rule."""
+    if record_ids is None:
+        record_ids = ["1779", "1243", "1276", "1355", "1026"]
+
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].set_index("record_id")
+    rows = []
+    for record_id in record_ids:
+        record = online.loc[record_id]
+        fired = [CHECK_PLAIN_NAMES[r] for r in SHARED_RULES if bool(record[r])]
+        serious = int(record["Serious checks"])
+        supporting = int(record["Supporting checks"])
+        if serious == 0 and supporting == 0:
+            reading = "No concerns"
+        elif serious == 0 and supporting == 1:
+            reading = "One supporting check on its own"
+        elif serious == 0:
+            reading = f"{supporting} supporting checks together"
+        else:
+            reading = f"{serious} serious and {supporting} supporting checks"
+        rows.append(
+            {
+                "Response": record_id,
+                "Whole survey (minutes)": record["Survey minutes"],
+                "Attitudes section (minutes)": record["Attitudes minutes"],
+                "Checks it set off": "; ".join(fired) if fired else "None",
+                "How the rule reads it": reading,
+                "Decision": record["Payment Decision"],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+# ── 6. How many checks each response set off ────────────────────────────────
+
+def build_checks_set_off_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """Counts and shares of how many checks each response tripped."""
+    table = (
+        pd.crosstab(screen_inputs["Checks set off"], screen_inputs["Group"])
+        .reindex(columns=list(STUDY_COLORS), fill_value=0)
+        .reindex(range(0, int(screen_inputs["Checks set off"].max()) + 1), fill_value=0)
+    )
+    out = pd.DataFrame({"Number of checks set off": table.index})
+    for group in STUDY_COLORS:
+        share = table[group] / table[group].sum() * 100
+        out[group] = table[group].values
+        out[f"{group} (% of group)"] = share.round(1).values
+    return out
+
+
+def plot_checks_set_off(screen_inputs: pd.DataFrame) -> plt.Figure:
+    """Grouped bars showing two checks is the ceiling for verified caregivers."""
+    table = build_checks_set_off_table(screen_inputs)
+    x = np.arange(len(table))
+    width = 0.4
+
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    for offset, (group, colour) in zip((-width / 2, width / 2), STUDY_COLORS.items()):
+        total = table[group].sum()
+        bars = ax.bar(
+            x + offset,
+            table[f"{group} (% of group)"],
+            width,
+            color=colour,
+            label=f"{group} ({total:,})",
+        )
+        # Zero bars are the point of this chart, so label them too.
+        for bar, count in zip(bars, table[group]):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 1.2,
+                f"{int(count):,}",
+                ha="center",
+                fontsize=9,
+                fontweight="bold",
+            )
+
+    ceiling = 2
+    past = int(screen_inputs[
+        screen_inputs["Group"].eq("Online sign-ups") & screen_inputs["Checks set off"].gt(ceiling)
+    ].shape[0])
+    online_total = int(screen_inputs["Group"].eq("Online sign-ups").sum())
+    ax.axvline(ceiling + 0.5, color="#A85D75", linestyle="--", linewidth=2)
+    ax.text(
+        ceiling + 0.62,
+        70,
+        f"No caregiver we verified has ever\nset off more than two checks.\n"
+        f"{past:,} online sign-ups ({past / online_total * 100:.1f}%)\nare past this line.",
+        color="#A85D75",
+        fontsize=10,
+        fontweight="bold",
+        va="top",
+    )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(table["Number of checks set off"])
+    ax.set_xlabel("Number of checks set off")
+    ax.set_ylabel("Share of that group (%)")
+    ax.set_ylim(0, 95)
+    ax.set_title("How many checks each response set off")
+    ax.legend(frameon=False)
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+# ── 7. When the responses arrived ───────────────────────────────────────────
+
+def build_arrival_tables(screen_inputs: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Daily arrival counts per study, plus what the surge day produced."""
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].copy()
+    verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")].copy()
+
+    online_days = online["Arrived"].dt.date.value_counts().sort_index()
+    surge_day = online_days.idxmax()
+
+    verified_days = verified["Arrived"].dt.date.value_counts().sort_index()
+    top_days = verified_days.nlargest(4).sort_index()
+    rest = int(verified_days.sum() - top_days.sum())
+    verified_frame = pd.DataFrame(
+        {
+            "When it arrived": [d.strftime("%d %b") for d in top_days.index]
+            + [f"all {len(verified_days) - len(top_days)} other days put together"],
+            "Responses": list(top_days.values) + [rest],
+        }
+    )
+
+    online_frame = pd.DataFrame(
+        {
+            "When it arrived": [d.strftime("%d %b") for d in online_days.index],
+            "Responses": online_days.values,
+        }
+    )
+
+    online["Surge"] = np.where(
+        online["Arrived"].dt.date.eq(surge_day),
+        f"Surge day ({surge_day.strftime('%d %b')})",
+        "The three days before it",
+    )
+    order = [
+        "Cleared for payment now",
+        "Low-risk provisional approval",
+        "Needs human review",
+        "Confirmed bot / reject",
+    ]
+    crosstab = (
+        pd.crosstab(online["Surge"], online["Payment Decision"])
+        .reindex(columns=order, fill_value=0)
+        .reindex(["The three days before it", f"Surge day ({surge_day.strftime('%d %b')})"])
+        .reset_index()
+        .rename(columns={"Surge": "When it arrived"})
+    )
+    crosstab.insert(1, "Responses", crosstab[order].sum(axis=1))
+
+    surge = online[online["Arrived"].dt.date.eq(surge_day)]
+    busiest = surge["Arrived"].dt.hour.value_counts().nlargest(4).sort_index()
+    gaps = surge.sort_values("Arrived")["Arrived"].diff().dt.total_seconds().dropna()
+    verified_gaps = (
+        verified.sort_values("Arrived")["Arrived"].diff().dt.total_seconds().dropna()
+    )
+
+    return {
+        "online_by_day": online_frame,
+        "verified_by_day": verified_frame,
+        "surge_crosstab": crosstab,
+        "surge_facts": {
+            "surge_day": surge_day,
+            "surge_n": int(len(surge)),
+            "online_n": int(len(online)),
+            "busiest_hours": busiest,
+            "busiest_n": int(busiest.sum()),
+            "median_gap_seconds": float(gaps.median()),
+            "verified_median_gap_minutes": float(verified_gaps.median() / 60),
+        },
+    }
+
+
+def plot_arrival_pattern(screen_inputs: pd.DataFrame) -> plt.Figure:
+    """Two bar panels on their own scales - a shared axis would erase Study 1."""
+    tables = build_arrival_tables(screen_inputs)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    for ax, frame, group in (
+        (axes[0], tables["online_by_day"], "Online sign-ups"),
+        (axes[1], tables["verified_by_day"], "Caregivers we verified"),
+    ):
+        bars = ax.bar(frame["When it arrived"], frame["Responses"], color=STUDY_COLORS[group])
+        for bar, value in zip(bars, frame["Responses"]):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + max(frame["Responses"]) * 0.02,
+                f"{int(value):,}",
+                ha="center",
+                fontsize=10,
+                fontweight="bold",
+            )
+        ax.set_title(f"{group}, by day ({int(frame['Responses'].sum()):,} in total)")
+        ax.set_ylabel("Responses")
+        ax.set_ylim(0, max(frame["Responses"]) * 1.15)
+        ax.tick_params(axis="x", rotation=30)
+        _apply_stakeholder_style(ax)
+
+    fig.suptitle(
+        "The two panels use different scales - read each against its own total",
+        fontsize=11,
+    )
+    fig.tight_layout()
+    return fig
+
+
+# ── 8. Which checks are holding money, and where no check can reach ─────────
+
+def build_check_impact_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """For each check: how often it fired, how often it stood alone, and what
+    switching it off would release.  The last column is recomputed by re-running
+    the published rule without that check, never asserted."""
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].copy()
+    baseline = _decide(online["Serious checks"], online["Supporting checks"])
+    held_now = baseline.eq("Needs human review").sum()
+
+    rows = []
+    for rule in SHARED_RULES:
+        fired = int(online[rule].sum())
+        if fired == 0:
+            continue
+        others = [r for r in SHARED_RULES if r != rule]
+        only_concern = int((online[rule] & ~online[others].any(axis=1)).sum())
+
+        serious = online[[r for r in SERIOUS_RULES if r != rule]].sum(axis=1)
+        supporting = online[[r for r in SUPPORTING_RULES if r != rule]].sum(axis=1)
+        released = int(held_now - _decide(serious, supporting).eq("Needs human review").sum())
+
+        rows.append(
+            {
+                "The check": CHECK_PLAIN_NAMES[rule],
+                "How seriously we treat it": CHECK_SEVERITY[rule],
+                "Times it fired on online sign-ups": fired,
+                "Times it was the only concern on the response": only_concern,
+                "Payments it would release if we switched it off": released,
+            }
+        )
+    return (
+        pd.DataFrame(rows)
+        .sort_values("Times it fired on online sign-ups", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def plot_check_impact(impact: pd.DataFrame) -> plt.Figure:
+    """Paired horizontal bars - fired, versus stood alone.  Never stacked."""
+    frame = impact.iloc[::-1]
+    y = np.arange(len(frame))
+    height = 0.38
+
+    fig, ax = plt.subplots(figsize=(11.5, 5.5))
+    ax.barh(
+        y + height / 2,
+        frame["Times it fired on online sign-ups"],
+        height,
+        color="#C67C2D",
+        label="Times it fired",
+    )
+    ax.barh(
+        y - height / 2,
+        frame["Times it was the only concern on the response"],
+        height,
+        color="#1F5A7A",
+        label="Times it was the only concern on the response",
+    )
+    for offset, column in (
+        (height / 2, "Times it fired on online sign-ups"),
+        (-height / 2, "Times it was the only concern on the response"),
+    ):
+        for index, value in enumerate(frame[column]):
+            ax.text(value + 20, index + offset, f"{int(value):,}", va="center", fontsize=9)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(frame["The check"])
+    ax.set_xlabel("Online sign-ups")
+    ax.set_title("Which checks are actually holding payments")
+    ax.legend(frameon=False, loc="lower right")
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def build_timing_coverage_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """The blind spot: every timing check needs a timing to fire."""
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].copy()
+
+    def bucket(row: pd.Series) -> str:
+        if row["Sections timed"] == 4:
+            return "All four sections timed"
+        if row["Sections timed"] == 0:
+            return "No timing at all"
+        if pd.isna(row["Attitudes minutes"]):
+            return "Some sections timed, attitudes section missing"
+        return "Some sections timed, one other section missing"
+
+    online["What we were able to time"] = online.apply(bucket, axis=1)
+    approved = online["Payment Decision"].isin(
+        ["Cleared for payment now", "Low-risk provisional approval"]
+    )
+    order = [
+        "All four sections timed",
+        "Some sections timed, attitudes section missing",
+        "Some sections timed, one other section missing",
+        "No timing at all",
+    ]
+    table = (
+        online.assign(Approved=approved)
+        .groupby("What we were able to time")
+        .agg(
+            Responses=("record_id", "size"),
+            **{"Approved to pay": ("Approved", "sum")},
+        )
+        .reindex(order)
+        .reset_index()
+    )
+    table["Held for review or rejected"] = table["Responses"] - table["Approved to pay"]
+    return table
+
+
+# ── 9. Where to start, and what it costs in staff time ──────────────────────
+
+def build_work_plan_table(
+    screen_inputs: pd.DataFrame,
+    minutes_per_response: int = 8,
+) -> pd.DataFrame:
+    """Worst-first batches for the review queue, with running coverage."""
+    queue = screen_inputs[
+        screen_inputs["Group"].eq("Online sign-ups")
+        & screen_inputs["Payment Decision"].eq("Needs human review")
+    ].copy()
+
+    beat_the_line = queue["rule_R1"] | queue["rule_R2"]
+    target = int(beat_the_line.sum())
+
+    batches = [
+        ("Set off 5 or 6 checks", queue["Checks set off"].ge(5)),
+        ("Set off 4 checks", queue["Checks set off"].eq(4)),
+        ("Set off 3 checks", queue["Checks set off"].eq(3)),
+        ("Set off 2 checks or fewer", queue["Checks set off"].le(2)),
+    ]
+
+    rows, done, found = [], 0, 0
+    for label, mask in batches:
+        size = int(mask.sum())
+        done += size
+        found += int((mask & beat_the_line).sum())
+        rows.append(
+            {
+                "Batch, worst first": label,
+                "Responses in this batch": size,
+                "Responses checked once this batch is done": done,
+                "Responses that beat the fastest verified caregiver, found so far":
+                    f"{found} of {target}",
+                f"Hours of staff time at {minutes_per_response} minutes each":
+                    round(done * minutes_per_response / 60),
+                "Responses still unchecked": len(queue) - done,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_all_checks_frequency_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """Every shared check and how often it fired, in both groups.
+
+    Supersedes ``build_workbook_issue_summary`` for notebook display: that
+    table lists only seven signals and its "Repeated answer pattern" row is the
+    identical-answer-sheet check, which has never fired, so a reader concludes
+    nobody repeated answers while the same-answer-down-a-block check - which
+    fired 577 times - appears nowhere.
+    """
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")]
+    verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")]
+
+    rows = []
+    for rule in SHARED_RULES:
+        fired = int(online[rule].sum())
+        rows.append(
+            {
+                "The check": CHECK_PLAIN_NAMES[rule],
+                "How seriously we treat it": CHECK_SEVERITY[rule],
+                f"Online sign-ups it fired on (out of {len(online):,})": fired,
+                "Share of online sign-ups": f"{fired / len(online) * 100:.1f}%",
+                f"Caregivers we verified it fired on (out of {len(verified):,})":
+                    int(verified[rule].sum()),
+            }
+        )
+    count_col = [c for c in pd.DataFrame(rows).columns if c.startswith("Online sign-ups")][0]
+    return pd.DataFrame(rows).sort_values(count_col, ascending=False).reset_index(drop=True)
+
+
+def plot_all_checks_frequency(screen_inputs: pd.DataFrame) -> plt.Figure:
+    """Horizontal bars of how often each check fired on online sign-ups."""
+    table = build_all_checks_frequency_table(screen_inputs).iloc[::-1]
+    count_col = [c for c in table.columns if c.startswith("Online sign-ups")][0]
+
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    colours = [
+        "#A85D75" if severity == "Serious" else "#C67C2D"
+        for severity in table["How seriously we treat it"]
+    ]
+    bars = ax.barh(table["The check"], table[count_col], color=colours)
+    for bar, value in zip(bars, table[count_col]):
+        ax.text(value + 18, bar.get_y() + bar.get_height() / 2, f"{int(value):,}",
+                va="center", fontsize=10, fontweight="bold")
+
+    ax.set_xlabel("Online sign-ups it fired on")
+    ax.set_title("How often each check fired on the online sign-ups")
+    ax.set_xlim(0, table[count_col].max() * 1.12)
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color="#A85D75"),
+        plt.Rectangle((0, 0), 1, 1, color="#C67C2D"),
+    ]
+    ax.legend(handles, ["Serious check", "Supporting check"], frameon=False, loc="lower right")
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
