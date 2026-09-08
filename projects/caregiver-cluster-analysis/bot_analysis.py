@@ -770,6 +770,9 @@ def build_stakeholder_views(
         "workflow_summary": build_workflow_summary(stakeholder_records),
         "workflow_diagram": format_workflow_pipeline(stakeholder_records),
         "demographic_comparison": build_demographic_comparison(stakeholder_records),
+        "study_action_summary": build_workbook_study_action_summary(stakeholder_records),
+        "review_signal_summary": build_workbook_review_signal_summary(stakeholder_records),
+        "flag_strength_summary": build_workbook_flag_strength_summary(stakeholder_records),
     }
 
 
@@ -812,6 +815,27 @@ def build_workbook_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataF
                 "What to do": WORKBOOK_ACTION_LABELS[group],
             }
         )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_study_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Show how the four action groups split within each study."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    rows = []
+    for study in [PROJECT_LABELS["clean_4797"], PROJECT_LABELS["dirty_4581"]]:
+        study_records = compact.loc[compact["Study"].eq(study)].copy()
+        total = len(study_records)
+        for group in WORKBOOK_GROUP_ORDER:
+            group_records = study_records.loc[study_records["Action group"].eq(group)]
+            rows.append(
+                {
+                    "Study": study,
+                    "Action group": group,
+                    "Records": int(len(group_records)),
+                    "Share within study (%)": round(len(group_records) / total * 100, 1) if total else 0.0,
+                    "What to do": WORKBOOK_ACTION_LABELS[group],
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -899,6 +923,103 @@ def build_workbook_issue_summary(stakeholder_records: pd.DataFrame) -> pd.DataFr
                 "Issue seen in Study 2": label,
                 "Records": count,
                 "Share of Study 2": f"{count / total * 100:.1f}%",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_review_signal_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Summarize the clearest signals inside the Study 2 review queue."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    review_queue = compact.loc[
+        compact["source_project"].eq("dirty_4581")
+        & compact["Action group"].isin(["Review", "Do not pay"])
+    ].copy()
+    total = len(review_queue)
+
+    signal_specs = [
+        (
+            "Bursty timing",
+            "Bursty",
+            "Common background signal; useful when it appears with other issues.",
+        ),
+        (
+            "Attitudes section too fast",
+            "Attitudes too fast",
+            "Shows where speed problems are most common in the questionnaire.",
+        ),
+        (
+            "Full survey too fast",
+            "Survey too fast",
+            "Signals unusually short full-survey completion.",
+        ),
+        (
+            "Broke both timing limits",
+            "Both time limits",
+            "Stronger timing concern because both cutoffs were crossed.",
+        ),
+        (
+            "Family logic did not line up",
+            "Family logic",
+            "Less common, but more substantive than timing alone.",
+        ),
+    ]
+
+    rows = []
+    for label, column, interpretation in signal_specs:
+        count = int(review_queue[column].eq("Yes").sum())
+        if count == 0:
+            continue
+        rows.append(
+            {
+                "Signal in Study 2 review queue": label,
+                "Records": count,
+                "Share of review queue (%)": round(count / total * 100, 1) if total else 0.0,
+                "How to read it": interpretation,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_workbook_flag_strength_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+    """Group flagged Study 2 records by how many major issues they carry."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    review_queue = compact.loc[
+        compact["source_project"].eq("dirty_4581")
+        & compact["Action group"].isin(["Review", "Do not pay"])
+    ].copy()
+    total = len(review_queue)
+
+    rows = []
+    for label, mask, interpretation in [
+        (
+            "Soft-only review",
+            review_queue["Hard Check Violations"].eq(0),
+            "No major issue; these records entered review because softer signals piled up.",
+        ),
+        (
+            "One major issue",
+            review_queue["Hard Check Violations"].eq(1),
+            "One strong signal is present, but not enough for an outright rejection.",
+        ),
+        (
+            "Two major issues",
+            review_queue["Hard Check Violations"].eq(2),
+            "Two strong signals on the same record; this is the clearest review cluster.",
+        ),
+        (
+            "Three or more major issues",
+            review_queue["Hard Check Violations"].ge(3),
+            "Very concentrated concern; this is the most severe tail of the queue.",
+        ),
+    ]:
+        count = int(mask.sum())
+        rows.append(
+            {
+                "Flag pattern in Study 2 queue": label,
+                "Records": count,
+                "Share of review queue (%)": round(count / total * 100, 1) if total else 0.0,
+                "How to read it": interpretation,
             }
         )
     return pd.DataFrame(rows)
@@ -1399,6 +1520,41 @@ def plot_workbook_action_summary(
     return fig
 
 
+def plot_workbook_study_action_comparison(
+    stakeholder_records: pd.DataFrame,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Compare the four action groups across Study 1 and Study 2."""
+    summary = build_workbook_study_action_summary(stakeholder_records)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10.5, 5.2))
+    else:
+        fig = ax.get_figure()
+
+    sns.barplot(
+        data=summary,
+        x="Study",
+        y="Records",
+        hue="Action group",
+        order=[PROJECT_LABELS["clean_4797"], PROJECT_LABELS["dirty_4581"]],
+        hue_order=WORKBOOK_GROUP_ORDER,
+        palette=WORKBOOK_GROUP_COLORS,
+        ax=ax,
+    )
+    for container in ax.containers:
+        labels = [f"{int(bar.get_height()):,}" if bar.get_height() > 0 else "" for bar in container]
+        ax.bar_label(container, labels=labels, padding=3, fontsize=9)
+
+    ax.set_title("How action groups differ by study")
+    ax.set_xlabel("")
+    ax.set_ylabel("Records")
+    ax.legend(frameon=False, title="")
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
 def plot_workbook_timing_histogram(
     stakeholder_records: pd.DataFrame,
     time_col: str,
@@ -1442,6 +1598,111 @@ def plot_workbook_timing_histogram(
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=8)
     _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_workbook_review_signal_summary(
+    stakeholder_records: pd.DataFrame,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Show the most common signals inside the Study 2 review queue."""
+    summary = build_workbook_review_signal_summary(stakeholder_records)
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(9.0, 4.8))
+    else:
+        fig = ax.get_figure()
+
+    colors = sns.color_palette("blend:#DCEAF2,#1F5A7A", n_colors=len(summary))
+    bars = ax.barh(
+        summary["Signal in Study 2 review queue"],
+        summary["Share of review queue (%)"],
+        color=colors,
+        edgecolor="white",
+        linewidth=0.5,
+    )
+    for bar, count, pct in zip(bars, summary["Records"], summary["Share of review queue (%)"]):
+        ax.text(
+            bar.get_width() + 1,
+            bar.get_y() + bar.get_height() / 2,
+            f"{int(count):,} ({pct:.1f}%)",
+            va="center",
+            fontsize=10,
+        )
+
+    ax.set_xlabel("Percent of Study 2 review + reject queue")
+    ax.set_ylabel("")
+    ax.set_title("What shows up most often in the flagged queue")
+    ax.invert_yaxis()
+    _apply_stakeholder_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_workbook_timing_comparison(
+    stakeholder_records: pd.DataFrame,
+    axes: Optional[tuple[plt.Axes, plt.Axes]] = None,
+) -> plt.Figure:
+    """Compare Study 2 timing for payment-ready versus flagged records."""
+    compact = build_compact_workbook_records(stakeholder_records)
+    study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
+    study2["Timing comparison group"] = study2["Action group"].map(
+        {
+            "Pay now": "Payment-ready",
+            "Low-risk approval": "Payment-ready",
+            "Review": "Review or reject",
+            "Do not pay": "Review or reject",
+        }
+    )
+    palette = {
+        "Payment-ready": WORKBOOK_GROUP_COLORS["Pay now"],
+        "Review or reject": WORKBOOK_GROUP_COLORS["Review"],
+    }
+
+    if axes is None:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5.0))
+    else:
+        fig = axes[0].get_figure()
+
+    for ax, time_col, threshold, title in [
+        (axes[0], "Survey time (min)", 11.57, "Study 2 full survey time"),
+        (axes[1], "Attitudes time (min)", 7.85, "Study 2 attitudes section time"),
+    ]:
+        plotting = study2.dropna(subset=[time_col]).copy()
+        plotting = plotting.loc[plotting[time_col] <= 120]
+        for label in ["Payment-ready", "Review or reject"]:
+            subset = plotting.loc[plotting["Timing comparison group"].eq(label), time_col]
+            if len(subset) == 0:
+                continue
+            ax.hist(
+                subset,
+                bins=28,
+                alpha=0.65,
+                label=f"{label} (n={len(subset)})",
+                color=palette[label],
+                edgecolor="white",
+                linewidth=0.3,
+            )
+        ax.axvline(
+            threshold,
+            color="#DC2626",
+            linestyle="--",
+            linewidth=2,
+            label=f"Time limit: {threshold} min",
+        )
+        ax.set_xlabel("Minutes")
+        ax.set_ylabel("Records")
+        ax.set_title(title)
+        ax.legend(frameon=False, fontsize=9)
+        _apply_stakeholder_style(ax)
+
+    fig.suptitle(
+        "Simple timing comparison: payment-ready vs flagged",
+        fontsize=15,
+        fontweight="bold",
+        y=1.03,
+    )
     fig.tight_layout()
     return fig
 
@@ -1597,7 +1858,7 @@ def export_stakeholder_excel(
     cache_dir: Optional[Path] = None,
     excel_filename: str = "ESD_Bot_Analysis_Stakeholder_Summary.xlsx",
 ) -> Path:
-    """Write a compact stakeholder workbook with four action-oriented sheets."""
+    """Write a compact stakeholder workbook with action-oriented sheets and simple extra views."""
     views = build_stakeholder_views(output_dir, cache_dir)
     stakeholder_records = views["stakeholder_records"]
     dashboard_summary = build_workbook_action_summary(stakeholder_records)
@@ -1609,6 +1870,9 @@ def export_stakeholder_excel(
     decision_guide = build_workbook_decision_guide(stakeholder_records)
     workflow_summary = build_workbook_workflow_summary(stakeholder_records)
     demographic_snapshot = build_workbook_demographic_snapshot(stakeholder_records)
+    study_action_summary = views["study_action_summary"]
+    review_signal_summary = views["review_signal_summary"]
+    flag_strength_summary = views["flag_strength_summary"]
 
     excel_path = output_dir / excel_filename
     temp_images: list[str] = []
@@ -1626,6 +1890,10 @@ def export_stakeholder_excel(
             issue_summary.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=3, startcol=5)
             workflow_summary.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=12, startcol=0)
             demographic_snapshot.to_excel(writer, sheet_name="Screen Guide", index=False, startrow=12, startcol=5)
+
+            study_action_summary.to_excel(writer, sheet_name="Extra Views", index=False, startrow=3, startcol=0)
+            review_signal_summary.to_excel(writer, sheet_name="Extra Views", index=False, startrow=3, startcol=6)
+            flag_strength_summary.to_excel(writer, sheet_name="Extra Views", index=False, startrow=12, startcol=6)
 
             overview_ws = writer.book["Summary"]
             _style_sheet_heading(overview_ws, "A1", "ESD Bot Analysis Summary")
@@ -1650,6 +1918,17 @@ def export_stakeholder_excel(
             _style_sheet_heading(methods_ws, "A12", "Workflow summary", size=12)
             _style_sheet_heading(methods_ws, "F12", "Cleared now vs review queue", size=12)
 
+            extra_ws = writer.book["Extra Views"]
+            _style_sheet_heading(extra_ws, "A1", "Extra Stakeholder Views")
+            _style_sheet_note(
+                extra_ws,
+                "A2",
+                "This sheet mirrors the simplest stakeholder add-ons from the notebook: the study split, the flagged-queue mix, and one simple timing comparison.",
+            )
+            _style_sheet_heading(extra_ws, "A3", "Action groups by study", size=12)
+            _style_sheet_heading(extra_ws, "G3", "What is driving the Study 2 flagged queue", size=12)
+            _style_sheet_heading(extra_ws, "G12", "How severe is the flagged queue", size=12)
+
             payment_ws = writer.book["Pay Now"]
             _style_sheet_heading(payment_ws, "A1", "Pay Now")
             _style_sheet_note(
@@ -1670,15 +1949,32 @@ def export_stakeholder_excel(
             temp_images.append(dashboard_image)
             overview_ws.add_image(XLImage(dashboard_image), "A18")
 
+            study_action_image = _save_figure_image(plot_workbook_study_action_comparison(stakeholder_records))
+            temp_images.append(study_action_image)
+            extra_ws.add_image(XLImage(study_action_image), "A16")
+
+            review_signal_image = _save_figure_image(plot_workbook_review_signal_summary(stakeholder_records))
+            temp_images.append(review_signal_image)
+            extra_ws.add_image(XLImage(review_signal_image), "J16")
+
+            timing_comparison_image = _save_figure_image(plot_workbook_timing_comparison(stakeholder_records))
+            temp_images.append(timing_comparison_image)
+            extra_ws.add_image(XLImage(timing_comparison_image), "A45")
+
             _autosize_sheet(overview_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
             _autosize_sheet(payment_ws, wrap_text=True, freeze_panes="A4")
             _autosize_sheet(review_ws, wrap_text=True, freeze_panes="A4")
             _autosize_sheet(methods_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
+            _autosize_sheet(extra_ws, wrap_text=True, freeze_panes=None, apply_filter=False)
             overview_ws.column_dimensions["B"].width = 18
             overview_ws.column_dimensions["C"].width = 18
             overview_ws.column_dimensions["D"].width = 22
             methods_ws.column_dimensions["A"].width = 22
             methods_ws.column_dimensions["F"].width = 28
+            extra_ws.column_dimensions["A"].width = 24
+            extra_ws.column_dimensions["B"].width = 18
+            extra_ws.column_dimensions["G"].width = 28
+            extra_ws.column_dimensions["J"].width = 22
             payment_ws.freeze_panes = "A4"
             review_ws.freeze_panes = "A4"
     finally:
