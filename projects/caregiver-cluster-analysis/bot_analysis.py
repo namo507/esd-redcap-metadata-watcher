@@ -1,7 +1,7 @@
 """Reader-friendly bot analysis helpers for the caregiver study.
 
 This module provides simple, presentation-ready visualisations, plain-English
-column names, and a multi-sheet Excel export targeted at non-technical reviewers
+column names, and a multi-sheet Excel export targeted at non-technical readers
 (e.g., Dr. Bradshaw).  It reads the pipeline's committed outputs and REDCap
 caches without duplicating computation logic.
 """
@@ -86,6 +86,9 @@ PAYMENT_DECISION_LABELS: dict[str, str] = {
     "do_not_pay_pending_adjudication": "Confirmed bot / reject",
 }
 
+# The keys below are the exact strings written by the pipeline into
+# table_41_distinct_record_classification.csv, punctuation included.  Do not
+# retype them: the values on the right are what a reader actually sees.
 SUBCLASSIFICATION_LABELS: dict[str, str] = {
     "Real Caregiver": "No rule violations",
     "Likely Real Caregiver": "One soft check only",
@@ -123,7 +126,7 @@ ETHNICITY_CHECKBOX_LABELS: dict[str, str] = {
 WORKBOOK_EXPORT_COLUMNS = [
     "Study",
     "Record ID",
-    "Stakeholder Bucket",
+    "Review Category",
     "Payment Decision",
     "Trust Tier",
     "Reason for Bucket",
@@ -264,7 +267,7 @@ def load_dirty_records(cache_dir: Path) -> pd.DataFrame:
 
 
 def load_record_classification(output_dir: Path) -> pd.DataFrame:
-    """Load the row-level stakeholder classification table."""
+    """Load the row-level record classification table."""
     df = pd.read_csv(output_dir / "table_41_distinct_record_classification.csv")
     df["record_id"] = df["record_id"].astype(str)
     return df
@@ -298,7 +301,7 @@ def classify_records(
     record_flags: pd.DataFrame,
     confirmed_bot_ids: set[str],
 ) -> pd.DataFrame:
-    """Assign each record to one of 4 stakeholder categories.
+    """Assign each record to one of 4 review categories.
 
     Categories:
         - Confirmed Bot (6 identified records)
@@ -394,11 +397,11 @@ def _format_gender(series: pd.Series) -> pd.Series:
     return formatted.fillna("Not answered")
 
 
-def build_stakeholder_record_view(
+def build_report_record_view(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Build a stakeholder-friendly record-level export with timing and demographics."""
+    """Build a reader-friendly record-level export with timing and demographics."""
     if cache_dir is None:
         cache_dir = output_dir.parent / "data_cache"
 
@@ -441,7 +444,7 @@ def build_stakeholder_record_view(
         other_flag="demo_maternalethnicity___4",
         other_text_col="demo_ethnicity_other",
     )
-    merged["Stakeholder Bucket"] = merged["classification"].map(
+    merged["Review Category"] = merged["classification"].map(
         {
             "Confirmed Bot": "Confirmed bot / reject",
             "Needs Review": "Needs human review",
@@ -486,7 +489,7 @@ def build_stakeholder_record_view(
         }
     ).fillna(merged["classification"])
 
-    stakeholder_records = merged[
+    report_records = merged[
         WORKBOOK_EXPORT_COLUMNS
         + [
             "Full survey too fast",
@@ -501,12 +504,12 @@ def build_stakeholder_record_view(
             "classification",
         ]
     ].copy()
-    stakeholder_records["Record ID"] = stakeholder_records["Record ID"].astype(str)
-    return stakeholder_records
+    report_records["Record ID"] = report_records["Record ID"].astype(str)
+    return report_records
 
 
-def _workflow_counts(stakeholder_records: pd.DataFrame) -> dict[str, int]:
-    dirty = stakeholder_records.loc[stakeholder_records["source_project"].eq("dirty_4581")].copy()
+def _workflow_counts(report_records: pd.DataFrame) -> dict[str, int]:
+    dirty = report_records.loc[report_records["source_project"].eq("dirty_4581")].copy()
     hard_failed = dirty["Trust Tier"].eq("Confirmed invalid")
     confirmed_bots = dirty["classification"].eq("Confirmed Bot")
     review_records = dirty["classification"].eq("Needs Review")
@@ -530,9 +533,9 @@ def _workflow_counts(stakeholder_records: pd.DataFrame) -> dict[str, int]:
     }
 
 
-def build_workflow_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workflow_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Summarise the current Study 2 screening workflow in plain English."""
-    counts = _workflow_counts(stakeholder_records)
+    counts = _workflow_counts(report_records)
     rows = [
         {
             "Step": "Study 2 raw responses",
@@ -583,40 +586,40 @@ def build_workflow_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_overview_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
-    """Create a concise stakeholder count table across both studies."""
+def build_overview_summary(report_records: pd.DataFrame) -> pd.DataFrame:
+    """Create a concise count table across both studies."""
     rows: list[dict[str, object]] = []
     for label, mask, interpretation in [
         (
             "Cleared for payment now",
-            stakeholder_records["Payment Decision"].eq("Cleared for payment now"),
+            report_records["Payment Decision"].eq("Cleared for payment now"),
             "Tier 4 pass. No screening rule fired.",
         ),
         (
             "Low-risk provisional approval",
-            stakeholder_records["Payment Decision"].eq("Low-risk provisional approval"),
+            report_records["Payment Decision"].eq("Low-risk provisional approval"),
             "One soft check only. Provisionally safe but still separate from fully clear records.",
         ),
         (
             "Needs human review",
-            stakeholder_records["Payment Decision"].eq("Needs human review"),
+            report_records["Payment Decision"].eq("Needs human review"),
             "Manual adjudication queue.",
         ),
         (
             "Confirmed bot / reject",
-            stakeholder_records["Payment Decision"].eq("Confirmed bot / reject"),
+            report_records["Payment Decision"].eq("Confirmed bot / reject"),
             "Strongest evidence concentration. Hold payment.",
         ),
         (
             "Extreme fast (R1 + R2)",
-            stakeholder_records["Extreme Fast (R1 + R2)"].eq("Yes"),
+            report_records["Extreme Fast (R1 + R2)"].eq("Yes"),
             "Cross-cut subset of the hard-check path; not a separate payment bucket.",
         ),
     ]:
-        subset = stakeholder_records.loc[mask]
+        subset = report_records.loc[mask]
         rows.append(
             {
-                "Stakeholder Group": label,
+                "Group": label,
                 "Study 1 (4797)": int(subset["source_project"].eq("clean_4797").sum()),
                 "Study 2 (4581)": int(subset["source_project"].eq("dirty_4581").sum()),
                 "All Records": int(len(subset)),
@@ -624,9 +627,9 @@ def build_overview_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
             }
         )
 
-    r1r2_only = stakeholder_records.loc[
-        stakeholder_records["Extreme Fast (R1 + R2)"].eq("Yes")
-        & stakeholder_records[[
+    r1r2_only = report_records.loc[
+        report_records["Extreme Fast (R1 + R2)"].eq("Yes")
+        & report_records[[
             "Duplicate Response Pattern",
             "Branching / Family Logic Issue",
             "Impossible Demographics",
@@ -634,7 +637,7 @@ def build_overview_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
     ]
     rows.append(
         {
-            "Stakeholder Group": "Extreme fast with no other hard check",
+            "Group": "Extreme fast with no other hard check",
             "Study 1 (4797)": int(r1r2_only["source_project"].eq("clean_4797").sum()),
             "Study 2 (4581)": int(r1r2_only["source_project"].eq("dirty_4581").sum()),
             "All Records": int(len(r1r2_only)),
@@ -645,9 +648,9 @@ def build_overview_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def format_workflow_pipeline(stakeholder_records: pd.DataFrame) -> str:
+def format_workflow_pipeline(report_records: pd.DataFrame) -> str:
     """Render a compact ASCII workflow diagram with live counts."""
-    counts = _workflow_counts(stakeholder_records)
+    counts = _workflow_counts(report_records)
     return "\n".join(
         [
             "┌──────────────────────────────────────────────┐",
@@ -678,10 +681,10 @@ def format_workflow_pipeline(stakeholder_records: pd.DataFrame) -> str:
     )
 
 
-def build_demographic_comparison(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_demographic_comparison(report_records: pd.DataFrame) -> pd.DataFrame:
     """Compare the 223 fully cleared records with the 1,048 review records."""
-    compare = stakeholder_records.loc[
-        stakeholder_records["Payment Decision"].isin(
+    compare = report_records.loc[
+        report_records["Payment Decision"].isin(
             ["Cleared for payment now", "Needs human review"]
         )
     ].copy()
@@ -741,12 +744,12 @@ def build_demographic_comparison(stakeholder_records: pd.DataFrame) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def build_stakeholder_views(
+def build_report_views(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
 ) -> dict[str, object]:
-    """Load the stakeholder-ready tables, records, and derived summaries."""
-    stakeholder_records = build_stakeholder_record_view(output_dir, cache_dir)
+    """Load the report-ready tables, records, and derived summaries."""
+    report_records = build_report_record_view(output_dir, cache_dir)
     master_summary = load_master_summary(output_dir)
     detailed_breakdown = load_detailed_breakdown(output_dir)
     confirmed_bots = load_confirmed_bots(output_dir)
@@ -757,29 +760,29 @@ def build_stakeholder_views(
         "detailed_breakdown": detailed_breakdown,
         "confirmed_bots": confirmed_bots,
         "record_flags": record_flags,
-        "stakeholder_records": stakeholder_records,
-        "cleared_records": stakeholder_records.loc[
-            stakeholder_records["Payment Decision"].eq("Cleared for payment now")
+        "report_records": report_records,
+        "cleared_records": report_records.loc[
+            report_records["Payment Decision"].eq("Cleared for payment now")
         ].copy(),
-        "low_risk_records": stakeholder_records.loc[
-            stakeholder_records["Payment Decision"].eq("Low-risk provisional approval")
+        "low_risk_records": report_records.loc[
+            report_records["Payment Decision"].eq("Low-risk provisional approval")
         ].copy(),
-        "review_records": stakeholder_records.loc[
-            stakeholder_records["Payment Decision"].eq("Needs human review")
+        "review_records": report_records.loc[
+            report_records["Payment Decision"].eq("Needs human review")
         ].copy(),
-        "confirmed_bot_records": stakeholder_records.loc[
-            stakeholder_records["Payment Decision"].eq("Confirmed bot / reject")
+        "confirmed_bot_records": report_records.loc[
+            report_records["Payment Decision"].eq("Confirmed bot / reject")
         ].copy(),
-        "extreme_fast_records": stakeholder_records.loc[
-            stakeholder_records["Extreme Fast (R1 + R2)"].eq("Yes")
+        "extreme_fast_records": report_records.loc[
+            report_records["Extreme Fast (R1 + R2)"].eq("Yes")
         ].copy(),
-        "overview_summary": build_overview_summary(stakeholder_records),
-        "workflow_summary": build_workflow_summary(stakeholder_records),
-        "workflow_diagram": format_workflow_pipeline(stakeholder_records),
-        "demographic_comparison": build_demographic_comparison(stakeholder_records),
-        "study_action_summary": build_workbook_study_action_summary(stakeholder_records),
-        "review_signal_summary": build_workbook_review_signal_summary(stakeholder_records),
-        "flag_strength_summary": build_workbook_flag_strength_summary(stakeholder_records),
+        "overview_summary": build_overview_summary(report_records),
+        "workflow_summary": build_workflow_summary(report_records),
+        "workflow_diagram": format_workflow_pipeline(report_records),
+        "demographic_comparison": build_demographic_comparison(report_records),
+        "study_action_summary": build_workbook_study_action_summary(report_records),
+        "review_signal_summary": build_workbook_review_signal_summary(report_records),
+        "flag_strength_summary": build_workbook_flag_strength_summary(report_records),
     }
 
 
@@ -787,15 +790,13 @@ def build_notebook_views(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
 ) -> dict[str, object]:
-    """Notebook-facing alias with neutral naming for reader-visible cells."""
-    views = build_stakeholder_views(output_dir, cache_dir)
-    views["report_records"] = views["stakeholder_records"]
-    return views
+    """Notebook-facing entry point for every reader-visible table."""
+    return build_report_views(output_dir, cache_dir)
 
 
-def build_compact_workbook_records(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_compact_workbook_records(report_records: pd.DataFrame) -> pd.DataFrame:
     """Create a simplified record table for the workbook export."""
-    df = stakeholder_records.copy()
+    df = report_records.copy()
     df["Action group"] = df["Payment Decision"].map(WORKBOOK_GROUP_LABELS).fillna(
         df["Payment Decision"]
     )
@@ -817,9 +818,9 @@ def build_compact_workbook_records(stakeholder_records: pd.DataFrame) -> pd.Data
     return df
 
 
-def build_workbook_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
-    """Summarize the four stakeholder action groups in plain language."""
-    compact = build_compact_workbook_records(stakeholder_records)
+def build_workbook_action_summary(report_records: pd.DataFrame) -> pd.DataFrame:
+    """Summarize the four action groups in plain language."""
+    compact = build_compact_workbook_records(report_records)
     total_records = len(compact)
     rows = []
     for group in WORKBOOK_GROUP_ORDER:
@@ -835,9 +836,9 @@ def build_workbook_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataF
     return pd.DataFrame(rows)
 
 
-def build_workbook_study_action_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_study_action_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Show how the four action groups split within each study."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     rows = []
     for study in [PROJECT_LABELS["clean_4797"], PROJECT_LABELS["dirty_4581"]]:
         study_records = compact.loc[compact["Study"].eq(study)].copy()
@@ -856,12 +857,12 @@ def build_workbook_study_action_summary(stakeholder_records: pd.DataFrame) -> pd
     return pd.DataFrame(rows)
 
 
-def build_workbook_key_metrics(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_key_metrics(report_records: pd.DataFrame) -> pd.DataFrame:
     """Return a concise set of meeting-ready metrics."""
-    counts = _workflow_counts(stakeholder_records)
-    total_records = len(stakeholder_records)
+    counts = _workflow_counts(report_records)
+    total_records = len(report_records)
     review_total = int(
-        stakeholder_records["Payment Decision"].isin(
+        report_records["Payment Decision"].isin(
             ["Needs human review", "Confirmed bot / reject"]
         ).sum()
     )
@@ -895,9 +896,9 @@ def build_workbook_key_metrics(stakeholder_records: pd.DataFrame) -> pd.DataFram
     return pd.DataFrame(rows)
 
 
-def build_workbook_timing_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_timing_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Summarize Study 2 timing by decision group."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
 
     rows = []
@@ -916,9 +917,9 @@ def build_workbook_timing_summary(stakeholder_records: pd.DataFrame) -> pd.DataF
     return pd.DataFrame(rows)
 
 
-def build_workbook_issue_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_issue_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Count the most visible Study 2 issues in plain language."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
     total = len(study2)
 
@@ -945,9 +946,9 @@ def build_workbook_issue_summary(stakeholder_records: pd.DataFrame) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def build_workbook_review_signal_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_review_signal_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Summarize the clearest signals inside the Study 2 review queue."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     review_queue = compact.loc[
         compact["source_project"].eq("dirty_4581")
         & compact["Action group"].isin(["Review", "Do not pay"])
@@ -998,9 +999,9 @@ def build_workbook_review_signal_summary(stakeholder_records: pd.DataFrame) -> p
     return pd.DataFrame(rows)
 
 
-def build_workbook_flag_strength_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_flag_strength_summary(report_records: pd.DataFrame) -> pd.DataFrame:
     """Group flagged Study 2 records by how many major issues they carry."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     review_queue = compact.loc[
         compact["source_project"].eq("dirty_4581")
         & compact["Action group"].isin(["Review", "Do not pay"])
@@ -1042,9 +1043,9 @@ def build_workbook_flag_strength_summary(stakeholder_records: pd.DataFrame) -> p
     return pd.DataFrame(rows)
 
 
-def build_workbook_decision_guide(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_decision_guide(report_records: pd.DataFrame) -> pd.DataFrame:
     """Explain the four workbook decision groups without jargon."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     rows = []
     for group in WORKBOOK_GROUP_ORDER:
         count = int(compact["Action group"].eq(group).sum())
@@ -1064,9 +1065,9 @@ def build_workbook_decision_guide(stakeholder_records: pd.DataFrame) -> pd.DataF
     return pd.DataFrame(rows)
 
 
-def build_workbook_workflow_summary(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
-    """Condense the workflow into a short stakeholder table."""
-    counts = _workflow_counts(stakeholder_records)
+def build_workbook_workflow_summary(report_records: pd.DataFrame) -> pd.DataFrame:
+    """Condense the workflow into a short summary table."""
+    counts = _workflow_counts(report_records)
     rows = [
         {
             "Step": "Study 2 responses received",
@@ -1102,9 +1103,9 @@ def build_workbook_workflow_summary(stakeholder_records: pd.DataFrame) -> pd.Dat
     return pd.DataFrame(rows)
 
 
-def build_workbook_demographic_snapshot(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_workbook_demographic_snapshot(report_records: pd.DataFrame) -> pd.DataFrame:
     """Return a small, plain-language demographic comparison table."""
-    demo = build_demographic_comparison(stakeholder_records).copy()
+    demo = build_demographic_comparison(report_records).copy()
     demo.columns = [
         "Demographic signal",
         "Cleared now (223)",
@@ -1114,9 +1115,9 @@ def build_workbook_demographic_snapshot(stakeholder_records: pd.DataFrame) -> pd
     return demo
 
 
-def build_payment_ready_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_payment_ready_sheet(report_records: pd.DataFrame) -> pd.DataFrame:
     """Create the compact payment-ready record sheet."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     payment_ready = compact.loc[
         compact["Action group"].isin(["Pay now", "Low-risk approval"]),
         PAYMENT_READY_COLUMNS,
@@ -1131,9 +1132,9 @@ def build_payment_ready_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame
     return payment_ready
 
 
-def build_review_needed_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame:
+def build_review_needed_sheet(report_records: pd.DataFrame) -> pd.DataFrame:
     """Create the compact review-focused record sheet."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     review_needed = compact.loc[
         compact["Action group"].isin(["Review", "Do not pay"]),
         REVIEW_NEEDED_COLUMNS,
@@ -1150,8 +1151,8 @@ def build_review_needed_sheet(stakeholder_records: pd.DataFrame) -> pd.DataFrame
 
 # ── Plotting functions ──────────────────────────────────────────────────────
 
-def _apply_stakeholder_style(ax: plt.Axes) -> None:
-    """Apply clean, large-label formatting for stakeholder presentation."""
+def _apply_chart_style(ax: plt.Axes) -> None:
+    """Apply clean, large-label formatting shared by every chart in the notebook."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.tick_params(labelsize=11)
@@ -1192,7 +1193,7 @@ def plot_category_summary(master_summary: pd.DataFrame, ax: Optional[plt.Axes] =
     ax.set_xlabel("Number of Records")
     ax.set_title("Record Classification Summary (All Projects)")
     ax.invert_yaxis()
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -1234,7 +1235,7 @@ def plot_completion_time_histogram(
     ax.set_ylabel("Number of Records")
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=10)
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -1266,7 +1267,7 @@ def plot_rule_violation_frequency(
     project_label = f" ({project_filter})" if project_filter else ""
     ax.set_xlabel("Number of Records Flagged")
     ax.set_title(f"Rule Violation Frequency{project_label}")
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -1309,7 +1310,7 @@ def plot_tier_distribution(
     ax.set_xlabel("% of Records")
     ax.set_title("Trust Tier Distribution by Project")
     ax.legend(frameon=False, loc="lower right", fontsize=10)
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -1344,7 +1345,7 @@ def plot_detailed_breakdown(
     ax.set_xlabel("Number of Records")
     ax.set_title("Detailed Record Breakdown by Sub-Category")
     ax.invert_yaxis()
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -1377,18 +1378,18 @@ def plot_rule_overlap_heatmap(
         ax=ax,
     )
     ax.set_title("Hard-check overlap in Study 2")
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 def plot_clear_vs_review_demographics(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     axes: Optional[tuple[plt.Axes, plt.Axes]] = None,
 ) -> plt.Figure:
     """Compare cleared-for-payment records with the human-review queue."""
-    compare = stakeholder_records.loc[
-        stakeholder_records["Payment Decision"].isin(
+    compare = report_records.loc[
+        report_records["Payment Decision"].isin(
             ["Cleared for payment now", "Needs human review"]
         )
     ].copy()
@@ -1460,7 +1461,7 @@ def plot_clear_vs_review_demographics(
     age_ax.set_title("Caregiver age coverage")
     age_ax.set_xlabel("")
     age_ax.set_ylabel("Records with usable age")
-    _apply_stakeholder_style(age_ax)
+    _apply_chart_style(age_ax)
 
     share_rows: list[dict[str, object]] = []
     for metric, mask in [
@@ -1497,17 +1498,17 @@ def plot_clear_vs_review_demographics(
     share_ax.set_xlabel("Percent of records in each group")
     share_ax.set_ylabel("")
     share_ax.legend(frameon=False)
-    _apply_stakeholder_style(share_ax)
+    _apply_chart_style(share_ax)
     fig.tight_layout()
     return fig
 
 
 def plot_workbook_action_summary(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     ax: Optional[plt.Axes] = None,
 ) -> plt.Figure:
     """Bar chart of the four decision groups for the workbook dashboard."""
-    summary = build_workbook_action_summary(stakeholder_records)
+    summary = build_workbook_action_summary(report_records)
     if ax is None:
         fig, ax = plt.subplots(figsize=(7.5, 4.8))
     else:
@@ -1532,17 +1533,17 @@ def plot_workbook_action_summary(
     ax.set_xlabel("Records")
     ax.set_title("How responses were grouped for payment")
     ax.invert_yaxis()
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 def plot_workbook_study_action_comparison(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     ax: Optional[plt.Axes] = None,
 ) -> plt.Figure:
     """Compare the four action groups across Study 1 and Study 2."""
-    summary = build_workbook_study_action_summary(stakeholder_records)
+    summary = build_workbook_study_action_summary(report_records)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(10.5, 5.2))
@@ -1567,20 +1568,20 @@ def plot_workbook_study_action_comparison(
     ax.set_xlabel("")
     ax.set_ylabel("Records")
     ax.legend(frameon=False, title="")
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 def plot_workbook_timing_histogram(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     time_col: str,
     threshold_min: float,
     title: str,
     ax: Optional[plt.Axes] = None,
 ) -> plt.Figure:
     """Histogram of Study 2 timing using workbook-friendly action groups."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
     study2 = study2.dropna(subset=[time_col])
     study2 = study2.loc[study2[time_col] <= 120].copy()
@@ -1614,17 +1615,17 @@ def plot_workbook_timing_histogram(
     ax.set_ylabel("Records")
     ax.set_title(title)
     ax.legend(frameon=False, fontsize=8)
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 def plot_workbook_review_signal_summary(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     ax: Optional[plt.Axes] = None,
 ) -> plt.Figure:
     """Show the most common signals inside the Study 2 review queue."""
-    summary = build_workbook_review_signal_summary(stakeholder_records)
+    summary = build_workbook_review_signal_summary(report_records)
 
     if ax is None:
         fig, ax = plt.subplots(figsize=(9.0, 4.8))
@@ -1652,17 +1653,17 @@ def plot_workbook_review_signal_summary(
     ax.set_ylabel("")
     ax.set_title("What shows up most often in the review pile")
     ax.invert_yaxis()
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 def plot_workbook_timing_comparison(
-    stakeholder_records: pd.DataFrame,
+    report_records: pd.DataFrame,
     axes: Optional[tuple[plt.Axes, plt.Axes]] = None,
 ) -> plt.Figure:
     """Compare Study 2 timing for payment-ready versus flagged records."""
-    compact = build_compact_workbook_records(stakeholder_records)
+    compact = build_compact_workbook_records(report_records)
     study2 = compact.loc[compact["source_project"].eq("dirty_4581")].copy()
     study2["Timing comparison group"] = study2["Action group"].map(
         {
@@ -1712,26 +1713,26 @@ def plot_workbook_timing_comparison(
         ax.set_ylabel("Records")
         ax.set_title(title)
         ax.legend(frameon=False, fontsize=9)
-        _apply_stakeholder_style(ax)
+        _apply_chart_style(ax)
 
     fig.suptitle("Simple timing comparison: payment-ready vs held", fontsize=15, fontweight="bold", y=1.03)
     fig.tight_layout()
     return fig
 
 
-def build_workbook_dashboard_figure(stakeholder_records: pd.DataFrame) -> plt.Figure:
+def build_workbook_dashboard_figure(report_records: pd.DataFrame) -> plt.Figure:
     """Create one compact dashboard figure with a bar chart and two histograms."""
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.2))
-    plot_workbook_action_summary(stakeholder_records, ax=axes[0])
+    plot_workbook_action_summary(report_records, ax=axes[0])
     plot_workbook_timing_histogram(
-        stakeholder_records,
+        report_records,
         time_col="Survey time (min)",
         threshold_min=11.57,
         title="Study 2 full survey time",
         ax=axes[1],
     )
     plot_workbook_timing_histogram(
-        stakeholder_records,
+        report_records,
         time_col="Attitudes time (min)",
         threshold_min=7.85,
         title="Study 2 attitudes time",
@@ -1756,7 +1757,7 @@ def _save_figure_image(fig: plt.Figure) -> str:
 WORKFLOW_PIPELINE = """
 ┌──────────────────────────────────┐
 │  1,779 Raw Responses             │
-│  (Study 2 — Project 4581)        │
+│  (Study 2, Project 4581)         │
 └───────────────┬──────────────────┘
                 │
                 ▼
@@ -1865,23 +1866,23 @@ def _style_sheet_note(worksheet, cell: str, text: str) -> None:
     worksheet[cell].alignment = Alignment(wrap_text=True)
 
 
-def export_stakeholder_excel(
+def export_report_excel(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
     excel_filename: str = "ESD_Bot_Analysis_Simple_Summary.xlsx",
 ) -> Path:
-    """Write a compact stakeholder workbook with action-oriented sheets and simple extra views."""
-    views = build_stakeholder_views(output_dir, cache_dir)
-    stakeholder_records = views["stakeholder_records"]
-    dashboard_summary = build_workbook_action_summary(stakeholder_records)
-    key_metrics = build_workbook_key_metrics(stakeholder_records)
-    timing_summary = build_workbook_timing_summary(stakeholder_records)
-    review_sheet = build_review_needed_sheet(stakeholder_records)
-    payment_sheet = build_payment_ready_sheet(stakeholder_records)
-    issue_summary = build_workbook_issue_summary(stakeholder_records)
-    decision_guide = build_workbook_decision_guide(stakeholder_records)
-    workflow_summary = build_workbook_workflow_summary(stakeholder_records)
-    demographic_snapshot = build_workbook_demographic_snapshot(stakeholder_records)
+    """Write a compact workbook with action-oriented sheets and simple extra views."""
+    views = build_report_views(output_dir, cache_dir)
+    report_records = views["report_records"]
+    dashboard_summary = build_workbook_action_summary(report_records)
+    key_metrics = build_workbook_key_metrics(report_records)
+    timing_summary = build_workbook_timing_summary(report_records)
+    review_sheet = build_review_needed_sheet(report_records)
+    payment_sheet = build_payment_ready_sheet(report_records)
+    issue_summary = build_workbook_issue_summary(report_records)
+    decision_guide = build_workbook_decision_guide(report_records)
+    workflow_summary = build_workbook_workflow_summary(report_records)
+    demographic_snapshot = build_workbook_demographic_snapshot(report_records)
     study_action_summary = views["study_action_summary"]
     review_signal_summary = views["review_signal_summary"]
     flag_strength_summary = views["flag_strength_summary"]
@@ -1957,15 +1958,15 @@ def export_stakeholder_excel(
                 "Use this sheet for records that need manual review or should not be paid.",
             )
 
-            dashboard_image = _save_figure_image(build_workbook_dashboard_figure(stakeholder_records))
+            dashboard_image = _save_figure_image(build_workbook_dashboard_figure(report_records))
             temp_images.append(dashboard_image)
             overview_ws.add_image(XLImage(dashboard_image), "A18")
 
-            review_signal_image = _save_figure_image(plot_workbook_review_signal_summary(stakeholder_records))
+            review_signal_image = _save_figure_image(plot_workbook_review_signal_summary(report_records))
             temp_images.append(review_signal_image)
             extra_ws.add_image(XLImage(review_signal_image), "A16")
 
-            timing_comparison_image = _save_figure_image(plot_workbook_timing_comparison(stakeholder_records))
+            timing_comparison_image = _save_figure_image(plot_workbook_timing_comparison(report_records))
             temp_images.append(timing_comparison_image)
             extra_ws.add_image(XLImage(timing_comparison_image), "A42")
 
@@ -1998,12 +1999,12 @@ def export_simple_excel(
     cache_dir: Optional[Path] = None,
     excel_filename: str = "ESD_Bot_Analysis_Simple_Summary.xlsx",
 ) -> Path:
-    """Notebook-facing alias with neutral naming for the exported workbook."""
-    return export_stakeholder_excel(output_dir, cache_dir, excel_filename)
+    """Notebook-facing name for the exported workbook."""
+    return export_report_excel(output_dir, cache_dir, excel_filename)
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Stakeholder screening-evidence views
+# Screening-evidence views
 #
 # Everything below answers four questions in plain language: does the screen
 # work, what did it catch, how severe is it, and what should we do next.  The
@@ -2017,7 +2018,7 @@ SUPPORTING_RULES = ["rule_R3", "rule_R4", "rule_R6", "rule_R7"]
 SHARED_RULES = SERIOUS_RULES + SUPPORTING_RULES
 
 # Plain-English name for every check, with no rule codes and no statistics
-# vocabulary.  These strings are what stakeholders read on every axis label,
+# vocabulary.  These strings are what readers see on every axis label,
 # table cell and legend in the notebook.
 CHECK_PLAIN_NAMES: dict[str, str] = {
     "rule_R1": "Whole survey too fast",
@@ -2085,7 +2086,7 @@ def build_screen_inputs(
     """One tidy record-level frame behind every screening-evidence view.
 
     The survey total here is deliberately stricter than the one in
-    ``build_stakeholder_record_view``: that column sums the four section times
+    ``build_report_record_view``: that column sums the four section times
     with ``min_count=1``, so a half-answered record gets a small partial total
     that never triggered the speed check.  Charting the partial total would put
     verified caregivers below a line that no verified caregiver actually
@@ -2147,15 +2148,16 @@ def _decide(serious: pd.Series, supporting: pd.Series) -> pd.Series:
 # ── 1. Where every time limit came from ─────────────────────────────────────
 
 def build_limit_origin_table(output_dir: Path) -> pd.DataFrame:
-    """Show that every cutoff was read off the verified caregivers, not chosen."""
+    """Show that every line was read off the verified caregivers, not chosen."""
     definitions = load_rule_definitions(output_dir).set_index("rule")
 
     def threshold(rule: str) -> float:
         return float(definitions.loc[rule, "threshold"])
 
     section_floors = json.loads(str(definitions.loc["R3", "threshold"]))
+    straightline = json.loads(str(definitions.loc["R4", "threshold"]))
     section_names = {
-        "feat_time_fif": "Family information section rushed",
+        "feat_time_fif": "Family Information section rushed",
         "feat_time_val": "Values section rushed",
         "feat_time_tfa": "Attitudes section rushed",
         "feat_time_demo": "Demographics section rushed",
@@ -2165,12 +2167,12 @@ def build_limit_origin_table(output_dir: Path) -> pd.DataFrame:
         {
             "What we check": "Whole survey too fast",
             "The line we drew": _minutes_to_words(threshold("R1")),
-            "How that line was worked out": "The fastest verified caregiver who finished every section",
+            "How that line was worked out": "Smallest whole-survey time among the verified caregivers",
         },
         {
             "What we check": "Thoughts, Feelings, and Attitudes section too fast",
             "The line we drew": _minutes_to_words(threshold("R2")),
-            "How that line was worked out": "The fastest verified caregiver on that section",
+            "How that line was worked out": "Smallest section time among the verified caregivers",
         },
     ]
     for field, label in section_names.items():
@@ -2178,26 +2180,107 @@ def build_limit_origin_table(output_dir: Path) -> pd.DataFrame:
             {
                 "What we check": label,
                 "The line we drew": _minutes_to_words(float(section_floors[field])),
-                "How that line was worked out": "The fastest 1 in 100 verified caregivers on that section",
+                "How that line was worked out": "1st percentile of verified caregiver times on that section",
             }
         )
+    lowest_block = min(straightline.values())
+    highest_block = max(straightline.values())
     rows.append(
         {
-            "What we check": "Same answer repeated down a block",
-            "The line we drew": "Answers varied less than 0.78 on a 1-4 block",
-            "How that line was worked out": "The 1 in 100 verified caregivers whose answers varied least",
+            "What we check": "Same answer repeated down a rating block",
+            "The line we drew": (
+                f"Answers spread by {lowest_block:.2f} to {highest_block:.2f} "
+                "points or less, depending on the block"
+            ),
+            "How that line was worked out": (
+                "1st percentile of the verified caregivers' answer spread, "
+                "worked out separately for each rating block"
+            ),
         }
     )
     rows.append(
         {
             "What we check": "Arrived within a minute of two or more others",
-            "The line we drew": "3 or more sign-ups inside 60 seconds",
-            "How that line was worked out": "The 1 in 100 shortest gaps between verified caregiver sign-ups",
+            "The line we drew": f"3 or more sign-ups inside {threshold('R6'):.0f} seconds",
+            "How that line was worked out": (
+                "The verified caregivers' 1st percentile gap was 3 seconds, which was "
+                "too tight to be useful, so a preset 60-second floor was applied instead. "
+                "This is the one line not read straight off the verified caregivers."
+            ),
         }
     )
 
     table = pd.DataFrame(rows)
     table["Whose answers set it"] = "The 131 verified caregivers who finished every section"
+    return table
+
+
+def build_threshold_check_table(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Recompute each timing line from the raw verified answers and compare.
+
+    This is the audit step.  The published lines live in a committed CSV; this
+    function goes back to the cached REDCap answers, redoes the arithmetic, and
+    prints both numbers next to each other so a reader can see they agree.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+
+    records = load_combined_records(cache_dir).copy()
+    for column in TIME_FIELDS:
+        records[column] = pd.to_numeric(records[column], errors="coerce")
+    totals = records[TIME_FIELDS].sum(axis=1, min_count=len(TIME_FIELDS))
+    verified = records[records["source_project"].eq("clean_4797") & totals.notna()]
+    verified_totals = verified[TIME_FIELDS].sum(axis=1)
+
+    definitions = load_rule_definitions(output_dir).set_index("rule")
+    section_floors = json.loads(str(definitions.loc["R3", "threshold"]))
+
+    checks = [
+        (
+            "Whole survey too fast",
+            "smallest whole-survey time",
+            float(definitions.loc["R1", "threshold"]),
+            float(verified_totals.min()),
+        ),
+        (
+            "Attitudes section too fast",
+            "smallest attitudes time",
+            float(definitions.loc["R2", "threshold"]),
+            float(verified["get_time_tfa"].min()),
+        ),
+    ]
+    section_pairs = [
+        ("Family Information section rushed", "get_time_fif", "feat_time_fif"),
+        ("Values section rushed", "get_time_val", "feat_time_val"),
+        ("Attitudes section rushed", "get_time_tfa", "feat_time_tfa"),
+        ("Demographics section rushed", "get_time_demo", "feat_time_demo"),
+    ]
+    for label, column, key in section_pairs:
+        checks.append(
+            (
+                label,
+                "1st percentile of verified times",
+                float(section_floors[key]),
+                float(verified[column].quantile(0.01)),
+            )
+        )
+
+    rows = []
+    for label, method, published, recomputed in checks:
+        rows.append(
+            {
+                "What we check": label,
+                "How the line is worked out": method,
+                "Line used in the report (minutes)": round(published, 3),
+                "Line recomputed here (minutes)": round(recomputed, 3),
+                "Do they match": "Yes" if abs(published - recomputed) < 0.005 else "No",
+            }
+        )
+    table = pd.DataFrame(rows)
+    table.attrs["verified_n"] = int(len(verified))
     return table
 
 
@@ -2239,18 +2322,27 @@ def _clipped_histogram(
     step: float,
     title: str,
 ) -> None:
-    """Percent-of-group histogram with a catch-all final bar and the limit marked.
+    """Side-by-side percent histogram with a catch-all final bar and the limit marked.
 
-    Survey times run to 1,383 minutes because people leave the form open, so
-    the axis is clipped and the tail is collected into one honest bar rather
-    than dropped.
+    The two groups are drawn as neighbouring bars, never overlaid.  Overlaid
+    semi-transparent bars read as a stacked chart, so a reader cannot tell how
+    tall either group's bar actually is.
+
+    Survey times run past 1,300 minutes because people leave the form open, so
+    the axis is clipped and the long tail is collected into one labelled bar
+    rather than dropped.
     """
     edges = np.arange(0, ceiling + step, step)
     centres = edges[:-1] + step / 2
     # A visible gap keeps the catch-all bar from reading as just another bin.
-    extra = ceiling + step * 1.4
+    extra = ceiling + step * 1.6
+    positions = np.append(centres, extra)
+    bar_width = step * 0.40
 
-    for group, colour in STUDY_COLORS.items():
+    heights_by_group = {}
+    for offset, (group, colour) in zip(
+        (-bar_width / 2, bar_width / 2), STUDY_COLORS.items()
+    ):
         frame = screen_inputs[screen_inputs["Group"].eq(group)]
         if gate is not None:
             frame = frame[frame[gate]]
@@ -2258,42 +2350,58 @@ def _clipped_histogram(
         counts, _ = np.histogram(values.clip(upper=ceiling - 1e-9), bins=edges)
         over = int((values >= ceiling).sum())
         heights = np.append(counts, over) / len(values) * 100
+        heights_by_group[group] = heights
+        under = int((values < limit).sum())
         ax.bar(
-            np.append(centres, extra),
+            positions + offset,
             heights,
-            width=step * 0.9,
+            bar_width,
             color=colour,
-            alpha=0.65,
-            label=f"{group} ({len(values):,})",
+            label=f"{group}: {len(values):,} timed, {under:,} under the line",
         )
 
-    ax.axvline(limit, color="#A85D75", linestyle="--", linewidth=2)
+    tallest = max(h.max() for h in heights_by_group.values())
+    ax.set_ylim(0, tallest * 1.22)
+
+    # Shade the region that the rule treats as too fast.
+    ax.axvspan(0, limit, color="#A85D75", alpha=0.12, zorder=0)
+    ax.axvline(limit, color="#A85D75", linestyle="--", linewidth=2, zorder=3)
     ax.text(
         limit,
-        ax.get_ylim()[1] * 0.94,
-        f"  the fastest verified caregiver\n  ({_minutes_to_words(limit)})",
+        tallest * 1.20,
+        f" Line: {_minutes_to_words(limit)}",
         color="#A85D75",
-        fontsize=9,
+        fontsize=10,
         fontweight="bold",
         va="top",
-        bbox=dict(facecolor="white", edgecolor="none", alpha=0.8, pad=2),
+        ha="left",
     )
     ax.set_title(title)
-    ax.set_xlabel("Minutes taken")
+    ax.set_xlabel("Minutes taken to finish")
     ax.set_ylabel("Share of that group (%)")
+    ax.set_xlim(-step, extra + step)
     # Drop any tick that would collide with the catch-all label.
     ticks = [e for e in edges[::2] if e < ceiling - step]
     ax.set_xticks(ticks + [extra])
-    ax.set_xticklabels(
-        [f"{int(e)}" for e in ticks] + [f"{int(ceiling)}+"], fontsize=9
+    ax.set_xticklabels([f"{int(e)}" for e in ticks] + [f"{int(ceiling)}+"], fontsize=9)
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(plt.Rectangle((0, 0), 1, 1, color="#A85D75", alpha=0.30))
+    labels.append("Shaded: faster than every verified caregiver")
+    ax.legend(
+        handles,
+        labels,
+        frameon=False,
+        fontsize=10,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.19),
+        ncol=1,
     )
-    ax.legend(frameon=False, fontsize=9)
-    _apply_stakeholder_style(ax)
+    _apply_chart_style(ax)
 
 
 def plot_speed_comparison(screen_inputs: pd.DataFrame) -> plt.Figure:
     """Two histograms showing verified caregivers never fall below the speed lines."""
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5.6))
     _clipped_histogram(
         axes[0],
         screen_inputs,
@@ -2302,7 +2410,7 @@ def plot_speed_comparison(screen_inputs: pd.DataFrame) -> plt.Figure:
         TOTAL_TIME_LIMIT_MIN,
         ceiling=90,
         step=5,
-        title="Whole survey: how long it took",
+        title="Whole survey (all four sections)",
     )
     _clipped_histogram(
         axes[1],
@@ -2312,14 +2420,14 @@ def plot_speed_comparison(screen_inputs: pd.DataFrame) -> plt.Figure:
         ATTITUDES_TIME_LIMIT_MIN,
         ceiling=45,
         step=2.5,
-        title="Thoughts, Feelings, and Attitudes: how long it took",
+        title="Thoughts, Feelings, and Attitudes section",
     )
     fig.suptitle(
-        "Nobody we verified finished faster than the line - many online sign-ups did",
+        "No verified caregiver finished faster than the line. Many online sign-ups did.",
         fontsize=14,
         fontweight="bold",
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.02, 1, 1))
     return fig
 
 
@@ -2332,7 +2440,7 @@ def build_cutoff_sensitivity_table(
     current: float = ATTITUDES_TIME_LIMIT_MIN,
     candidates: Optional[list[float]] = None,
 ) -> pd.DataFrame:
-    """How many responses each candidate cutoff would catch, in both groups."""
+    """How many responses each candidate line would catch, in both groups."""
     if candidates is None:
         candidates = [4, 5, 6, 7, current, 9, 10, 12, 15]
 
@@ -2348,17 +2456,17 @@ def build_cutoff_sensitivity_table(
         caught = int((online_values < cutoff).sum())
         wrong = int((verified_values < cutoff).sum())
         if cutoff == current:
-            note = "Today's setting - the last one that catches nobody we know is real"
+            note = "Today's setting, and the loosest line that still catches no verified caregiver"
         elif wrong == 0:
-            note = "Catches nobody we know is real, but holds fewer sign-ups"
+            note = "Catches no verified caregiver, but holds fewer online sign-ups"
         else:
-            note = f"Moves {wrong} caregiver(s) we know are real into the hold pile"
+            note = f"Pulls {wrong} verified caregiver(s) into the hold pile"
         rows.append(
             {
                 "Where we draw the line": f"{cutoff:g} minutes"
                 + (" (today's setting)" if cutoff == current else ""),
-                f"Online sign-ups caught (out of {len(online_values):,})": caught,
-                f"Caregivers we know are real caught by mistake (out of {len(verified_values):,})": wrong,
+                f"Online sign-ups caught (of {len(online_values):,})": caught,
+                f"Verified caregivers caught by mistake (of {len(verified_values):,})": wrong,
                 "What this setting means": note,
             }
         )
@@ -2366,9 +2474,9 @@ def build_cutoff_sensitivity_table(
 
 
 def plot_cutoff_sensitivity(sensitivity: pd.DataFrame) -> plt.Figure:
-    """Two stacked panels: what a cutoff catches, and who it catches by mistake."""
+    """Two stacked panels: what a line catches, and who it catches by mistake."""
     caught_col = [c for c in sensitivity.columns if c.startswith("Online sign-ups")][0]
-    wrong_col = [c for c in sensitivity.columns if c.startswith("Caregivers we know")][0]
+    wrong_col = [c for c in sensitivity.columns if c.startswith("Verified caregivers")][0]
     current = sensitivity["Where we draw the line"].str.contains("today")
     # Short axis labels: the full sentence belongs in the table, not on the ticks.
     labels = (
@@ -2376,36 +2484,54 @@ def plot_cutoff_sensitivity(sensitivity: pd.DataFrame) -> plt.Figure:
         .str.replace(" (today's setting)", "\n(today)", regex=False)
         .str.replace(" minutes", "", regex=False)
     )
-    colours = ["#A85D75" if flag else "#C67C2D" for flag in current]
 
-    fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-    for ax, column, palette, ylabel in (
-        (axes[0], caught_col, colours, caught_col),
+    panels = [
         (
-            axes[1],
+            caught_col,
+            ["#A85D75" if flag else "#C67C2D" for flag in current],
+            "Online sign-ups\ncaught",
+            "Moving the attitudes line: online sign-ups it would catch",
+        ),
+        (
             wrong_col,
             ["#A85D75" if flag else "#1F5A7A" for flag in current],
-            wrong_col,
+            "Verified caregivers\ncaught by mistake",
+            "Moving the attitudes line: verified caregivers it would catch by mistake",
         ),
-    ):
+    ]
+
+    fig, axes = plt.subplots(2, 1, figsize=(11.5, 7.6), sharex=True)
+    for ax, (column, palette, ylabel, title) in zip(axes, panels):
+        tallest = max(sensitivity[column].max(), 1)
         bars = ax.bar(labels, sensitivity[column], color=palette)
         # Zero bars carry the good news here, so every value is labelled.
         for bar, value in zip(bars, sensitivity[column]):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + max(sensitivity[column]) * 0.02,
+                bar.get_height() + tallest * 0.03,
                 f"{int(value):,}",
                 ha="center",
                 fontsize=10,
                 fontweight="bold",
             )
-        ax.set_ylabel("\n".join(ylabel.split(" (out of ")[0].split(" caught")[0:1]) + "\ncaught")
-        ax.set_ylim(0, max(sensitivity[column]) * 1.18 + 1)
-        _apply_stakeholder_style(ax)
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(0, tallest * 1.20)
+        ax.set_title(title)
+        _apply_chart_style(ax)
 
-    axes[0].set_title("Moving the Thoughts/Feelings/Attitudes line: what it would catch")
-    axes[1].set_title("Moving the Thoughts/Feelings/Attitudes line: who it would catch by mistake")
     axes[1].set_xlabel("Where we draw the line (minutes)")
+    axes[1].text(
+        0.02,
+        0.94,
+        "The zero at today's setting is partly built in:\n"
+        "the line was placed at the fastest verified caregiver.",
+        transform=axes[1].transAxes,
+        ha="left",
+        va="top",
+        fontsize=9.5,
+        color="#A85D75",
+        fontweight="bold",
+    )
     fig.tight_layout()
     return fig
 
@@ -2413,33 +2539,46 @@ def plot_cutoff_sensitivity(sensitivity: pd.DataFrame) -> plt.Figure:
 # ── 4. Has any check ever flagged a verified caregiver? ─────────────────────
 
 def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
-    """How often each check fires on people we know are real."""
-    verified = screen_inputs[
-        screen_inputs["Group"].eq("Caregivers we verified") & screen_inputs["Timed end to end"]
-    ]
-    total = len(verified)
+    """How often each check fires on people we know are real.
+
+    The denominator changes by check on purpose.  The two whole-timing checks
+    can only fire on a response that has all four sections timed, so scoring
+    them against all 177 verified caregivers would understate how often they
+    fire.  Every other check can fire on any response, so it is scored against
+    all 177.
+    """
+    verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")]
+    timed = verified[verified["Timed end to end"]]
+    online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")]
 
     rows = []
     for rule in SHARED_RULES:
-        hits = int(verified[rule].sum())
-        if rule in ("rule_R1", "rule_R2"):
+        needs_full_timing = rule in ("rule_R1", "rule_R2")
+        pool = timed if needs_full_timing else verified
+        total = len(pool)
+        hits = int(pool[rule].sum())
+        online_hits = int(online[rule].sum())
+
+        if needs_full_timing:
             reading = (
-                "Zero here is partly guaranteed - this line was set at the fastest "
-                "verified caregiver - so treat it as consistent, not as proof."
+                "Zero here is partly built in: this line was placed at the fastest "
+                "verified caregiver, so treat it as consistent, not as proof."
             )
-        elif hits == 0:
+        elif hits == 0 and online_hits == 0:
             reading = "This pattern has not shown up in either study."
+        elif hits == 0:
+            reading = (
+                "It never fired on a verified caregiver, and it fired on "
+                f"{online_hits:,} online sign-ups."
+            )
         else:
             reading = f"This pattern showed up in {hits} of {total} people we know are real."
 
-        online_hits = int(
-            screen_inputs.loc[screen_inputs["Group"].eq("Online sign-ups"), rule].sum()
-        )
         if hits == 0:
             advice = "Strong enough to act on with a quick spot check"
         elif online_hits == 0:
             advice = (
-                "Review this pattern - it has never shown up in an online sign-up, "
+                "Review this check. It has never fired on an online sign-up, "
                 "only on people we know are real"
             )
         else:
@@ -2450,14 +2589,356 @@ def build_wrong_flag_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
                 "Pattern we look for": CHECK_PLAIN_NAMES[rule],
                 "Where it shows up": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                f"Verified caregivers showing this pattern (out of {total})": hits,
+                "Verified caregivers this check could fire on": total,
+                "Verified caregivers it fired on": hits,
                 "What that tells us": reading,
                 "How to use it": advice,
             }
         )
     table = pd.DataFrame(rows)
-    count_col = [c for c in table.columns if c.startswith("Verified caregivers")][0]
-    return table.sort_values(count_col, ascending=False).reset_index(drop=True)
+    return table.sort_values(
+        "Verified caregivers it fired on", ascending=False
+    ).reset_index(drop=True)
+
+
+# ── 4b. What the two groups actually answered, side by side ─────────────────
+
+# One real rating block from the questionnaire, used for the worked example of
+# the repeated-answer check.  Every item here is answered on the same 1-to-5
+# scale, and this is the exact block the published check reads, so the spread
+# worked out below reproduces the published line of 0.82 exactly.
+RATING_BLOCK_FIELDS: list[str] = [
+    "tfa_angry",
+    "tfa_comfortable",
+    "tfa_disgusted",
+    "tfa_future",
+    "tfa_happy",
+    "tfa_mult_kids_odds",
+    "tfa_sad",
+    "tfa_scared",
+    "tfa_surprised",
+    "tfa_test_today",
+    "tfa_trusting",
+]
+
+RATING_BLOCK_LABELS: dict[str, str] = {
+    "tfa_angry": "Angry",
+    "tfa_comfortable": "Comfortable",
+    "tfa_disgusted": "Disgusted",
+    "tfa_future": "How sure the test would need to be",
+    "tfa_happy": "Happy",
+    "tfa_mult_kids_odds": "Odds a younger sibling is also autistic",
+    "tfa_sad": "Sad",
+    "tfa_scared": "Scared",
+    "tfa_surprised": "Surprised",
+    "tfa_test_today": "When you would want the test done",
+    "tfa_trusting": "Trusting",
+}
+
+RATING_BLOCK_SPREAD_LIMIT = 0.82  # published line for this block, rounded for display
+
+SECTION_TIME_LABELS: dict[str, str] = {
+    "get_time_fif": "Family Information",
+    "get_time_val": "Values",
+    "get_time_tfa": "Thoughts, Feelings, and Attitudes",
+    "get_time_demo": "Demographics",
+}
+
+
+def _typical_verified_id(
+    screen_inputs: pd.DataFrame,
+    cache_dir: Path,
+    column: str = "Survey minutes",
+) -> str:
+    """The verified caregiver sitting closest to the middle of their own group.
+
+    Picked by rule rather than by hand so the comparison cannot be accused of
+    reaching for a flattering example.  The record must have all four sections
+    timed and every question in the rating block answered, otherwise the
+    side-by-side comparison would have blanks in it.
+    """
+    verified = screen_inputs[
+        screen_inputs["Group"].eq("Caregivers we verified") & screen_inputs["Timed end to end"]
+    ].set_index("record_id")
+
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+    answers = records[records["source_project"].eq("clean_4797")].set_index("record_id")
+    complete = answers[RATING_BLOCK_FIELDS].apply(pd.to_numeric, errors="coerce").notna().all(axis=1)
+
+    values = verified[column].dropna()
+    eligible = values.loc[[i for i in values.index if complete.get(i, False)]]
+    middle = values.median()
+    return str((eligible - middle).abs().idxmin())
+
+
+def build_answer_comparison(
+    screen_inputs: pd.DataFrame,
+    cache_dir: Path,
+    flagged_id: str = "296",
+    verified_id: Optional[str] = None,
+) -> pd.DataFrame:
+    """The same eleven questions, answered by one flagged response and one caregiver.
+
+    ``flagged_id`` defaults to the online sign-up with the flattest answers in
+    this block.  ``verified_id`` defaults to the verified caregiver whose whole
+    survey time is closest to the verified median.
+    """
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+    online = records[records["source_project"].eq("dirty_4581")].set_index("record_id")
+    verified_records = records[records["source_project"].eq("clean_4797")].set_index("record_id")
+
+    if verified_id is None:
+        verified_id = _typical_verified_id(screen_inputs, cache_dir)
+
+    flagged_answers = pd.to_numeric(online.loc[flagged_id, RATING_BLOCK_FIELDS], errors="coerce")
+    verified_answers = pd.to_numeric(
+        verified_records.loc[verified_id, RATING_BLOCK_FIELDS], errors="coerce"
+    )
+
+    table = pd.DataFrame(
+        {
+            "Question in this block": [RATING_BLOCK_LABELS[f] for f in RATING_BLOCK_FIELDS],
+            f"Online sign-up {flagged_id} answered": flagged_answers.values,
+            f"Verified caregiver {verified_id} answered": verified_answers.values,
+        }
+    )
+    table.attrs["flagged_id"] = flagged_id
+    table.attrs["verified_id"] = verified_id
+    table.attrs["flagged_spread"] = float(flagged_answers.std(ddof=1))
+    table.attrs["verified_spread"] = float(verified_answers.std(ddof=1))
+    table.attrs["limit"] = RATING_BLOCK_SPREAD_LIMIT
+    return table
+
+
+def plot_answer_comparison(comparison: pd.DataFrame) -> plt.Figure:
+    """Two columns of real answers, drawn on the same 1-to-5 scale."""
+    flagged_id = comparison.attrs["flagged_id"]
+    verified_id = comparison.attrs["verified_id"]
+    flagged_column = f"Online sign-up {flagged_id} answered"
+    verified_column = f"Verified caregiver {verified_id} answered"
+
+    labels = comparison["Question in this block"]
+    y = np.arange(len(labels))[::-1]
+    height = 0.38
+
+    fig, ax = plt.subplots(figsize=(11.5, 6.2))
+    ax.barh(
+        y + height / 2,
+        comparison[verified_column],
+        height,
+        color=STUDY_COLORS["Caregivers we verified"],
+        label=(
+            f"Verified caregiver {verified_id}: answers spread by "
+            f"{comparison.attrs['verified_spread']:.2f}"
+        ),
+    )
+    ax.barh(
+        y - height / 2,
+        comparison[flagged_column],
+        height,
+        color=STUDY_COLORS["Online sign-ups"],
+        label=(
+            f"Online sign-up {flagged_id}: answers spread by "
+            f"{comparison.attrs['flagged_spread']:.2f}"
+        ),
+    )
+    for offset, column in ((height / 2, verified_column), (-height / 2, flagged_column)):
+        for index, value in zip(y, comparison[column]):
+            if pd.notna(value):
+                ax.text(value + 0.07, index + offset, f"{int(value)}", va="center", fontsize=9)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels)
+    ax.set_xlim(0, 5.6)
+    ax.set_xticks([1, 2, 3, 4, 5])
+    ax.set_xlabel("Answer given (1 = not at all, 5 = a lot)")
+    ax.set_title("The same eleven questions, as each response actually answered them")
+    ax.legend(
+        frameon=False,
+        fontsize=10,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.13),
+        ncol=1,
+    )
+    _apply_chart_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def build_section_time_comparison(
+    screen_inputs: pd.DataFrame,
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+    flagged_id: str = "1026",
+    verified_id: Optional[str] = None,
+) -> pd.DataFrame:
+    """Section-by-section minutes for one flagged response and one caregiver."""
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+
+    definitions = load_rule_definitions(output_dir).set_index("rule")
+    floors = json.loads(str(definitions.loc["R3", "threshold"]))
+    floor_lookup = {
+        "get_time_fif": float(floors["feat_time_fif"]),
+        "get_time_val": float(floors["feat_time_val"]),
+        "get_time_tfa": float(floors["feat_time_tfa"]),
+        "get_time_demo": float(floors["feat_time_demo"]),
+    }
+
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+    for column in TIME_FIELDS:
+        records[column] = pd.to_numeric(records[column], errors="coerce")
+    online = records[records["source_project"].eq("dirty_4581")].set_index("record_id")
+    verified_records = records[records["source_project"].eq("clean_4797")].set_index("record_id")
+
+    if verified_id is None:
+        verified_id = _typical_verified_id(screen_inputs, cache_dir)
+
+    rows = []
+    for column in TIME_FIELDS:
+        flagged_value = float(online.loc[flagged_id, column])
+        verified_value = float(verified_records.loc[verified_id, column])
+        rows.append(
+            {
+                "Survey section": SECTION_TIME_LABELS[column],
+                f"Online sign-up {flagged_id} (minutes)": round(flagged_value, 2),
+                f"Verified caregiver {verified_id} (minutes)": round(verified_value, 2),
+                "Rushed-section line (minutes)": round(floor_lookup[column], 2),
+                "Was this section rushed": "Yes" if flagged_value < floor_lookup[column] else "No",
+            }
+        )
+
+    table = pd.DataFrame(rows)
+    flagged_total = float(online.loc[flagged_id, TIME_FIELDS].sum())
+    verified_total = float(verified_records.loc[verified_id, TIME_FIELDS].sum())
+    table.loc[len(table)] = {
+        "Survey section": "Whole survey",
+        f"Online sign-up {flagged_id} (minutes)": round(flagged_total, 2),
+        f"Verified caregiver {verified_id} (minutes)": round(verified_total, 2),
+        "Rushed-section line (minutes)": TOTAL_TIME_LIMIT_MIN,
+        "Was this section rushed": "Yes" if flagged_total < TOTAL_TIME_LIMIT_MIN else "No",
+    }
+    table.attrs["flagged_id"] = flagged_id
+    table.attrs["verified_id"] = verified_id
+    return table
+
+
+def plot_section_time_comparison(comparison: pd.DataFrame) -> plt.Figure:
+    """Section times for the two responses, with the rushed-section line marked."""
+    flagged_id = comparison.attrs["flagged_id"]
+    verified_id = comparison.attrs["verified_id"]
+    flagged_column = f"Online sign-up {flagged_id} (minutes)"
+    verified_column = f"Verified caregiver {verified_id} (minutes)"
+
+    sections = comparison[comparison["Survey section"].ne("Whole survey")]
+    labels = sections["Survey section"]
+    x = np.arange(len(labels))
+    width = 0.36
+
+    fig, ax = plt.subplots(figsize=(11.5, 5.8))
+    ax.bar(
+        x - width / 2,
+        sections[verified_column],
+        width,
+        color=STUDY_COLORS["Caregivers we verified"],
+        label=f"Verified caregiver {verified_id}",
+    )
+    ax.bar(
+        x + width / 2,
+        sections[flagged_column],
+        width,
+        color=STUDY_COLORS["Online sign-ups"],
+        label=f"Online sign-up {flagged_id}",
+    )
+    tallest = max(sections[verified_column].max(), sections[flagged_column].max())
+    for offset, column in ((-width / 2, verified_column), (width / 2, flagged_column)):
+        for index, value in zip(x, sections[column]):
+            ax.text(
+                index + offset,
+                value + tallest * 0.035,
+                f"{value:g}",
+                ha="center",
+                fontsize=10,
+                fontweight="bold",
+            )
+
+    for index, floor in zip(x, sections["Rushed-section line (minutes)"]):
+        ax.plot(
+            [index - 0.46, index + 0.46],
+            [floor, floor],
+            color="#A85D75",
+            linestyle="--",
+            linewidth=2,
+        )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_xlabel("Survey section")
+    ax.set_ylabel("Minutes spent on the section")
+    ax.set_ylim(0, tallest * 1.28)
+    ax.set_title("Minutes spent on each section, against the rushed-section line")
+    handles, legend_labels = ax.get_legend_handles_labels()
+    handles.append(plt.Line2D([0], [0], color="#A85D75", linestyle="--", linewidth=2))
+    legend_labels.append("Rushed-section line for that section")
+    ax.legend(handles, legend_labels, frameon=False, fontsize=10, loc="upper left")
+    _apply_chart_style(ax)
+    fig.tight_layout()
+    return fig
+
+
+def build_family_contradiction_example(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """The child-count contradiction, shown as the answers the response gave.
+
+    This is the easiest Family Information contradiction to read: the response
+    says how many children it has, then ticks more age bands than it has
+    children.  One child sits in exactly one age band, so the two answers
+    cannot both be true.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+
+    audit = load_branching_audit(output_dir)
+    audit = audit[audit["family"].eq("child_age_band_count_exceeds_child_count")].copy()
+    if audit.empty:
+        return pd.DataFrame()
+    audit["record_id"] = audit["record_id"].astype(str)
+
+    band_labels = {
+        "fif_childrens_ages___1": "Under 1 year",
+        "fif_childrens_ages___2": "1 to 2 years",
+        "fif_childrens_ages___3": "3 to 5 years",
+        "fif_childrens_ages___4": "6 to 10 years",
+        "fif_childrens_ages___5": "11 to 14 years",
+        "fif_childrens_ages___6": "15 to 17 years",
+        "fif_childrens_ages___7": "18 years or older",
+    }
+
+    rows = []
+    for record_id in audit["record_id"].head(4):
+        observed = json.loads(audit.loc[audit["record_id"].eq(record_id), "observed_values"].iloc[0])
+        children = int(float(observed["fif_num_children"]))
+        ticked = [
+            label for field, label in band_labels.items() if str(observed.get(field, "0")) == "1"
+        ]
+        rows.append(
+            {
+                "Response": record_id,
+                "Children reported": children,
+                "Age bands ticked": len(ticked),
+                "Which age bands": ", ".join(ticked),
+                "Why this cannot be true": (
+                    f"{len(ticked)} age bands need at least {len(ticked)} children, "
+                    f"but the response reported {children}"
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 # ── 5. How one response becomes one decision ────────────────────────────────
@@ -2522,6 +3003,8 @@ def _branching_note(rows: list[dict[str, object]]) -> str:
         return "Gave earlier-diagnosis reasons without first marking that earlier diagnosis happened."
     if family == "earlier_diagnosis_no_reason_without_no_gate":
         return "Gave earlier-diagnosis reasons from the no-branch without first marking that branch."
+    if family == "child_age_band_count_exceeds_child_count":
+        return "Ticked more child age bands than the number of children it reported."
     return "Family Information follow-up answers did not match the earlier item."
 
 
@@ -2639,12 +3122,19 @@ def build_worked_examples(
     output_dir: Optional[Path] = None,
     cache_dir: Optional[Path] = None,
     record_ids: Optional[list[str]] = None,
+    verified_id: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Five real responses walked end to end through the decision rule."""
+    """Real responses walked end to end through the decision rule.
+
+    The first row is a verified caregiver, included as the control: without it
+    the table shows only online sign-ups and there is nothing to read the four
+    flagged responses against.
+    """
     if record_ids is None:
         record_ids = ["1779", "1243", "1276", "1355", "1026"]
 
     online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].set_index("record_id")
+    verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")].set_index("record_id")
     detail_lookup: Optional[pd.DataFrame] = None
     section_limits = {
         "feat_time_fif": 0.0,
@@ -2672,7 +3162,35 @@ def build_worked_examples(
                 .to_dict()
             )
 
+    verified_detail: Optional[pd.DataFrame] = None
+    if output_dir is not None and cache_dir is not None:
+        if verified_id is None:
+            verified_id = _typical_verified_id(screen_inputs, cache_dir)
+        clean = load_combined_records(cache_dir)
+        clean = clean.loc[clean["source_project"].eq("clean_4797")].copy()
+        clean["record_id"] = clean["record_id"].astype(str)
+        verified_detail = clean.set_index("record_id")
+
     rows = []
+    if verified_detail is not None and verified_id in verified.index:
+        control = verified.loc[verified_id]
+        control_details = verified_detail.loc[verified_id]
+        rows.append(
+            {
+                "Response": f"{verified_id} (verified caregiver)",
+                "Family Information": _family_snapshot(control_details, []),
+                "Thoughts, Feelings, and Attitudes": _tfa_snapshot(
+                    control_details, bool(control["rule_R4"])
+                ),
+                "Timing and arrival": _timing_snapshot(control, control_details, section_limits),
+                "Why this response landed here": (
+                    "This is the control row. It is a caregiver we verified, so it shows what "
+                    "the same four sections look like when the response is known to be real."
+                ),
+                "Decision": control["Payment Decision"],
+            }
+        )
+
     for record_id in record_ids:
         record = online.loc[record_id]
         details = detail_lookup.loc[record_id] if detail_lookup is not None and record_id in detail_lookup.index else None
@@ -2711,39 +3229,37 @@ def plot_checks_set_off(screen_inputs: pd.DataFrame) -> plt.Figure:
     """Grouped bars showing two checks is the ceiling for verified caregivers."""
     table = build_checks_set_off_table(screen_inputs)
     x = np.arange(len(table))
-    width = 0.4
+    width = 0.38
 
-    fig, ax = plt.subplots(figsize=(11, 5.5))
+    fig, ax = plt.subplots(figsize=(11.5, 6))
     for offset, (group, colour) in zip((-width / 2, width / 2), STUDY_COLORS.items()):
         total = table[group].sum()
-        bars = ax.bar(
-            x + offset,
-            table[f"{group} (% of group)"],
-            width,
-            color=colour,
-            label=f"{group} ({total:,})",
-        )
-        # Zero bars are the point of this chart, so label them too.
-        for bar, count in zip(bars, table[group]):
+        share = table[f"{group} (% of group)"]
+        bars = ax.bar(x + offset, share, width, color=colour, label=f"{group} ({total:,})")
+        # Both numbers are shown because a zero bar is the point of this chart.
+        for bar, pct, count in zip(bars, share, table[group]):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 1.2,
-                f"{int(count):,}",
+                bar.get_height() + 1.5,
+                f"{pct:.1f}%\n{int(count):,}",
                 ha="center",
                 fontsize=9,
                 fontweight="bold",
             )
 
     ceiling = 2
-    past = int(screen_inputs[
-        screen_inputs["Group"].eq("Online sign-ups") & screen_inputs["Checks set off"].gt(ceiling)
-    ].shape[0])
+    past = int(
+        screen_inputs[
+            screen_inputs["Group"].eq("Online sign-ups")
+            & screen_inputs["Checks set off"].gt(ceiling)
+        ].shape[0]
+    )
     online_total = int(screen_inputs["Group"].eq("Online sign-ups").sum())
     ax.axvline(ceiling + 0.5, color="#A85D75", linestyle="--", linewidth=2)
     ax.text(
-        ceiling + 0.62,
-        70,
-        f"No caregiver we verified has ever\nset off more than two checks.\n"
+        ceiling + 0.68,
+        76,
+        "No verified caregiver set off\nmore than two checks.\n"
         f"{past:,} online sign-ups ({past / online_total * 100:.1f}%)\nare past this line.",
         color="#A85D75",
         fontsize=10,
@@ -2753,20 +3269,57 @@ def plot_checks_set_off(screen_inputs: pd.DataFrame) -> plt.Figure:
 
     ax.set_xticks(x)
     ax.set_xticklabels(table["Number of patterns on one response"])
-    ax.set_xlabel("Number of patterns on one response")
+    ax.set_xlabel("Number of unusual patterns found on one response")
     ax.set_ylabel("Share of that group (%)")
-    ax.set_ylim(0, 95)
+    ax.set_ylim(0, 100)
     ax.set_title("How many unusual patterns each response showed")
-    ax.legend(frameon=False)
-    _apply_stakeholder_style(ax)
+    ax.legend(frameon=False, fontsize=10, loc="upper right")
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
 
 # ── 7. When the responses arrived ───────────────────────────────────────────
 
+# The burst check asks how close together sign-ups arrived, so these buckets
+# measure the gap to the previous sign-up.  A per-day bar chart cannot answer
+# that question: 100 verified caregivers also arrived on a single day, spread
+# calmly across it, and a daily chart makes that look like the same behaviour.
+ARRIVAL_GAP_BUCKETS = [
+    ("Under 1 minute", 0.0, 60.0),
+    ("1 to 5 minutes", 60.0, 300.0),
+    ("5 to 30 minutes", 300.0, 1800.0),
+    ("30 minutes or more", 1800.0, float("inf")),
+]
+
+
+def _arrival_gaps(frame: pd.DataFrame) -> pd.Series:
+    """Seconds between each sign-up and the one before it, within one study."""
+    stamps = frame["Arrived"].dropna().sort_values()
+    gaps = stamps.diff().dt.total_seconds().dropna()
+    return gaps[gaps.ge(0)]
+
+
+def build_arrival_gap_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
+    """How long each sign-up waited behind the previous one, in both studies."""
+    rows = []
+    gaps_by_group = {
+        group: _arrival_gaps(screen_inputs[screen_inputs["Group"].eq(group)])
+        for group in STUDY_COLORS
+    }
+    for label, low, high in ARRIVAL_GAP_BUCKETS:
+        row = {"Gap to the sign-up before it": label}
+        for group, gaps in gaps_by_group.items():
+            hits = int(((gaps >= low) & (gaps < high)).sum())
+            row[f"{group} (count)"] = hits
+            row[f"{group} (% of group)"] = round(hits / len(gaps) * 100, 1)
+        rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 def build_arrival_tables(screen_inputs: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Daily arrival counts per study, plus what the surge day produced."""
+    """Arrival-gap buckets, daily counts, and what the surge day produced."""
     online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")].copy()
     verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")].copy()
 
@@ -2813,12 +3366,11 @@ def build_arrival_tables(screen_inputs: pd.DataFrame) -> dict[str, pd.DataFrame]
 
     surge = online[online["Arrived"].dt.date.eq(surge_day)]
     busiest = surge["Arrived"].dt.hour.value_counts().nlargest(4).sort_index()
-    gaps = surge.sort_values("Arrived")["Arrived"].diff().dt.total_seconds().dropna()
-    verified_gaps = (
-        verified.sort_values("Arrived")["Arrived"].diff().dt.total_seconds().dropna()
-    )
+    online_gaps = _arrival_gaps(online)
+    verified_gaps = _arrival_gaps(verified)
 
     return {
+        "gap_table": build_arrival_gap_table(screen_inputs),
         "online_by_day": online_frame,
         "verified_by_day": verified_frame,
         "surge_crosstab": crosstab,
@@ -2828,38 +3380,49 @@ def build_arrival_tables(screen_inputs: pd.DataFrame) -> dict[str, pd.DataFrame]
             "online_n": int(len(online)),
             "busiest_hours": busiest,
             "busiest_n": int(busiest.sum()),
-            "median_gap_seconds": float(gaps.median()),
+            "median_gap_seconds": float(online_gaps.median()),
             "verified_median_gap_minutes": float(verified_gaps.median() / 60),
+            "online_under_minute_pct": float(online_gaps.lt(60).mean() * 100),
+            "verified_under_minute_pct": float(verified_gaps.lt(60).mean() * 100),
         },
     }
 
 
 def plot_arrival_pattern(screen_inputs: pd.DataFrame) -> plt.Figure:
-    """Two bar panels on their own scales - a shared axis would erase Study 1."""
-    tables = build_arrival_tables(screen_inputs)
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    """Gap to the previous sign-up, which is exactly what the burst check reads."""
+    table = build_arrival_gap_table(screen_inputs)
+    labels = table["Gap to the sign-up before it"]
+    x = np.arange(len(labels))
+    width = 0.38
 
-    for ax, frame, group in (
-        (axes[0], tables["online_by_day"], "Online sign-ups"),
-        (axes[1], tables["verified_by_day"], "Caregivers we verified"),
-    ):
-        bars = ax.bar(frame["When it arrived"], frame["Responses"], color=STUDY_COLORS[group])
-        for bar, value in zip(bars, frame["Responses"]):
+    fig, ax = plt.subplots(figsize=(11.5, 5.6))
+    for offset, (group, colour) in zip((-width / 2, width / 2), STUDY_COLORS.items()):
+        share = table[f"{group} (% of group)"]
+        counts = table[f"{group} (count)"]
+        total = int(counts.sum())
+        bars = ax.bar(x + offset, share, width, color=colour, label=f"{group} ({total:,} gaps)")
+        for bar, pct, count in zip(bars, share, counts):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + max(frame["Responses"]) * 0.02,
-                f"{int(value):,}",
+                bar.get_height() + 1.5,
+                f"{pct:.1f}%\n{int(count):,}",
                 ha="center",
-                fontsize=10,
+                fontsize=9,
                 fontweight="bold",
             )
-        ax.set_title(f"{group}, by day ({int(frame['Responses'].sum()):,} in total)")
-        ax.set_ylabel("Responses")
-        ax.set_ylim(0, max(frame["Responses"]) * 1.15)
-        ax.tick_params(axis="x", rotation=30)
-        _apply_stakeholder_style(ax)
 
-    fig.suptitle("Each panel uses its own scale so the smaller verified sample stays visible", fontsize=11)
+    ax.axvspan(-0.5, 0.5, color="#A85D75", alpha=0.10, zorder=0)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_xlabel("Gap between a sign-up and the one before it")
+    ax.set_ylabel("Share of that group's sign-ups (%)")
+    ax.set_ylim(0, 118)
+    ax.set_title("How closely sign-ups followed one another")
+    handles, legend_labels = ax.get_legend_handles_labels()
+    handles.append(plt.Rectangle((0, 0), 1, 1, color="#A85D75", alpha=0.30))
+    legend_labels.append("Shaded: the range the burst check reads")
+    ax.legend(handles, legend_labels, frameon=False, fontsize=10, loc="upper right")
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -2904,39 +3467,52 @@ def build_check_impact_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
 
 
 def plot_check_impact(impact: pd.DataFrame) -> plt.Figure:
-    """Paired horizontal bars - fired, versus stood alone.  Never stacked."""
+    """Three side-by-side bars per pattern.  Never stacked, because the three
+    numbers overlap: a response can be counted in more than one of them."""
     frame = impact.iloc[::-1]
     y = np.arange(len(frame))
-    height = 0.38
+    height = 0.26
 
-    fig, ax = plt.subplots(figsize=(11.5, 5.5))
-    ax.barh(
-        y + height / 2,
-        frame["Online sign-ups showing it"],
-        height,
-        color="#C67C2D",
-        label="Times it showed up",
-    )
-    ax.barh(
-        y - height / 2,
-        frame["Times it was the only issue on the response"],
-        height,
-        color="#1F5A7A",
-        label="Times it was the only issue",
-    )
-    for offset, column in (
-        (height / 2, "Online sign-ups showing it"),
-        (-height / 2, "Times it was the only issue on the response"),
-    ):
+    series = [
+        (height, "Online sign-ups showing it", "#C67C2D", "Responses showing the pattern"),
+        (
+            0.0,
+            "Responses released if we removed it",
+            "#B08A2E",
+            "Responses that would be released if this check were switched off",
+        ),
+        (
+            -height,
+            "Times it was the only issue on the response",
+            "#1F5A7A",
+            "Responses where this was the only pattern found",
+        ),
+    ]
+
+    fig, ax = plt.subplots(figsize=(12, 6.6))
+    widest = frame["Online sign-ups showing it"].max()
+    for offset, column, colour, label in series:
+        ax.barh(y + offset, frame[column], height, color=colour, label=label)
         for index, value in enumerate(frame[column]):
-            ax.text(value + 20, index + offset, f"{int(value):,}", va="center", fontsize=9)
+            ax.text(
+                value + widest * 0.012,
+                index + offset,
+                f"{int(value):,}",
+                va="center",
+                fontsize=9,
+            )
 
+    labels = [
+        f"{name}\n({severity.lower()})"
+        for name, severity in zip(frame["Pattern"], frame["How seriously we treat it"])
+    ]
     ax.set_yticks(y)
-    ax.set_yticklabels(frame["Pattern"])
+    ax.set_yticklabels(labels, fontsize=10)
     ax.set_xlabel("Online sign-ups")
+    ax.set_xlim(0, widest * 1.14)
     ax.set_title("Which patterns are doing most of the holding")
-    ax.legend(frameon=False, loc="lower right")
-    _apply_stakeholder_style(ax)
+    ax.legend(frameon=False, fontsize=10, loc="lower right")
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
 
@@ -3021,58 +3597,88 @@ def build_work_plan_table(
 
 
 def build_all_checks_frequency_table(screen_inputs: pd.DataFrame) -> pd.DataFrame:
-    """Every shared check and how often it fired, in both groups.
+    """Every check and how often it fired, as a share of each group.
 
-    Supersedes ``build_workbook_issue_summary`` for notebook display: that
-    table lists only seven signals and its "Repeated answer pattern" row is the
-    identical-answer-sheet check, which has never fired, so a reader concludes
-    nobody repeated answers while the same-answer-down-a-block check - which
-    fired 577 times - appears nowhere.
+    Counts alone cannot be compared here: there are 1,779 online sign-ups and
+    177 verified caregivers, so the shares are what make the two columns read
+    against each other.
     """
     online = screen_inputs[screen_inputs["Group"].eq("Online sign-ups")]
     verified = screen_inputs[screen_inputs["Group"].eq("Caregivers we verified")]
 
     rows = []
     for rule in SHARED_RULES:
-        fired = int(online[rule].sum())
+        online_hits = int(online[rule].sum())
+        verified_hits = int(verified[rule].sum())
         rows.append(
             {
                 "Pattern": CHECK_PLAIN_NAMES[rule],
                 "Where it shows up": CHECK_SURVEY_AREAS[rule],
                 "How seriously we treat it": CHECK_SEVERITY[rule],
-                f"Online sign-ups showing it (out of {len(online):,})": fired,
-                "Share of online sign-ups": f"{fired / len(online) * 100:.1f}%",
-                f"Verified caregivers showing it (out of {len(verified):,})":
-                    int(verified[rule].sum()),
+                f"Online sign-ups showing it (of {len(online):,})": online_hits,
+                "Share of online sign-ups (%)": round(online_hits / len(online) * 100, 1),
+                f"Verified caregivers showing it (of {len(verified):,})": verified_hits,
+                "Share of verified caregivers (%)": round(verified_hits / len(verified) * 100, 1),
             }
         )
-    count_col = [c for c in pd.DataFrame(rows).columns if c.startswith("Online sign-ups")][0]
-    return pd.DataFrame(rows).sort_values(count_col, ascending=False).reset_index(drop=True)
+    table = pd.DataFrame(rows)
+    return table.sort_values("Share of online sign-ups (%)", ascending=False).reset_index(drop=True)
 
 
 def plot_all_checks_frequency(screen_inputs: pd.DataFrame) -> plt.Figure:
-    """Horizontal bars of how often each check fired on online sign-ups."""
+    """Side-by-side shares so the two groups can be read against each other.
+
+    Plotting online counts on their own invites the wrong comparison, because
+    the online sample is ten times larger.  Shares put both groups on one
+    scale, and the gap between the pair of bars is the evidence.
+    """
     table = build_all_checks_frequency_table(screen_inputs).iloc[::-1]
-    count_col = [c for c in table.columns if c.startswith("Online sign-ups")][0]
+    online_column = "Share of online sign-ups (%)"
+    verified_column = "Share of verified caregivers (%)"
+    online_count = [c for c in table.columns if c.startswith("Online sign-ups showing")][0]
+    verified_count = [c for c in table.columns if c.startswith("Verified caregivers showing")][0]
 
-    fig, ax = plt.subplots(figsize=(11, 5.5))
-    colours = [
-        "#A85D75" if severity == "Serious" else "#C67C2D"
-        for severity in table["How seriously we treat it"]
-    ]
-    bars = ax.barh(table["Pattern"], table[count_col], color=colours)
-    for bar, value in zip(bars, table[count_col]):
-        ax.text(value + 18, bar.get_y() + bar.get_height() / 2, f"{int(value):,}",
-                va="center", fontsize=10, fontweight="bold")
+    y = np.arange(len(table))
+    height = 0.38
 
-    ax.set_xlabel("Online sign-ups showing the pattern")
-    ax.set_title("How often each pattern showed up in the online sign-up sample")
-    ax.set_xlim(0, table[count_col].max() * 1.12)
-    handles = [
-        plt.Rectangle((0, 0), 1, 1, color="#A85D75"),
-        plt.Rectangle((0, 0), 1, 1, color="#C67C2D"),
+    fig, ax = plt.subplots(figsize=(12, 6.4))
+    ax.barh(
+        y + height / 2,
+        table[verified_column],
+        height,
+        color=STUDY_COLORS["Caregivers we verified"],
+        label="Caregivers we verified",
+    )
+    ax.barh(
+        y - height / 2,
+        table[online_column],
+        height,
+        color=STUDY_COLORS["Online sign-ups"],
+        label="Online sign-ups",
+    )
+    for offset, share_column, count_column in (
+        (height / 2, verified_column, verified_count),
+        (-height / 2, online_column, online_count),
+    ):
+        for index, (share, count) in enumerate(zip(table[share_column], table[count_column])):
+            ax.text(
+                share + 1.5,
+                index + offset,
+                f"{share:.1f}%  ({int(count):,})",
+                va="center",
+                fontsize=9,
+            )
+
+    labels = [
+        f"{name}\n({severity.lower()})"
+        for name, severity in zip(table["Pattern"], table["How seriously we treat it"])
     ]
-    ax.legend(handles, ["Serious check", "Supporting check"], frameon=False, loc="lower right")
-    _apply_stakeholder_style(ax)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=10)
+    ax.set_xlabel("Share of that group showing the pattern (%)")
+    ax.set_xlim(0, 118)
+    ax.set_title("How often each pattern showed up, in each group")
+    ax.legend(frameon=False, fontsize=10, loc="lower right")
+    _apply_chart_style(ax)
     fig.tight_layout()
     return fig
