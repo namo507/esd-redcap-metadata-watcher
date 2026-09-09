@@ -74,7 +74,8 @@ python3 -m pytest tests/ -v
 |------|---------|
 | `caregiver_cluster_simple_metrics.ipynb` | **Start here.** The reader-facing summary notebook that runs the full pipeline and displays all results. |
 | `caregiver_analysis_pipeline.py` | The 4,600-line reusable pipeline: API ingestion, trust screen, clustering, modeling, and figure generation. All analysis logic lives here. |
-| `bot_analysis.py` | Stakeholder-facing bot-analysis helpers used by the notebook to generate simplified workflow charts, review tables, and the Excel workbook. |
+| `bot_analysis.py` | Reader-facing bot-analysis helpers used by the notebook: the survey-system pull, the screening-evidence tables, the weighted risk score, and both Excel workbooks. |
+| `bot_analysis.ipynb` | The response-review notebook. Sections 1 to 4 explain and test the rules; section 5 adds the weighted risk score; section 6 triages the check-by-hand pile; section 7 lays out the rules broken two ways; section 8 writes the spreadsheets. |
 | `config.yaml` | Seeds, thresholds, tiers, and modeling configuration. Change parameters here, not in the code. |
 | `requirements.txt` | Pinned Python dependencies. |
 
@@ -92,7 +93,8 @@ python3 -m pytest tests/ -v
 | Directory / File | Purpose |
 |------------------|---------|
 | `Caregiver Outputs/` | All generated figures (PNG + PDF) and tables (CSV). See the output guide below. |
-| `Caregiver Outputs/ESD_Bot_Analysis_Stakeholder_Summary.xlsx` | Stakeholder-ready workbook with separate sheets for overview, workflow, all records, cleared-now cases, low-risk approvals, review queue, extreme-fast records, confirmed bots, demographics, and rule definitions. |
+| `Caregiver Outputs/ESD_Bot_Analysis_Stakeholder_Summary.xlsx` | Reader-facing workbook with separate sheets for overview, workflow, all records, cleared-now cases, low-risk approvals, review queue, extreme-fast records, confirmed bots, demographics, and rule definitions. |
+| `Caregiver Outputs/restricted/ESD_Response_Review_Master.xlsx` | **Git-ignored.** The master review file written by `bot_analysis.ipynb` section 8. Sixteen tabs. One row per response for all 1,956, a Yes/No column for every check, the checks broken written out, the weighted risk score, the recommended action, the review plan for held responses, and the drawn-in-advance reading sample. Carries email addresses, which is why it is kept out of version control. |
 | `Caregiver Outputs/record_flags.parquet` | **Git-ignored.** Row-level audit artifact with per-record rule flags, tier assignments, and detector scores. No PII. |
 | `Caregiver Outputs/output_manifest.csv` | Auto-generated inventory of every output file with row/column counts and SHA-256 hashes. |
 
@@ -257,6 +259,147 @@ and hit counts into operational actions:
 
 ---
 
+## The weighted risk score (`bot_analysis.ipynb` sections 5 and 6)
+
+The tier system above answers each rule with a yes or a no. The notebook adds a
+second, simpler layer on top of it for the payment decision, agreed at the
+2026-09 review meeting: add the checks up into points.
+
+### Weights
+
+A **serious** check adds **2 points**. A **mild** check adds **1 point**.
+`SCORED_CHECKS` in `bot_analysis.py` is the single source of truth for the list.
+
+| Check | Severity | Points | Source |
+|-------|----------|--------|--------|
+| Whole survey finished faster than any verified caregiver | Serious | 2 | R1 |
+| Whole survey time sits inside the uncertainty band | Mild | 1 | bootstrap band |
+| Thoughts and feelings section faster than any verified caregiver | Serious | 2 | R2 |
+| Thoughts and feelings time sits inside the uncertainty band | Mild | 1 | bootstrap band |
+| One of the four sections finished below its own speed line | Mild | 1 | R3 |
+| The same answer repeated down a rating block | Mild | 1 | R4 |
+| Answer sheet identical to another response | Serious | 2 | R5 |
+| Arrived within a minute of two or more other sign-ups | Mild | 1 | R6 |
+| Written comment nearly identical to another response | Mild | 1 | R7 |
+| Family answers contradict each other | Serious | 2 | R8 |
+| Age and location cannot both be true | Serious | 2 | R9 |
+| Throwaway or temporary email address | Serious | 2 | `disposable_email_domains` in `config.yaml` |
+| No email address on a finished form | Mild | 1 | `demo_email` blank on a completed record |
+| Started between midnight and five in the morning | Mild | 1 | `eligibility_timestamp` hour |
+
+### Actions
+
+| Risk score | Recommended action |
+|------------|--------------------|
+| 0 | Pay now |
+| 1 to 2 | Check by hand |
+| 3 or more | Do not pay |
+
+A `.edu` email address clears a held response, **unless** one of the
+contradiction checks fired (`CONTRADICTION_CHECKS`: identical answer sheet,
+family contradiction, impossible demographics, throwaway email). The size of
+that override is reported by `build_email_override_effect`.
+
+### Confidence bands on the time limits
+
+`build_time_limit_bands` resamples the 131 verified completers 4,000 times
+(seed `20260725`) and takes the middle 95 percent of the recomputed limit.
+
+- Below the band: **definitely rushed**, the serious check.
+- Inside the band: **possibly rushed**, the mild check.
+- Above the band: normal.
+
+For the min-based limits (whole survey, thoughts and feelings) the band can only
+reach upward, so its lower edge equals the published limit.
+
+### Current result
+
+| Recommended action | Verified caregivers | Online sign-ups | All |
+|--------------------|--------------------:|----------------:|----:|
+| Pay now | 152 | 68 | 220 |
+| Check by hand | 22 | 1,032 | 1,054 |
+| Do not pay | 3 | 679 | 682 |
+
+All six previously confirmed bots score 6 to 9. `build_score_simulation_table`
+prices every alternative line: at 5 points the wrongly refused count drops to
+zero and 424 online sign-ups are still refused.
+
+### Handling the check-by-hand pile (`bot_analysis.ipynb` section 6)
+
+The points leave 1,032 online sign-ups on 1 or 2 points, which is too many to
+read individually. `build_review_triage` sorts them by the *kind* of evidence
+against each response.
+
+**The key split**: the arrival check (R6) describes the day, not the person.
+Every one of the 1,676 arrival flags falls on 2025-09-06, and 97.3% of that
+day's sign-ups carry it, so it cannot rank one Study 2 response against
+another. `CHANNEL_CHECKS` holds it; `PERSON_CHECKS` is everything else, and the
+triage scores only the latter.
+
+| Review plan | n (online) | Reads | Basis |
+|-------------|-----------:|------:|-------|
+| Release, arrival timing only | 544 | 0 | No person-level check fired at all. Median survey time 30.9 min. |
+| Release, slower than a typical verified caregiver | 145 | 0 | Mild checks only, and survey time at or above the verified median (26.69 min). Median 36.9 min. |
+| Read a random sample by hand | 249 | 59 | Mild checks only, but faster than the verified median, or never finished. |
+| Read every one by hand | 2 | 2 | A serious person-level check fired. |
+| Hold until the completion rule is set | 92 | 0 | No section has a recorded time. A completion question, not a bot question. |
+
+**Net: 1,032 held responses become 61 that a person opens.**
+
+`recommended_sample_size` uses the plain binomial bound
+`n = ceil(ln(1 - 0.95) / ln(1 - 0.05))` = 59, so a clean sample puts the bad
+rate at no more than 5% (at most 13 of the 249). `build_sample_to_read` draws
+that sample in advance with seed `20260725` and adds blank adjudication
+columns, so nobody chooses which records get read.
+
+Every row of the master export carries `Review plan`, `Why this plan`, and
+`Final plan`. `Final plan` is the single actionable column.
+
+### Two layouts for the rules broken (`bot_analysis.ipynb` section 7)
+
+`build_rules_grid` and `build_rules_list` produce the same 1,956 responses in
+two shapes, sketched by the study team:
+
+- **Rules grid**: one Yes/No column per rule (`R1`-`R9`, `E1`-`E5`), then
+  `Total Rules Violated`, both scores, and the action. Filterable per rule.
+- **Rules list**: `Rules violated` (`R1, R5`) plus the same rules spelled out,
+  `Total Number of Rules`, both scores, and the action. Readable per row.
+
+`R1`-`R9` are the nine rules the study already names. `E1`-`E5` are the checks
+added after the September meeting (the two uncertainty bands, throwaway email,
+missing email, overnight start), kept on a separate letter. `build_rule_key_table`
+is the legend.
+
+**Response key, not record ID.** Record numbers restart in each project, so 348
+of the 1,956 appear twice (record 100 exists in both 4797 and 4581). Every rule
+table carries `Response key` = `<project_id>-<record_id>`. Sorting or joining on
+`Record ID` alone silently merges rows.
+
+**Two scoring scales are carried side by side**, because the study team's sketch
+weighted a serious rule 5 while the meeting notes weighted it 2:
+
+| Scale | Column | Line in use |
+|-------|--------|-------------|
+| Mild 1, Serious 2 | `Scoring (Mild = 1, Serious = 2)` | 3 points. Refuses 680 online, 3 verified. |
+| Mild 1, Serious 5 | `Scoring (Mild = 1, Serious = 5)` | Not set. `build_heavy_cutoff_table` prices it; 7 points refuses 480 online and 0 verified. |
+
+The 3-point line does **not** carry across scales. On the 1/5 scale any single
+serious rule scores 5, so a line of 3, 4, or 5 makes one serious rule an
+automatic refusal (affects 3 records), and five mild rules also reach 5, tying
+with one serious rule. `build_scale_comparison` shows both effects.
+
+### Survey system access
+
+`refresh_redcap_cache` pulls records, metadata, and instruments for **both**
+projects on every notebook run, reusing a checksum-verified copy already pulled
+that day. `check_redcap_audit_access` asks for the change log and the survey
+invitation list and prints what comes back; the read-only analysis tokens carry
+neither the `Logging` nor the `Manage Survey Participants` privilege, so the
+per-response survey timestamps (`*_timestamp`) and timing fields
+(`get_time_*`) carry the audit-trail role instead.
+
+---
+
 ## How to use the review queue
 
 1. Open `Caregiver Outputs/table_38_dirty4581_review_queue.csv` in a spreadsheet.
@@ -276,6 +419,10 @@ and hit counts into operational actions:
 
 - **No PII in outputs**: The pipeline blocks export of email, ZIP, DOB,
   occupation, and open text in any tracked CSV or figure.
+- **Email addresses live in one git-ignored file only**:
+  `Caregiver Outputs/restricted/`. Anything the notebook prints on the page is
+  masked by `bot_analysis.mask_email`, because executed notebook output is
+  saved inside the tracked `.ipynb`.
 - **Caches are git-ignored**: `data_cache/` and `record_flags.parquet` never
   enter version control.
 - **Aggregate only**: All committed outputs contain only aggregate counts,
@@ -308,3 +455,5 @@ Do **not** use:
 - **Clean project (4797)**: 177 records, 131 completed-human reference set
 - **Dirty project (4581)**: 1,779 records (legacy, unverified recruitment)
 - **Combined**: 1,956 records across both projects
+- **Live pull**: `bot_analysis.ipynb` refreshes both projects from the API on
+  every run and caches under today's date

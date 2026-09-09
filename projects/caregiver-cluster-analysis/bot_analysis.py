@@ -4729,6 +4729,9 @@ READ_ME_ROWS = [
     ("If the line moves", "What changes if we refuse payment at a different number of points"),
     ("Spot checks", "University emails, overnight sign-ups, tight arrival clusters, one-off email providers"),
     ("Handling the held pile", "How the check-by-hand responses split, and what each group needs"),
+    ("Rule key", "What every rule code means, what it is worth, and how often it fired"),
+    ("Rules grid", "One row per response, with a Yes or No column for every rule"),
+    ("Rules list", "One row per response, with the rules written into a single cell"),
     ("Read by hand", "The short list a person opens one at a time, and the random sample to work through"),
     ("Where the data came from", "The pull from the survey system, and what its audit trail would give us"),
 ]
@@ -4785,6 +4788,12 @@ def export_master_workbook(
     sample_plan = build_sample_plan_table(risk_table)
     read_list = build_read_by_hand_list(risk_table)
     sample_list = build_sample_to_read(risk_table)
+    rules_grid = build_rules_grid(risk_table)
+    rules_list = build_rules_list(risk_table)
+    rule_key = build_rule_key_table(risk_table)
+    layout_choice = build_layout_choice_table()
+    scale_comparison = build_scale_comparison(risk_table)
+    heavy_cutoffs = build_heavy_cutoff_table(risk_table)
 
     read_me = pd.DataFrame(READ_ME_ROWS, columns=["Tab", "What it holds"])
     action_meaning = pd.DataFrame(
@@ -4862,6 +4871,14 @@ def export_master_workbook(
         row = _write_block(writer, "Handling the held pile", final_plan, row + 1)
         _write_block(writer, "Handling the held pile", triage_mix, row + 1)
 
+        row = _write_block(writer, "Rule key", rule_key, 4)
+        row = _write_block(writer, "Rule key", layout_choice, row + 1)
+        row = _write_block(writer, "Rule key", scale_comparison, row + 1)
+        _write_block(writer, "Rule key", heavy_cutoffs, row + 1)
+
+        rules_grid.to_excel(writer, sheet_name="Rules grid", index=False, startrow=2)
+        rules_list.to_excel(writer, sheet_name="Rules list", index=False, startrow=2)
+
         row = _write_block(writer, "Read by hand", read_list, 4)
         row = _write_block(writer, "Read by hand", sample_plan, row + 1)
         _write_block(writer, "Read by hand", sample_list, row + 1)
@@ -4926,6 +4943,24 @@ def export_master_workbook(
                 "aside when judging one person, because every arrival flag in the study falls "
                 "on a single day and 97 of every 100 sign-ups that day carry it.",
             ),
+            "Rule key": (
+                "Rule key",
+                "R1 to R9 are the nine rules the study already names. E1 to E5 were added after "
+                "the September review meeting and are kept on a separate letter so nobody "
+                "mistakes one for the other. Two scoring scales are carried side by side.",
+            ),
+            "Rules grid": (
+                "Rules grid",
+                "One row per response, a Yes or No in every rule column. Use this one to filter "
+                "on a single rule or to count how often two rules travel together. Sort or "
+                "filter on Response key, never on Record ID alone: record numbers restart in "
+                "each study, so 348 of them appear twice.",
+            ),
+            "Rules list": (
+                "Rules list",
+                "The same responses with the rules written into one cell, in codes and again in "
+                "plain words. Easier to read down a page. Harder to filter on one rule.",
+            ),
             "Read by hand": (
                 "Read by hand",
                 "The short list to open one at a time, then the random sample drawn from the "
@@ -4942,7 +4977,14 @@ def export_master_workbook(
             _style_sheet_heading(worksheet, "A1", title)
             _style_sheet_note(worksheet, "A2", note)
 
-        for sheet in ("All responses", "Pay now", "Check by hand", "Do not pay"):
+        for sheet in (
+            "All responses",
+            "Pay now",
+            "Check by hand",
+            "Do not pay",
+            "Rules grid",
+            "Rules list",
+        ):
             _autosize_sheet(book[sheet], wrap_text=False, freeze_panes="C4", apply_filter=True)
             book[sheet].auto_filter.ref = book[sheet].dimensions
         for sheet in (
@@ -4953,6 +4995,7 @@ def export_master_workbook(
             "If the line moves",
             "Spot checks",
             "Handling the held pile",
+            "Rule key",
             "Read by hand",
             "Where the data came from",
         ):
@@ -5356,3 +5399,259 @@ def build_sample_to_read(triaged: pd.DataFrame, seed: int = TIME_BAND_SEED) -> p
     sample["Notes"] = ""
     sample["Who read it"] = ""
     return sample
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Two layouts for the rules a response broke
+#
+# One row per response either way.  The grid gives every rule its own Yes/No
+# column, which suits filtering and sorting.  The list writes the rules into
+# a single cell, which suits reading.  Both carry the same totals so they can
+# never disagree.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Short codes.  R1 to R9 are the nine rules the study team already names.
+# E1 to E5 are the checks added after the September review meeting, kept on a
+# separate letter so nobody mistakes one for the other.
+RULE_CODES: dict[str, str] = {
+    "check_survey_definitely_rushed": "R1",
+    "check_attitudes_definitely_rushed": "R2",
+    "check_section_rushed": "R3",
+    "check_repeated_answers": "R4",
+    "check_identical_answer_sheet": "R5",
+    "check_burst_arrival": "R6",
+    "check_duplicate_comment": "R7",
+    "check_family_contradiction": "R8",
+    "check_impossible_demographics": "R9",
+    "check_survey_possibly_rushed": "E1",
+    "check_attitudes_possibly_rushed": "E2",
+    "check_throwaway_email": "E3",
+    "check_no_email": "E4",
+    "check_overnight": "E5",
+}
+
+CODE_ORDER = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9",
+              "E1", "E2", "E3", "E4", "E5"]
+CODE_TO_KEY = {code: key for key, code in RULE_CODES.items()}
+
+# The scale drawn on the meeting whiteboard: a mild rule counts 1, a serious
+# rule counts 5.  The agreed scale from the meeting notes counts a serious
+# rule 2.  Both are carried so the difference can be seen rather than argued.
+HEAVY_SERIOUS_POINTS = 5
+HEAVY_MILD_POINTS = 1
+
+SCORE_HEAVY_COLUMN = "Scoring (Mild = 1, Serious = 5)"
+SCORE_AGREED_COLUMN = "Scoring (Mild = 1, Serious = 2)"
+
+
+def _response_key(frame: pd.DataFrame) -> pd.Series:
+    """A key that is unique across both studies.
+
+    Record numbers restart in each study, so 348 numbers appear twice across
+    the 1,956 responses.  Anything keyed on the record number alone would put
+    two different people on one row.
+    """
+    return frame["project_id"].astype(str) + "-" + frame["record_id"].astype(str)
+
+
+def _heavy_score(frame: pd.DataFrame) -> pd.Series:
+    serious = [k for k in CHECK_KEYS if CHECK_SEVERITY_BY_KEY[k] == "Serious"]
+    mild = [k for k in CHECK_KEYS if CHECK_SEVERITY_BY_KEY[k] == "Mild"]
+    return (
+        frame[serious].sum(axis=1) * HEAVY_SERIOUS_POINTS
+        + frame[mild].sum(axis=1) * HEAVY_MILD_POINTS
+    ).astype(int)
+
+
+def _rules_common(triaged: pd.DataFrame) -> pd.DataFrame:
+    frame = triaged.copy()
+    frame["Study"] = frame["source_project"].map(PROJECT_LABELS)
+    frame["Record ID"] = frame["record_id"]
+    frame["Response key"] = _response_key(frame)
+    frame["Total Rules Violated"] = frame["Checks broken"]
+    frame["Serious Rules Violated"] = frame["Serious checks broken"]
+    frame["Mild Rules Violated"] = frame["Mild checks broken"]
+    frame[SCORE_HEAVY_COLUMN] = _heavy_score(frame)
+    frame[SCORE_AGREED_COLUMN] = frame["Risk score"]
+    return frame
+
+
+def build_rules_grid(triaged: pd.DataFrame) -> pd.DataFrame:
+    """One column per rule, Yes or No in every cell.
+
+    Best when someone wants to filter on one rule, sort by it, or count how
+    often two rules travel together.
+    """
+    frame = _rules_common(triaged)
+    for code in CODE_ORDER:
+        frame[code] = np.where(frame[CODE_TO_KEY[code]], "Yes", "No")
+    columns = (
+        ["Study", "Record ID", "Response key"]
+        + CODE_ORDER
+        + [
+            "Total Rules Violated",
+            "Serious Rules Violated",
+            "Mild Rules Violated",
+            SCORE_HEAVY_COLUMN,
+            SCORE_AGREED_COLUMN,
+            "Recommended action",
+            "Final plan",
+        ]
+    )
+    grid = frame[columns].copy()
+    return grid.sort_values(
+        ["Study", SCORE_HEAVY_COLUMN, "Record ID"], ascending=[True, False, True]
+    ).reset_index(drop=True)
+
+
+def build_rules_list(triaged: pd.DataFrame) -> pd.DataFrame:
+    """The rules written into one cell, in codes and again in plain words.
+
+    Best for reading down a page, or pasting a single row into an email.
+    """
+    frame = _rules_common(triaged)
+    matrix = frame[[CODE_TO_KEY[c] for c in CODE_ORDER]].to_numpy()
+    codes = np.array(CODE_ORDER)
+    names = np.array([CHECK_NAMES[CODE_TO_KEY[c]] for c in CODE_ORDER])
+
+    frame["Rules violated"] = [
+        ", ".join(codes[row]) if row.any() else "None" for row in matrix
+    ]
+    frame["Rules violated, in plain words"] = [
+        "; ".join(names[row]) if row.any() else "No rules broken" for row in matrix
+    ]
+    frame["Total Number of Rules"] = frame["Total Rules Violated"]
+    columns = [
+        "Study",
+        "Record ID",
+        "Response key",
+        "Rules violated",
+        "Rules violated, in plain words",
+        "Total Number of Rules",
+        "Serious Rules Violated",
+        "Mild Rules Violated",
+        SCORE_HEAVY_COLUMN,
+        SCORE_AGREED_COLUMN,
+        "Recommended action",
+        "Final plan",
+    ]
+    listing = frame[columns].copy()
+    return listing.sort_values(
+        ["Study", SCORE_HEAVY_COLUMN, "Record ID"], ascending=[True, False, True]
+    ).reset_index(drop=True)
+
+
+def build_rule_key_table(triaged: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """What every code means, what it is worth, and how often it fired."""
+    rows = []
+    for code in CODE_ORDER:
+        key = CODE_TO_KEY[code]
+        check = next(c for c in SCORED_CHECKS if str(c["key"]) == key)
+        severity = CHECK_SEVERITY_BY_KEY[key]
+        row = {
+            "Code": code,
+            "What it means": CHECK_NAMES[key],
+            "Where in the survey": check["area"],
+            "Mild or serious": severity,
+            "Points on the 1 and 5 scale": (
+                HEAVY_SERIOUS_POINTS if severity == "Serious" else HEAVY_MILD_POINTS
+            ),
+            "Points on the 1 and 2 scale": CHECK_WEIGHTS[key],
+            "Added after the meeting": "Yes" if code.startswith("E") else "No",
+        }
+        if triaged is not None:
+            verified = triaged[triaged["Group"].eq("Caregivers we verified")]
+            online = triaged[triaged["Group"].eq("Online sign-ups")]
+            row["Verified caregivers it fired on"] = f"{int(verified[key].sum())} of {len(verified):,}"
+            row["Online sign-ups it fired on"] = f"{int(online[key].sum()):,} of {len(online):,}"
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def build_scale_comparison(triaged: pd.DataFrame) -> pd.DataFrame:
+    """The same responses on both scoring scales, side by side."""
+    frame = _rules_common(triaged)
+    rows = []
+    for label, mask in (
+        ("No rules broken", frame["Total Rules Violated"].eq(0)),
+        ("Mild rules only", frame["Serious Rules Violated"].eq(0) & frame["Mild Rules Violated"].ge(1)),
+        ("Exactly one serious rule", frame["Serious Rules Violated"].eq(1)),
+        ("Two or more serious rules", frame["Serious Rules Violated"].ge(2)),
+    ):
+        block = frame[mask]
+        if block.empty:
+            continue
+        rows.append(
+            {
+                "Kind of response": label,
+                "Responses": len(block),
+                "Lowest score on the 1 and 5 scale": int(block[SCORE_HEAVY_COLUMN].min()),
+                "Highest score on the 1 and 5 scale": int(block[SCORE_HEAVY_COLUMN].max()),
+                "Lowest score on the 1 and 2 scale": int(block[SCORE_AGREED_COLUMN].min()),
+                "Highest score on the 1 and 2 scale": int(block[SCORE_AGREED_COLUMN].max()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_heavy_cutoff_table(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Where the refusal line would sit on the 1 and 5 scale.
+
+    The line of 3 points from the meeting notes belongs to the 1 and 2 scale.
+    Carrying that same number over to the 1 and 5 scale would make any single
+    serious rule an automatic refusal, so the line has to be chosen again.
+    """
+    frame = _rules_common(triaged)
+    verified = frame[frame["Group"].eq("Caregivers we verified")]
+    online = frame[frame["Group"].eq("Online sign-ups")]
+    rows = []
+    for cut in (3, 5, 6, 7, 8, 10, 12):
+        refused_online = int((online[SCORE_HEAVY_COLUMN] >= cut).sum())
+        refused_verified = int((verified[SCORE_HEAVY_COLUMN] >= cut).sum())
+        rows.append(
+            {
+                "Refuse payment at this many points or more": cut,
+                "Online sign-ups refused": f"{refused_online:,}",
+                "Verified caregivers refused by mistake": refused_verified,
+                "Share of verified caregivers refused by mistake": f"{refused_verified / len(verified) * 100:.1f}%",
+                "What this line does": {
+                    3: "Refuses any three mild rules, and any single serious rule",
+                    5: "Refuses any single serious rule on its own",
+                    6: "Refuses a serious rule once anything else joins it",
+                    7: "Refuses a serious rule with two mild ones, or two serious rules",
+                    8: "Refuses a serious rule with three mild ones, or two serious rules",
+                    10: "Refuses two serious rules",
+                    12: "Refuses two serious rules with two mild ones",
+                }[cut],
+                "Note": {
+                    3: "Same number as the line in use, but a much harsher line on this scale",
+                    5: "",
+                    6: "",
+                    7: "The lowest line here that refuses no verified caregiver",
+                    8: "",
+                    10: "",
+                    12: "",
+                }[cut],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_layout_choice_table() -> pd.DataFrame:
+    """A short note on which of the two layouts to hand to whom."""
+    return pd.DataFrame(
+        [
+            {
+                "Layout": "Rules grid",
+                "What one row looks like": "A Yes or No in fourteen separate columns",
+                "Best for": "Filtering on one rule, sorting by it, counting how often two rules appear together",
+                "Watch out for": "Fourteen narrow columns, so it is wide to read on paper",
+            },
+            {
+                "Layout": "Rules list",
+                "What one row looks like": "One cell reading R1, R5, and a second cell spelling those out",
+                "Best for": "Reading down a page, or pasting one response into an email",
+                "Watch out for": "Cannot be filtered on a single rule without splitting the cell first",
+            },
+        ]
+    )
