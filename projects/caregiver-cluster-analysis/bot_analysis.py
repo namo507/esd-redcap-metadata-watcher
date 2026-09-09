@@ -3682,3 +3682,1677 @@ def plot_all_checks_frequency(screen_inputs: pd.DataFrame) -> plt.Figure:
     _apply_chart_style(ax)
     fig.tight_layout()
     return fig
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Weighted risk score, spot checks, and the master record export
+#
+# Everything below turns the pass/fail checks above into a points total per
+# response, adds the checks the study team asked for after the last meeting
+# (a maybe-rushed band, email address, and time of day), and writes one
+# spreadsheet that lists every response with the exact checks it broke.
+# ══════════════════════════════════════════════════════════════════════════
+
+REDCAP_CONTENTS = ("record", "metadata", "instrument")
+
+# Time of day treated as overnight, in the survey's own clock.
+OVERNIGHT_START_HOUR = 0
+OVERNIGHT_END_HOUR = 5
+
+# Wider arrival window used only for the spot-check list, never for points.
+# The bar is set at ten because no verified caregiver arrived in a cluster
+# that dense, so anything at or above it separates the two studies cleanly.
+WIDE_BURST_SECONDS = 120
+WIDE_BURST_MIN_OTHERS = 10
+
+# Bootstrap settings for the uncertainty band around each time limit.
+TIME_BAND_REPEATS = 4000
+TIME_BAND_SEED = 20260725
+
+SECTION_TIME_LABELS: dict[str, str] = {
+    "get_time_fif": "Family Information minutes",
+    "get_time_val": "Values minutes",
+    "get_time_tfa": "Thoughts and feelings minutes",
+    "get_time_demo": "Demographics minutes",
+}
+
+SECTION_TIMESTAMP_FIELDS: dict[str, str] = {
+    "get_time_fif": "family_information_form_timestamp",
+    "get_time_val": "values_timestamp",
+    "get_time_tfa": "tfa_timestamp",
+    "get_time_demo": "demographics_timestamp",
+}
+
+# Every scored check, in the order a reader should meet them.  "Serious" is
+# worth 2 points and "Mild" is worth 1, exactly as agreed in the meeting.
+SCORED_CHECKS: list[dict[str, object]] = [
+    {
+        "key": "check_survey_definitely_rushed",
+        "name": "Whole survey finished faster than any verified caregiver",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Whole survey timing",
+        "source": "rule_R1",
+    },
+    {
+        "key": "check_survey_possibly_rushed",
+        "name": "Whole survey time sits inside the uncertainty band",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Whole survey timing",
+        "source": "uncertainty band",
+    },
+    {
+        "key": "check_attitudes_definitely_rushed",
+        "name": "Thoughts and feelings section faster than any verified caregiver",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Thoughts and feelings timing",
+        "source": "rule_R2",
+    },
+    {
+        "key": "check_attitudes_possibly_rushed",
+        "name": "Thoughts and feelings time sits inside the uncertainty band",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Thoughts and feelings timing",
+        "source": "uncertainty band",
+    },
+    {
+        "key": "check_section_rushed",
+        "name": "One of the four sections finished below its own speed line",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Section timing",
+        "source": "rule_R3",
+    },
+    {
+        "key": "check_repeated_answers",
+        "name": "The same answer repeated down a rating block",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Rating blocks",
+        "source": "rule_R4",
+    },
+    {
+        "key": "check_identical_answer_sheet",
+        "name": "Answer sheet identical to another response",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Whole questionnaire",
+        "source": "rule_R5",
+    },
+    {
+        "key": "check_burst_arrival",
+        "name": "Arrived within a minute of two or more other sign-ups",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Arrival time",
+        "source": "rule_R6",
+    },
+    {
+        "key": "check_duplicate_comment",
+        "name": "Written comment nearly identical to another response",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Open text",
+        "source": "rule_R7",
+    },
+    {
+        "key": "check_family_contradiction",
+        "name": "Family answers contradict each other",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Family Information",
+        "source": "rule_R8",
+    },
+    {
+        "key": "check_impossible_demographics",
+        "name": "Age and location cannot both be true",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Demographics",
+        "source": "rule_R9",
+    },
+    {
+        "key": "check_throwaway_email",
+        "name": "Throwaway or temporary email address",
+        "weight": 2,
+        "severity": "Serious",
+        "area": "Email address",
+        "source": "email domain list",
+    },
+    {
+        "key": "check_no_email",
+        "name": "No email address on a finished form",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Email address",
+        "source": "email address field",
+    },
+    {
+        "key": "check_overnight",
+        "name": "Started between midnight and five in the morning",
+        "weight": 1,
+        "severity": "Mild",
+        "area": "Arrival time",
+        "source": "sign-up timestamp",
+    },
+]
+
+CHECK_KEYS = [str(check["key"]) for check in SCORED_CHECKS]
+CHECK_NAMES = {str(c["key"]): str(c["name"]) for c in SCORED_CHECKS}
+CHECK_WEIGHTS = {str(c["key"]): int(c["weight"]) for c in SCORED_CHECKS}
+CHECK_SEVERITY_BY_KEY = {str(c["key"]): str(c["severity"]) for c in SCORED_CHECKS}
+
+# Checks that describe a contradiction rather than a pace.  A university email
+# address never clears one of these on its own.
+CONTRADICTION_CHECKS = [
+    "check_identical_answer_sheet",
+    "check_family_contradiction",
+    "check_impossible_demographics",
+    "check_throwaway_email",
+]
+
+REJECT_SCORE = 3          # score at or above this is a do-not-pay
+REVIEW_SCORE = 1          # score at or above this, but below reject, is a hand check
+
+ACTION_PAY = "Pay now"
+ACTION_REVIEW = "Check by hand"
+ACTION_REJECT = "Do not pay"
+ACTION_ORDER = [ACTION_PAY, ACTION_REVIEW, ACTION_REJECT]
+
+
+# ── Pulling both studies from the survey system ─────────────────────────────
+
+def refresh_redcap_cache(
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Pull answers, field list, and section list for both studies.
+
+    A dated copy that already exists is reused after its checksum is verified,
+    so running the notebook twice on the same day makes no extra calls.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    import requests
+    from dotenv import load_dotenv
+
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    config = load_config(project_dir)["redcap"]
+    load_dotenv(project_dir.parents[1] / ".env", override=False)
+    api_url = os.environ.get(config["api_url_env"], "").strip()
+    if not api_url:
+        raise RuntimeError(f"Missing {config['api_url_env']} in the repository .env file.")
+
+    date_text = datetime.now(timezone.utc).date().isoformat()
+    pulled_at = datetime.now(timezone.utc).isoformat()
+
+    def file_digest(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    rows: list[dict[str, object]] = []
+    for source_name, source_config in config["projects"].items():
+        token = os.environ.get(source_config["token_env"], "").strip()
+        if not token:
+            raise RuntimeError(
+                f"Missing {source_config['token_env']} in the repository .env file. "
+                "Access keys are never written into the code."
+            )
+        project_id = int(source_config["project_id"])
+        for content in REDCAP_CONTENTS:
+            target = cache_dir / f"{project_id}_{content}_{date_text}.parquet"
+            sidecar = target.with_suffix(target.suffix + ".sha256")
+            if target.exists() and sidecar.exists():
+                saved = json.loads(sidecar.read_text(encoding="utf-8"))
+                if saved.get("sha256") != file_digest(target):
+                    raise RuntimeError(f"Saved copy does not match its checksum: {target.name}")
+                frame = pd.read_parquet(target)
+                origin = "Saved copy from today, checksum verified"
+            else:
+                payload = {
+                    "token": token,
+                    "content": content,
+                    "format": "json",
+                    "returnFormat": "json",
+                }
+                if content == "record":
+                    payload.update(
+                        {
+                            "type": "flat",
+                            "rawOrLabel": "raw",
+                            "rawOrLabelHeaders": "raw",
+                            "exportCheckboxLabel": "false",
+                            "exportSurveyFields": "true",
+                            "exportDataAccessGroups": "false",
+                        }
+                    )
+                response = requests.post(
+                    api_url, data=payload, timeout=int(config["request_timeout_seconds"])
+                )
+                response.raise_for_status()
+                frame = pd.DataFrame(response.json())
+                if frame.empty:
+                    raise RuntimeError(f"The survey system returned no {content} rows for {project_id}.")
+                frame.to_parquet(target, index=False)
+                sidecar.write_text(
+                    json.dumps(
+                        {"file": target.name, "sha256": file_digest(target), "pulled_at_utc": pulled_at},
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                origin = "Pulled live today"
+            rows.append(
+                {
+                    "Study": PROJECT_LABELS[source_name],
+                    "Project number": project_id,
+                    "What was pulled": {
+                        "record": "Every answer, including survey timing fields",
+                        "metadata": "Field list and branching rules",
+                        "instrument": "Section list",
+                    }[content],
+                    "Rows": len(frame),
+                    "Where it came from": origin,
+                    "Saved as": target.name,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def check_redcap_audit_access(project_dir: Path) -> pd.DataFrame:
+    """Ask the survey system for its audit trail and report what came back.
+
+    The meeting asked us to work from the survey system's own logs.  This
+    reports plainly whether the read-only keys can reach them, so the answer
+    is on the page rather than in someone's memory.
+    """
+    import requests
+    from dotenv import load_dotenv
+
+    config = load_config(project_dir)["redcap"]
+    load_dotenv(project_dir.parents[1] / ".env", override=False)
+    api_url = os.environ.get(config["api_url_env"], "").strip()
+
+    requests_to_make = [
+        ("Audit trail (who changed what, and when)", "log"),
+        ("Survey invitation list", "participantList"),
+    ]
+    rows: list[dict[str, object]] = []
+    for source_name, source_config in config["projects"].items():
+        token = os.environ.get(source_config["token_env"], "").strip()
+        for label, content in requests_to_make:
+            payload = {"token": token, "content": content, "format": "json", "returnFormat": "json"}
+            if content == "participantList":
+                payload["instrument"] = "eligibility"
+            try:
+                response = requests.post(api_url, data=payload, timeout=60)
+                if response.status_code == 200:
+                    outcome = "Available"
+                    detail = f"{len(response.json()):,} rows returned"
+                else:
+                    outcome = "Not available to this key"
+                    detail = str(response.json().get("error", response.text))[:160]
+            except Exception as error:  # noqa: BLE001 - reported, never raised
+                outcome = "Could not be reached"
+                detail = str(error)[:160]
+            rows.append(
+                {
+                    "Study": PROJECT_LABELS[source_name],
+                    "What we asked for": label,
+                    "Result": outcome,
+                    "What came back": detail,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+# ── Timing, read straight from the survey system's own fields ───────────────
+
+def build_timing_detail(cache_dir: Path) -> pd.DataFrame:
+    """Per-response timing, taken from the survey system's timing fields.
+
+    The survey records how long each of the four sections took and stamps the
+    moment each section was handed in.  Those stamps are the per-response
+    audit trail we can reach with a read-only key, so they carry the work the
+    system-wide audit log would otherwise do.
+    """
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+
+    frame = records[["source_project", "record_id"]].copy()
+    frame["Started"] = pd.to_datetime(records["eligibility_timestamp"], errors="coerce")
+
+    for field, label in SECTION_TIME_LABELS.items():
+        frame[label] = pd.to_numeric(records[field], errors="coerce").round(2)
+
+    stamps = pd.DataFrame(
+        {
+            field: pd.to_datetime(records[column], errors="coerce")
+            for field, column in SECTION_TIMESTAMP_FIELDS.items()
+        }
+    )
+    frame["Last section handed in"] = stamps.max(axis=1)
+    frame["Sections with a recorded time"] = (
+        records[list(SECTION_TIME_LABELS)].apply(pd.to_numeric, errors="coerce").notna().sum(axis=1)
+    )
+    frame["Whole survey minutes"] = (
+        records[list(SECTION_TIME_LABELS)]
+        .apply(pd.to_numeric, errors="coerce")
+        .sum(axis=1, min_count=len(SECTION_TIME_LABELS))
+        .round(2)
+    )
+    minutes_open = (frame["Last section handed in"] - frame["Started"]).dt.total_seconds() / 60
+    frame["Minutes from sign-up to last section"] = minutes_open.round(2)
+    frame["Started at hour"] = frame["Started"].dt.hour
+    frame["Day started"] = frame["Started"].dt.date
+    return frame
+
+
+TIMING_PREVIEW_COLUMNS = [
+    "Study",
+    "Record ID",
+    "Started",
+    "Last section handed in",
+    "Family Information minutes",
+    "Values minutes",
+    "Thoughts and feelings minutes",
+    "Demographics minutes",
+    "Whole survey minutes",
+    "Sections with a recorded time",
+]
+
+
+def build_timing_preview(timing_detail: pd.DataFrame, rows: int = 6) -> pd.DataFrame:
+    """The timing record with reader-facing column names, for a short look."""
+    frame = timing_detail.copy()
+    frame["Study"] = frame["source_project"].map(PROJECT_LABELS)
+    frame["Record ID"] = frame["record_id"]
+    return frame[TIMING_PREVIEW_COLUMNS].head(rows).reset_index(drop=True)
+
+
+def build_time_limit_bands(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+    repeats: int = TIME_BAND_REPEATS,
+    seed: int = TIME_BAND_SEED,
+) -> pd.DataFrame:
+    """Put an uncertainty band around every time limit.
+
+    Each limit was read off 131 verified caregivers.  A different 131 real
+    caregivers would have produced a slightly different limit.  Drawing 131
+    caregivers back out of that group at random, thousands of times over,
+    shows how far the limit could reasonably move.  Below the band is
+    definitely rushed.  Inside the band is possibly rushed.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+
+    records = load_combined_records(cache_dir).copy()
+    for field in TIME_FIELDS:
+        records[field] = pd.to_numeric(records[field], errors="coerce")
+    totals = records[TIME_FIELDS].sum(axis=1, min_count=len(TIME_FIELDS))
+    verified = records[records["source_project"].eq("clean_4797") & totals.notna()].copy()
+    verified["_total"] = verified[TIME_FIELDS].sum(axis=1)
+
+    generator = np.random.default_rng(seed)
+
+    def band(values: pd.Series, statistic) -> tuple[float, float]:
+        clean = values.dropna().to_numpy(dtype=float)
+        draws = generator.integers(0, len(clean), size=(repeats, len(clean)))
+        spread = statistic(clean[draws])
+        return float(np.percentile(spread, 2.5)), float(np.percentile(spread, 97.5))
+
+    smallest = lambda block: block.min(axis=1)  # noqa: E731
+    percentile = lambda block: np.quantile(block, 0.01, axis=1)  # noqa: E731
+
+    definitions = load_rule_definitions(output_dir).set_index("rule")
+    section_floors = json.loads(str(definitions.loc["R3", "threshold"]))
+
+    specs = [
+        ("Whole survey", "_total", "Fastest verified caregiver", smallest, TOTAL_TIME_LIMIT_MIN),
+        ("Thoughts and feelings section", "get_time_tfa", "Fastest verified caregiver", smallest, ATTITUDES_TIME_LIMIT_MIN),
+        ("Family Information section", "get_time_fif", "Slowest 1 in 100 verified caregivers", percentile, section_floors["feat_time_fif"]),
+        ("Values section", "get_time_val", "Slowest 1 in 100 verified caregivers", percentile, section_floors["feat_time_val"]),
+        ("Demographics section", "get_time_demo", "Slowest 1 in 100 verified caregivers", percentile, section_floors["feat_time_demo"]),
+    ]
+
+    rows = []
+    for label, column, method, statistic, published in specs:
+        low, high = band(verified[column], statistic)
+        rows.append(
+            {
+                "Part of the survey": label,
+                "How the limit was set": method,
+                "Limit in use (minutes)": round(float(published), 2),
+                "Limit in use": _minutes_to_words(float(published)),
+                "Band runs from (minutes)": round(low, 2),
+                "Band runs to (minutes)": round(high, 2),
+                "Below the band": "Definitely rushed",
+                "Inside the band": "Possibly rushed",
+            }
+        )
+    table = pd.DataFrame(rows)
+    table.attrs["verified_n"] = int(len(verified))
+    table.attrs["repeats"] = int(repeats)
+    table.attrs["survey_band"] = (
+        float(table.loc[0, "Band runs from (minutes)"]),
+        float(table.loc[0, "Band runs to (minutes)"]),
+    )
+    table.attrs["attitudes_band"] = (
+        float(table.loc[1, "Band runs from (minutes)"]),
+        float(table.loc[1, "Band runs to (minutes)"]),
+    )
+    return table
+
+
+# ── Email address and time of day ───────────────────────────────────────────
+
+def _email_series(records: pd.DataFrame) -> pd.Series:
+    """The best available email address for each response, lower-cased."""
+    columns = [c for c in ("demo_email", "email_elig") if c in records.columns]
+    result = pd.Series("", index=records.index, dtype="object")
+    for column in columns:
+        value = records[column].astype(str).str.strip().str.lower()
+        value = value.where(~value.isin({"nan", "none", "<na>"}), "")
+        result = result.where(result.ne(""), value)
+    return result
+
+
+def _email_domain(emails: pd.Series) -> pd.Series:
+    return emails.str.extract(r"@([^@\s]+)$", expand=False).fillna("")
+
+
+# ── The master record table ─────────────────────────────────────────────────
+
+def build_risk_table(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+    project_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """One row per response, with every check, its points, and what to do.
+
+    This is the table the meeting asked for.  It carries the record number,
+    the timing, a yes or no for every check, the exact checks that were
+    broken, the points those checks add up to, and the recommended action.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+    if project_dir is None:
+        project_dir = output_dir.parent
+
+    screen = build_screen_inputs(output_dir, cache_dir)
+    timing = build_timing_detail(cache_dir)
+    bands = build_time_limit_bands(output_dir, cache_dir)
+    survey_low, survey_high = bands.attrs["survey_band"]
+    attitudes_low, attitudes_high = bands.attrs["attitudes_band"]
+
+    records = load_combined_records(cache_dir).copy()
+    records["record_id"] = records["record_id"].astype(str)
+    emails = _email_series(records)
+    finished = pd.to_numeric(records.get("demographics_complete"), errors="coerce").fillna(0)
+    email_frame = pd.DataFrame(
+        {
+            "source_project": records["source_project"],
+            "record_id": records["record_id"],
+            "Email address": emails,
+            "Email domain": _email_domain(emails),
+            "_finished_demographics": finished.eq(2),
+        }
+    )
+
+    frame = (
+        screen.merge(timing, on=["source_project", "record_id"], how="left", validate="one_to_one")
+        .merge(email_frame, on=["source_project", "record_id"], how="left", validate="one_to_one")
+    )
+
+    throwaway = {
+        str(domain).strip().lower()
+        for domain in load_config(project_dir)["fraud_rules"].get("disposable_email_domains", [])
+    }
+
+    # ── The fourteen scored checks ──────────────────────────────────────────
+    frame["check_survey_definitely_rushed"] = frame["rule_R1"].astype(bool)
+    frame["check_survey_possibly_rushed"] = (
+        frame["Timed end to end"]
+        & frame["Survey minutes"].ge(survey_low)
+        & frame["Survey minutes"].lt(survey_high)
+    )
+    frame["check_attitudes_definitely_rushed"] = frame["rule_R2"].astype(bool)
+    frame["check_attitudes_possibly_rushed"] = (
+        frame["Attitudes minutes"].notna()
+        & frame["Attitudes minutes"].ge(attitudes_low)
+        & frame["Attitudes minutes"].lt(attitudes_high)
+    )
+    frame["check_section_rushed"] = frame["rule_R3"].astype(bool)
+    frame["check_repeated_answers"] = frame["rule_R4"].astype(bool)
+    frame["check_identical_answer_sheet"] = frame["rule_R5"].astype(bool)
+    frame["check_burst_arrival"] = frame["rule_R6"].astype(bool)
+    frame["check_duplicate_comment"] = frame["rule_R7"].astype(bool)
+    frame["check_family_contradiction"] = frame["rule_R8"].astype(bool)
+    frame["check_impossible_demographics"] = frame["rule_R9"].astype(bool)
+    frame["check_throwaway_email"] = frame["Email domain"].isin(throwaway)
+    frame["check_no_email"] = frame["_finished_demographics"] & frame["Email address"].eq("")
+    frame["check_overnight"] = frame["Started at hour"].between(
+        OVERNIGHT_START_HOUR, OVERNIGHT_END_HOUR - 1
+    ).fillna(False)
+
+    for key in CHECK_KEYS:
+        frame[key] = frame[key].fillna(False).astype(bool)
+
+    # ── Points, count, and the exact list of what was broken ────────────────
+    frame["Risk score"] = sum(frame[key].astype(int) * CHECK_WEIGHTS[key] for key in CHECK_KEYS)
+    frame["Checks broken"] = frame[CHECK_KEYS].sum(axis=1).astype(int)
+    frame["Serious checks broken"] = frame[
+        [k for k in CHECK_KEYS if CHECK_SEVERITY_BY_KEY[k] == "Serious"]
+    ].sum(axis=1).astype(int)
+    frame["Mild checks broken"] = frame[
+        [k for k in CHECK_KEYS if CHECK_SEVERITY_BY_KEY[k] == "Mild"]
+    ].sum(axis=1).astype(int)
+
+    broken_matrix = frame[CHECK_KEYS].to_numpy()
+    names = np.array([CHECK_NAMES[key] for key in CHECK_KEYS])
+    weights = np.array([CHECK_WEIGHTS[key] for key in CHECK_KEYS])
+    frame["Which checks were broken"] = [
+        "; ".join(names[row]) if row.any() else "No checks broken" for row in broken_matrix
+    ]
+    frame["Points from each check"] = [
+        "; ".join(f"{n} ({w} point{'s' if w != 1 else ''})" for n, w in zip(names[row], weights[row]))
+        if row.any()
+        else "No checks broken"
+        for row in broken_matrix
+    ]
+
+    # ── Timing verdicts in words ────────────────────────────────────────────
+    def verdict(values: pd.Series, low: float, high: float, gate: pd.Series) -> pd.Series:
+        out = pd.Series("Normal", index=values.index, dtype="object")
+        out[values.ge(low) & values.lt(high)] = "Possibly rushed"
+        out[values.lt(low)] = "Definitely rushed"
+        out[~gate | values.isna()] = "No time recorded"
+        return out
+
+    frame["Whole survey speed"] = verdict(
+        frame["Survey minutes"], survey_low, survey_high, frame["Timed end to end"]
+    )
+    frame["Thoughts and feelings speed"] = verdict(
+        frame["Attitudes minutes"], attitudes_low, attitudes_high, frame["Attitudes minutes"].notna()
+    )
+
+    # ── Spot checks ─────────────────────────────────────────────────────────
+    frame["University email address"] = np.where(
+        frame["Email domain"].str.endswith(".edu"), "Yes", "No"
+    )
+    frame["Started overnight"] = np.where(frame["check_overnight"], "Yes", "No")
+    frame["Sign-ups within two minutes"] = _neighbours_within(frame, WIDE_BURST_SECONDS)
+    frame["Arrived in a tight cluster"] = np.where(
+        frame["Sign-ups within two minutes"].ge(WIDE_BURST_MIN_OTHERS), "Yes", "No"
+    )
+    domain_counts = frame.loc[frame["Email domain"].ne(""), "Email domain"].value_counts()
+    rare_domains = set(domain_counts[domain_counts.eq(1)].index)
+    frame["Email domain seen only once"] = np.where(
+        frame["Email domain"].isin(rare_domains), "Yes", "No"
+    )
+
+    # ── Recommended action ──────────────────────────────────────────────────
+    action = pd.Series(ACTION_PAY, index=frame.index, dtype="object")
+    action[frame["Risk score"].ge(REVIEW_SCORE)] = ACTION_REVIEW
+    action[frame["Risk score"].ge(REJECT_SCORE)] = ACTION_REJECT
+    frame["Action before email check"] = action
+
+    has_contradiction = frame[CONTRADICTION_CHECKS].any(axis=1)
+    cleared_by_email = (
+        frame["University email address"].eq("Yes")
+        & ~has_contradiction
+        & action.ne(ACTION_PAY)
+    )
+    frame["Cleared by university email"] = np.where(cleared_by_email, "Yes", "No")
+    frame["Recommended action"] = np.where(cleared_by_email, ACTION_PAY, action)
+
+    reason = pd.Series("", index=frame.index, dtype="object")
+    reason[frame["Recommended action"].eq(ACTION_PAY)] = "No checks broken"
+    reason[frame["Checks broken"].gt(0) & frame["Recommended action"].eq(ACTION_PAY)] = (
+        "Points were added, but a university email address cleared it"
+    )
+    reason[frame["Recommended action"].eq(ACTION_REVIEW)] = (
+        "One or two points, which is not enough to refuse payment on its own"
+    )
+    reason[frame["Recommended action"].eq(ACTION_REJECT)] = (
+        f"{REJECT_SCORE} points or more"
+    )
+    frame["Why this action"] = reason
+
+    confirmed = set(load_confirmed_bots(output_dir)["Record ID"].astype(str))
+    frame["Named in the earlier confirmed list"] = np.where(
+        frame["source_project"].eq("dirty_4581") & frame["record_id"].isin(confirmed), "Yes", "No"
+    )
+
+    frame["Record ID"] = frame["record_id"]
+    return frame
+
+
+def _neighbours_within(frame: pd.DataFrame, seconds: int) -> pd.Series:
+    """How many other sign-ups in the same study landed within N seconds."""
+    counts = pd.Series(0, index=frame.index, dtype=int)
+    for _, block in frame.groupby("source_project"):
+        arrived = block["Started"].dropna().sort_values()
+        if arrived.empty:
+            continue
+        stamps = arrived.to_numpy(dtype="datetime64[s]").astype("int64")
+        window = int(seconds)
+        left = np.searchsorted(stamps, stamps - window, side="left")
+        right = np.searchsorted(stamps, stamps + window, side="right")
+        counts.loc[arrived.index] = (right - left) - 1
+    return counts
+
+
+# ── Reader-facing summaries of the score ────────────────────────────────────
+
+MASTER_EXPORT_COLUMNS = [
+    "Study",
+    "Record ID",
+    "Email address",
+    "University email address",
+    "Started",
+    "Last section handed in",
+    "Started overnight",
+    "Family Information minutes",
+    "Values minutes",
+    "Thoughts and feelings minutes",
+    "Demographics minutes",
+    "Whole survey minutes",
+    "Sections with a recorded time",
+    "Minutes from sign-up to last section",
+    "Whole survey speed",
+    "Thoughts and feelings speed",
+]
+
+MASTER_TAIL_COLUMNS = [
+    "Which checks were broken",
+    "Points from each check",
+    "Checks broken",
+    "Serious checks broken",
+    "Mild checks broken",
+    "Risk score",
+    "Recommended action",
+    "Why this action",
+    "Review plan",
+    "Why this plan",
+    "Final plan",
+    "Cleared by university email",
+    "Sign-ups within two minutes",
+    "Arrived in a tight cluster",
+    "Email domain seen only once",
+    "Named in the earlier confirmed list",
+]
+
+
+def build_master_export(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """The full record list, in the column order the meeting asked for."""
+    frame = risk_table.copy()
+    if "Review plan" not in frame.columns:
+        frame = build_review_triage(frame)
+    for key in CHECK_KEYS:
+        frame[CHECK_NAMES[key]] = np.where(frame[key], "Yes", "No")
+    check_columns = [CHECK_NAMES[key] for key in CHECK_KEYS]
+    ordered = MASTER_EXPORT_COLUMNS + check_columns + MASTER_TAIL_COLUMNS
+    export = frame[ordered].copy()
+    for column in ("Started", "Last section handed in"):
+        export[column] = pd.to_datetime(export[column], errors="coerce").dt.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+    export = export.sort_values(
+        ["Study", "Risk score", "Record ID"], ascending=[True, False, True]
+    ).reset_index(drop=True)
+    return export
+
+
+def build_action_summary_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """How many responses land in each action, by study."""
+    counts = pd.crosstab(risk_table["Recommended action"], risk_table["Group"])
+    counts = counts.reindex(ACTION_ORDER).fillna(0).astype(int)
+    counts = counts.reindex(
+        columns=["Caregivers we verified", "Online sign-ups"], fill_value=0
+    )
+    table = counts.reset_index()
+    table.columns = ["Recommended action", "Verified caregivers", "Online sign-ups"]
+    table["All responses"] = table["Verified caregivers"] + table["Online sign-ups"]
+    total = int(table["All responses"].sum())
+    table["Share of all responses"] = (table["All responses"] / total * 100).round(1).astype(str) + "%"
+    table["What this means"] = table["Recommended action"].map(
+        {
+            ACTION_PAY: "No points. Send the gift card.",
+            ACTION_REVIEW: "One or two points. A person should look before paying.",
+            ACTION_REJECT: f"{REJECT_SCORE} points or more. Refuse payment.",
+        }
+    )
+    return table
+
+
+def build_score_distribution_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """Every points total, and how many responses sit on it."""
+    counts = pd.crosstab(risk_table["Risk score"], risk_table["Group"])
+    counts = counts.reindex(
+        columns=["Caregivers we verified", "Online sign-ups"], fill_value=0
+    )
+    table = counts.reset_index()
+    table.columns = ["Risk score", "Verified caregivers", "Online sign-ups"]
+    table["All responses"] = table["Verified caregivers"] + table["Online sign-ups"]
+    table["Recommended action"] = np.where(
+        table["Risk score"] >= REJECT_SCORE,
+        ACTION_REJECT,
+        np.where(table["Risk score"] >= REVIEW_SCORE, ACTION_REVIEW, ACTION_PAY),
+    )
+    return table
+
+
+def build_check_weight_table() -> pd.DataFrame:
+    """The full list of checks, what each is worth, and where it comes from."""
+    rows = []
+    for check in SCORED_CHECKS:
+        rows.append(
+            {
+                "Check": check["name"],
+                "Where in the survey": check["area"],
+                "How seriously we treat it": check["severity"],
+                "Points it adds": check["weight"],
+                "Where the line came from": {
+                    "rule_R1": "Fastest of the 131 verified caregivers",
+                    "rule_R2": "Fastest of the 131 verified caregivers",
+                    "rule_R3": "Slowest 1 in 100 verified caregivers, section by section",
+                    "rule_R4": "Slowest 1 in 100 verified caregivers, block by block",
+                    "rule_R5": "Exact match on the full answer sheet",
+                    "rule_R6": "Sixty seconds, set by hand, not read off the caregivers",
+                    "rule_R7": "Written comments at least 90 percent alike",
+                    "rule_R8": "Two answers on the same page that cannot both be true",
+                    "rule_R9": "Age and location that cannot both be true",
+                    "uncertainty band": "Redrawing the verified caregivers 4,000 times over",
+                    "email domain list": "Throwaway email services named in the settings file",
+                    "email address field": "Finished form with the email box left empty",
+                    "sign-up timestamp": "Sign-up between midnight and five in the morning",
+                }[str(check["source"])],
+            }
+        )
+    table = pd.DataFrame(rows)
+    return table
+
+
+def build_check_frequency_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """How often each check fired in each group, counts before shares."""
+    verified = risk_table[risk_table["Group"].eq("Caregivers we verified")]
+    online = risk_table[risk_table["Group"].eq("Online sign-ups")]
+    rows = []
+    for key in CHECK_KEYS:
+        verified_hits = int(verified[key].sum())
+        online_hits = int(online[key].sum())
+        rows.append(
+            {
+                "Check": CHECK_NAMES[key],
+                "How seriously we treat it": CHECK_SEVERITY_BY_KEY[key],
+                "Points it adds": CHECK_WEIGHTS[key],
+                "Verified caregivers": f"{verified_hits} of {len(verified):,}",
+                "Online sign-ups": f"{online_hits:,} of {len(online):,}",
+                "Share of verified caregivers": f"{verified_hits / len(verified) * 100:.1f}%",
+                "Share of online sign-ups": f"{online_hits / len(online) * 100:.1f}%",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_score_simulation_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """What happens to both groups if the refusal line moves.
+
+    The verified caregivers are people we know are real, so anything the line
+    catches there is a response we would have refused by mistake.
+
+    These counts are points only.  The university email rule is applied after
+    the points are totalled, so at the line in use this table can name one or
+    two more responses than the action summary does.
+    """
+    verified = risk_table[risk_table["Group"].eq("Caregivers we verified")]
+    online = risk_table[risk_table["Group"].eq("Online sign-ups")]
+    rows = []
+    for cut in range(1, 8):
+        refused_online = int((online["Risk score"] >= cut).sum())
+        refused_verified = int((verified["Risk score"] >= cut).sum())
+        rows.append(
+            {
+                "Refuse payment at this many points or more": cut,
+                "Online sign-ups refused": f"{refused_online:,}",
+                "Share of online sign-ups refused": f"{refused_online / len(online) * 100:.1f}%",
+                "Verified caregivers refused by mistake": refused_verified,
+                "Share of verified caregivers refused by mistake": f"{refused_verified / len(verified) * 100:.1f}%",
+                "In use": "Yes" if cut == REJECT_SCORE else "",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_time_simulation_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """What the whole-survey time limit catches as it moves."""
+    verified = risk_table[
+        risk_table["Group"].eq("Caregivers we verified") & risk_table["Timed end to end"]
+    ]
+    online = risk_table[
+        risk_table["Group"].eq("Online sign-ups") & risk_table["Timed end to end"]
+    ]
+    rows = []
+    for limit in (8, 10, TOTAL_TIME_LIMIT_MIN, 13.2, 15, 18, 20):
+        caught_online = int((online["Survey minutes"] < limit).sum())
+        caught_verified = int((verified["Survey minutes"] < limit).sum())
+        rows.append(
+            {
+                "Whole survey limit (minutes)": round(float(limit), 2),
+                "Whole survey limit": _minutes_to_words(float(limit)),
+                "Online sign-ups below it": f"{caught_online:,} of {len(online):,}",
+                "Verified caregivers below it": f"{caught_verified} of {len(verified):,}",
+                "Note": (
+                    "The limit in use"
+                    if abs(limit - TOTAL_TIME_LIMIT_MIN) < 0.01
+                    else "Top of the uncertainty band"
+                    if abs(limit - 13.2) < 0.01
+                    else ""
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_spot_check_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """The four quick eyeball lists the meeting asked for, as counts."""
+    online = risk_table[risk_table["Group"].eq("Online sign-ups")]
+    rows = [
+        {
+            "Spot check": "University email address",
+            "What it is": "The email ends in .edu, so a real person almost certainly holds it",
+            "Online sign-ups": int(online["University email address"].eq("Yes").sum()),
+            "All responses": int(risk_table["University email address"].eq("Yes").sum()),
+            "How we use it": "Clears the response for payment unless a contradiction check fired",
+        },
+        {
+            "Spot check": "Started overnight",
+            "What it is": "Sign-up between midnight and five in the morning",
+            "Online sign-ups": int(online["Started overnight"].eq("Yes").sum()),
+            "All responses": int(risk_table["Started overnight"].eq("Yes").sum()),
+            "How we use it": "Adds one point",
+        },
+        {
+            "Spot check": "Arrived in a tight cluster",
+            "What it is": "Ten or more other sign-ups landed within two minutes",
+            "Online sign-ups": int(online["Arrived in a tight cluster"].eq("Yes").sum()),
+            "All responses": int(risk_table["Arrived in a tight cluster"].eq("Yes").sum()),
+            "How we use it": "Listed for eyeballing only, adds no points",
+        },
+        {
+            "Spot check": "Email domain seen only once",
+            "What it is": "No other response used that email provider",
+            "Online sign-ups": int(online["Email domain seen only once"].eq("Yes").sum()),
+            "All responses": int(risk_table["Email domain seen only once"].eq("Yes").sum()),
+            "How we use it": "Listed for eyeballing only, adds no points",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def mask_email(address: str) -> str:
+    """Show the shape of an address without printing it in full.
+
+    Anything displayed in the notebook is saved inside the notebook file, and
+    that file is kept in version control.  Full addresses belong only in the
+    spreadsheet, which is not.
+    """
+    text = str(address or "")
+    if "@" not in text:
+        return ""
+    name, _, domain = text.partition("@")
+    head = name[0] if name else ""
+    return f"{head}***@{domain}"
+
+
+def build_university_email_list(
+    risk_table: pd.DataFrame,
+    show_full_address: bool = False,
+) -> pd.DataFrame:
+    """Every response with a university email address, for quick verification."""
+    columns = [
+        "Study",
+        "Record ID",
+        "Email address",
+        "Whole survey minutes",
+        "Which checks were broken",
+        "Risk score",
+        "Action before email check",
+        "Recommended action",
+        "Cleared by university email",
+    ]
+    frame = risk_table[risk_table["University email address"].eq("Yes")][columns].copy()
+    if not show_full_address:
+        frame["Email address"] = frame["Email address"].map(mask_email)
+    return frame.sort_values(["Study", "Risk score"], ascending=[True, False]).reset_index(drop=True)
+
+
+def build_email_override_effect(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """What the university email rule actually changed."""
+    holds_university = risk_table["University email address"].eq("Yes")
+    would_hold = risk_table["Action before email check"].ne(ACTION_PAY)
+    rows = [
+        {
+            "Question": "Responses with a university email address",
+            "Count": int(holds_university.sum()),
+        },
+        {
+            "Question": "Of those, how many the points alone would have held",
+            "Count": int((holds_university & would_hold).sum()),
+        },
+        {
+            "Question": "Of those, how many the university email rule cleared",
+            "Count": int(risk_table["Cleared by university email"].eq("Yes").sum()),
+        },
+        {
+            "Question": "Of those, how many stayed held because a contradiction check fired",
+            "Count": int(
+                (holds_university & would_hold & risk_table["Cleared by university email"].eq("No")).sum()
+            ),
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def build_false_alarm_summary(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """What the score does to people we already know are real."""
+    verified = risk_table[risk_table["Group"].eq("Caregivers we verified")]
+    counts = verified["Recommended action"].value_counts().reindex(ACTION_ORDER).fillna(0).astype(int)
+    table = counts.reset_index()
+    table.columns = ["Recommended action", "Verified caregivers"]
+    table["Share of the 177 verified caregivers"] = (
+        table["Verified caregivers"] / len(verified) * 100
+    ).round(1).astype(str) + "%"
+    return table
+
+
+def build_wrongly_refused_detail(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """The verified caregivers the score would refuse, named and explained."""
+    columns = [
+        "Record ID",
+        "Whole survey minutes",
+        "Thoughts and feelings minutes",
+        "Whole survey speed",
+        "Thoughts and feelings speed",
+        "Which checks were broken",
+        "Risk score",
+        "Recommended action",
+    ]
+    frame = risk_table[
+        risk_table["Group"].eq("Caregivers we verified")
+        & risk_table["Recommended action"].eq(ACTION_REJECT)
+    ][columns]
+    return frame.sort_values("Risk score", ascending=False).reset_index(drop=True)
+
+
+def build_top_reasons_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """The check combinations that account for the most refused responses."""
+    refused = risk_table[
+        risk_table["Group"].eq("Online sign-ups")
+        & risk_table["Recommended action"].eq(ACTION_REJECT)
+    ]
+    counts = refused["Which checks were broken"].value_counts().head(12)
+    table = counts.reset_index()
+    table.columns = ["Checks broken together", "Online sign-ups"]
+    table["Share of refused online sign-ups"] = (
+        table["Online sign-ups"] / len(refused) * 100
+    ).round(1).astype(str) + "%"
+    return table
+
+
+# ── The workbook ────────────────────────────────────────────────────────────
+
+MASTER_WORKBOOK_NAME = "ESD_Response_Review_Master.xlsx"
+
+READ_ME_ROWS = [
+    ("Read me first", "What this file is, and what each tab holds"),
+    ("Summary", "How many responses land in each action, and what the points look like"),
+    ("All responses", "Every response, with a yes or no for every check and the points it scored"),
+    ("Pay now", "Responses with no points against them"),
+    ("Check by hand", "Responses with one or two points, which a person should look at"),
+    ("Do not pay", "Responses with three points or more"),
+    ("Checks and points", "Every check, what it is worth, and how often it fired in each group"),
+    ("Time limits", "The time limits, the uncertainty band around each one, and what they catch"),
+    ("If the line moves", "What changes if we refuse payment at a different number of points"),
+    ("Spot checks", "University emails, overnight sign-ups, tight arrival clusters, one-off email providers"),
+    ("Handling the held pile", "How the check-by-hand responses split, and what each group needs"),
+    ("Read by hand", "The short list a person opens one at a time, and the random sample to work through"),
+    ("Where the data came from", "The pull from the survey system, and what its audit trail would give us"),
+]
+
+
+def _write_block(writer, sheet: str, frame: pd.DataFrame, row: int, col: int = 0) -> int:
+    frame.to_excel(writer, sheet_name=sheet, index=False, startrow=row, startcol=col)
+    return row + len(frame) + 3
+
+
+def export_master_workbook(
+    output_dir: Path,
+    cache_dir: Optional[Path] = None,
+    project_dir: Optional[Path] = None,
+    destination: Optional[Path] = None,
+    filename: str = MASTER_WORKBOOK_NAME,
+    source_table: Optional[pd.DataFrame] = None,
+    audit_table: Optional[pd.DataFrame] = None,
+) -> Path:
+    """Write the one spreadsheet the meeting asked for.
+
+    The file carries email addresses, so it is written to a folder that is
+    kept out of version control.
+    """
+    if cache_dir is None:
+        cache_dir = output_dir.parent / "data_cache"
+    if project_dir is None:
+        project_dir = output_dir.parent
+    if destination is None:
+        destination = output_dir / "restricted"
+    destination.mkdir(parents=True, exist_ok=True)
+
+    risk_table = build_review_triage(build_risk_table(output_dir, cache_dir, project_dir))
+    master = build_master_export(risk_table)
+
+    action_summary = build_action_summary_table(risk_table)
+    false_alarms = build_false_alarm_summary(risk_table)
+    score_spread = build_score_distribution_table(risk_table)
+    top_reasons = build_top_reasons_table(risk_table)
+    weights = build_check_weight_table()
+    frequency = build_check_frequency_table(risk_table)
+    bands = build_time_limit_bands(output_dir, cache_dir).drop(columns=["Limit in use (minutes)"])
+    time_simulation = build_time_simulation_table(risk_table)
+    score_simulation = build_score_simulation_table(risk_table)
+    spot_checks = build_spot_check_table(risk_table)
+    university = build_university_email_list(risk_table, show_full_address=True)
+    override_effect = build_email_override_effect(risk_table)
+    wrongly_refused = build_wrongly_refused_detail(risk_table)
+    triage_summary = build_triage_summary(risk_table)
+    arrival_by_day = build_arrival_by_day_table(risk_table)
+    triage_time = build_triage_time_comparison(risk_table)
+    triage_mix = build_triage_check_mix(risk_table)
+    final_plan = build_final_plan_summary(risk_table)
+    sample_plan = build_sample_plan_table(risk_table)
+    read_list = build_read_by_hand_list(risk_table)
+    sample_list = build_sample_to_read(risk_table)
+
+    read_me = pd.DataFrame(READ_ME_ROWS, columns=["Tab", "What it holds"])
+    action_meaning = pd.DataFrame(
+        [
+            {
+                "Recommended action": ACTION_PAY,
+                "Points": "0",
+                "What to do": "Send the gift card.",
+            },
+            {
+                "Recommended action": ACTION_REVIEW,
+                "Points": "1 or 2",
+                "What to do": "A person reads the response before any payment goes out.",
+            },
+            {
+                "Recommended action": ACTION_REJECT,
+                "Points": f"{REJECT_SCORE} or more",
+                "What to do": "Refuse payment and keep the response out of the analysis.",
+            },
+        ]
+    )
+    scoring_rule = pd.DataFrame(
+        [
+            {"Rule": "A serious check adds 2 points."},
+            {"Rule": "A mild check adds 1 point."},
+            {"Rule": "The points are added up across every check a response broke."},
+            {"Rule": f"{REJECT_SCORE} points or more means do not pay."},
+            {"Rule": "1 or 2 points means a person checks it by hand."},
+            {"Rule": "0 points means pay now."},
+            {
+                "Rule": "A university email address clears a held response, unless one of the "
+                "contradiction checks fired."
+            },
+        ]
+    )
+
+    excel_path = destination / filename
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        row = _write_block(writer, "Read me first", read_me, 4)
+        row = _write_block(writer, "Read me first", action_meaning, row + 1)
+        row = _write_block(writer, "Read me first", scoring_rule, row + 1)
+        _write_block(writer, "Read me first", build_master_column_guide(master), row + 1)
+
+        row = _write_block(writer, "Summary", action_summary, 4)
+        row = _write_block(writer, "Summary", false_alarms, row + 1)
+        row = _write_block(writer, "Summary", score_spread, row + 1)
+        _write_block(writer, "Summary", top_reasons, row + 1)
+
+        master.to_excel(writer, sheet_name="All responses", index=False, startrow=2)
+        for sheet, action in (
+            ("Pay now", ACTION_PAY),
+            ("Check by hand", ACTION_REVIEW),
+            ("Do not pay", ACTION_REJECT),
+        ):
+            master[master["Recommended action"].eq(action)].to_excel(
+                writer, sheet_name=sheet, index=False, startrow=2
+            )
+
+        row = _write_block(writer, "Checks and points", weights, 4)
+        _write_block(writer, "Checks and points", frequency, row + 1)
+
+        row = _write_block(writer, "Time limits", bands, 4)
+        _write_block(writer, "Time limits", time_simulation, row + 1)
+
+        row = _write_block(writer, "If the line moves", score_simulation, 4)
+        _write_block(writer, "If the line moves", wrongly_refused, row + 1)
+
+        row = _write_block(writer, "Spot checks", spot_checks, 4)
+        row = _write_block(writer, "Spot checks", override_effect, row + 1)
+        _write_block(writer, "Spot checks", university, row + 1)
+
+        row = _write_block(writer, "Handling the held pile", triage_summary, 4)
+        row = _write_block(writer, "Handling the held pile", arrival_by_day, row + 1)
+        row = _write_block(writer, "Handling the held pile", triage_time, row + 1)
+        row = _write_block(writer, "Handling the held pile", final_plan, row + 1)
+        _write_block(writer, "Handling the held pile", triage_mix, row + 1)
+
+        row = _write_block(writer, "Read by hand", read_list, 4)
+        row = _write_block(writer, "Read by hand", sample_plan, row + 1)
+        _write_block(writer, "Read by hand", sample_list, row + 1)
+
+        if source_table is None:
+            source_table = pd.DataFrame([{"Note": "No pull record was passed in."}])
+        if audit_table is None:
+            audit_table = pd.DataFrame([{"Note": "The audit trail was not queried."}])
+        row = _write_block(writer, "Where the data came from", source_table, 4)
+        _write_block(writer, "Where the data came from", audit_table, row + 1)
+
+        book = writer.book
+        headings = {
+            "Read me first": (
+                "Caregiver survey response review",
+                "One row per response, the exact checks each one broke, the points those checks "
+                "add up to, and what we recommend doing about it.",
+            ),
+            "Summary": (
+                "Summary",
+                "Action groups first, then what the score does to caregivers we already know are "
+                "real, then the full spread of points.",
+            ),
+            "All responses": (
+                "All responses",
+                "Every response from both studies. Each check has its own yes or no column, and "
+                "the checks a response broke are also written out in one cell.",
+            ),
+            "Pay now": ("Pay now", "No checks broken. Nothing is holding these up."),
+            "Check by hand": (
+                "Check by hand",
+                "One or two points. Not enough to refuse payment on its own.",
+            ),
+            "Do not pay": (
+                "Do not pay",
+                f"{REJECT_SCORE} points or more. Read the checks column before acting on any single row.",
+            ),
+            "Checks and points": (
+                "Checks and points",
+                "What every check is worth, where its line came from, and how often it fired in "
+                "each of the two studies.",
+            ),
+            "Time limits": (
+                "Time limits",
+                "Each limit came from the 131 verified caregivers who finished all four sections. "
+                "Below the band is definitely rushed. Inside the band is possibly rushed.",
+            ),
+            "If the line moves": (
+                "If the line moves",
+                "The cost of moving the refusal line, measured against caregivers we know are real. "
+                "These counts are points only, before the university email rule is applied, so at "
+                "the line in use they can name one or two more responses than the Summary tab.",
+            ),
+            "Spot checks": (
+                "Spot checks",
+                "Quick lists to eyeball. Only the overnight check adds points.",
+            ),
+            "Handling the held pile": (
+                "Handling the held pile",
+                "The check-by-hand pile is too big to read one response at a time, so it is "
+                "split by the kind of evidence against each response. The arrival check is set "
+                "aside when judging one person, because every arrival flag in the study falls "
+                "on a single day and 97 of every 100 sign-ups that day carry it.",
+            ),
+            "Read by hand": (
+                "Read by hand",
+                "The short list to open one at a time, then the random sample drawn from the "
+                "group that is too large to read in full. Fill in the last three columns as "
+                "you go.",
+            ),
+            "Where the data came from": (
+                "Where the data came from",
+                "Both studies were pulled from the survey system for this run.",
+            ),
+        }
+        for sheet, (title, note) in headings.items():
+            worksheet = book[sheet]
+            _style_sheet_heading(worksheet, "A1", title)
+            _style_sheet_note(worksheet, "A2", note)
+
+        for sheet in ("All responses", "Pay now", "Check by hand", "Do not pay"):
+            _autosize_sheet(book[sheet], wrap_text=False, freeze_panes="C4", apply_filter=True)
+            book[sheet].auto_filter.ref = book[sheet].dimensions
+        for sheet in (
+            "Read me first",
+            "Summary",
+            "Checks and points",
+            "Time limits",
+            "If the line moves",
+            "Spot checks",
+            "Handling the held pile",
+            "Read by hand",
+            "Where the data came from",
+        ):
+            _autosize_sheet(book[sheet], wrap_text=True, freeze_panes=None, apply_filter=False)
+
+    return excel_path
+
+
+NOTEBOOK_PREVIEW_COLUMNS = [
+    "Study",
+    "Record ID",
+    "Whole survey minutes",
+    "Whole survey speed",
+    "Thoughts and feelings speed",
+    "Which checks were broken",
+    "Checks broken",
+    "Risk score",
+    "Recommended action",
+]
+
+
+def build_master_preview(master_export: pd.DataFrame, rows: int = 8) -> pd.DataFrame:
+    """A short, address-free look at the spreadsheet, safe to leave on the page."""
+    online = master_export[master_export["Study"].eq(PROJECT_LABELS["dirty_4581"])]
+    return online[NOTEBOOK_PREVIEW_COLUMNS].head(rows).reset_index(drop=True)
+
+
+def build_master_column_guide(master_export: pd.DataFrame) -> pd.DataFrame:
+    """Name every column in the spreadsheet and say what it holds."""
+    descriptions = {
+        "Study": "Which of the two studies the response came from",
+        "Record ID": "The response number in the survey system",
+        "Email address": "The address given on the demographics page, for spot checking",
+        "University email address": "Yes when the address ends in .edu",
+        "Started": "When the sign-up screen was submitted",
+        "Last section handed in": "When the last of the four sections was submitted",
+        "Started overnight": "Yes when the sign-up landed between midnight and five in the morning",
+        "Family Information minutes": "Minutes spent on the Family Information section",
+        "Values minutes": "Minutes spent on the Values section",
+        "Thoughts and feelings minutes": "Minutes spent on the Thoughts, Feelings, and Attitudes section",
+        "Demographics minutes": "Minutes spent on the Demographics section",
+        "Whole survey minutes": "The four section times added together, blank unless all four were timed",
+        "Sections with a recorded time": "How many of the four sections have a time at all",
+        "Minutes from sign-up to last section": "Clock time between the sign-up and the last section",
+        "Whole survey speed": "Definitely rushed, possibly rushed, normal, or no time recorded",
+        "Thoughts and feelings speed": "Definitely rushed, possibly rushed, normal, or no time recorded",
+        "Which checks were broken": "The exact checks this response broke, written out",
+        "Points from each check": "The same list, with the points each check added",
+        "Checks broken": "How many checks fired on this response",
+        "Serious checks broken": "How many of those were serious",
+        "Mild checks broken": "How many of those were mild",
+        "Risk score": "The points added up",
+        "Recommended action": "Pay now, check by hand, or do not pay",
+        "Why this action": "The reason in one line",
+        "Review plan": "For the held pile only, which of the five review groups this response falls into",
+        "Why this plan": "Why that review group, in one line",
+        "Final plan": "The single column to work from: the action, or the review group for held responses",
+        "Cleared by university email": "Yes when a .edu address moved a held response to pay now",
+        "Sign-ups within two minutes": "How many other sign-ups in the same study landed within two minutes",
+        "Arrived in a tight cluster": "Yes when ten or more other sign-ups landed within two minutes",
+        "Email domain seen only once": "Yes when no other response used that email provider",
+        "Named in the earlier confirmed list": "Yes for the six responses the earlier review already called bots",
+    }
+    rows = []
+    for column in master_export.columns:
+        rows.append(
+            {
+                "Column": column,
+                "What it holds": descriptions.get(
+                    column, "Yes or No for this one check"
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Second look at the check-by-hand pile
+#
+# The points system leaves about a thousand responses in the middle.  Reading
+# a thousand responses one at a time is not work anyone can actually do, so
+# this section sorts them by the kind of evidence against them and says what
+# to do with each group.
+# ══════════════════════════════════════════════════════════════════════════
+
+# The arrival check describes the traffic on a given day, not the person who
+# filled the survey in.  Every other check describes what one person did.
+CHANNEL_CHECKS = ["check_burst_arrival"]
+PERSON_CHECKS = [key for key in CHECK_KEYS if key not in CHANNEL_CHECKS]
+
+PLAN_RELEASE_ARRIVAL = "Release, arrival timing only"
+PLAN_RELEASE_SLOW = "Release, slower than a typical verified caregiver"
+PLAN_READ_ALL = "Read every one by hand"
+PLAN_READ_SAMPLE = "Read a random sample by hand"
+PLAN_COMPLETION = "Hold until the completion rule is set"
+PLAN_PAY = "Pay now"
+PLAN_REJECT = "Do not pay"
+
+TRIAGE_ORDER = [
+    PLAN_RELEASE_ARRIVAL,
+    PLAN_RELEASE_SLOW,
+    PLAN_READ_SAMPLE,
+    PLAN_READ_ALL,
+    PLAN_COMPLETION,
+]
+
+TRIAGE_REASONS: dict[str, str] = {
+    PLAN_RELEASE_ARRIVAL: (
+        "The only check against this response was arrival timing, and that check is about "
+        "the day rather than the person."
+    ),
+    PLAN_RELEASE_SLOW: (
+        "Only mild checks fired, and this response spent longer on the survey than the "
+        "typical verified caregiver, so speed is not in question."
+    ),
+    PLAN_READ_SAMPLE: (
+        "Only mild checks fired, but this response finished faster than the typical "
+        "verified caregiver, so a person should read a sample of this group."
+    ),
+    PLAN_READ_ALL: (
+        "A serious check fired that describes what this person answered, not when they "
+        "arrived."
+    ),
+    PLAN_COMPLETION: (
+        "No section of this response has a recorded time, so no timing check can reach it. "
+        "This is a completion question, not a bot question."
+    ),
+}
+
+
+def verified_median_minutes(risk_table: pd.DataFrame) -> float:
+    """The whole-survey time of the typical verified caregiver."""
+    verified = risk_table[risk_table["Group"].eq("Caregivers we verified")]
+    return float(verified["Survey minutes"].median())
+
+
+def build_arrival_by_day_table(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """Show that every arrival flag falls on one day.
+
+    This is the whole argument for setting the arrival check aside when
+    deciding about one person.  If almost everyone who signed up that day
+    carries the flag, the flag cannot tell one of them from another.
+    """
+    online = risk_table[risk_table["Group"].eq("Online sign-ups")].copy()
+    online["Day"] = pd.to_datetime(online["Started"], errors="coerce").dt.date
+    grouped = online.groupby("Day").agg(
+        signups=("record_id", "size"),
+        flagged=("check_burst_arrival", "sum"),
+    )
+    table = grouped.reset_index()
+    table.columns = ["Day", "Sign-ups that day", "Arrived in a burst"]
+    table["Share of that day"] = (
+        table["Arrived in a burst"] / table["Sign-ups that day"] * 100
+    ).round(1).astype(str) + "%"
+    verified = risk_table[risk_table["Group"].eq("Caregivers we verified")]
+    table.loc[len(table)] = [
+        "All verified caregivers",
+        len(verified),
+        int(verified["check_burst_arrival"].sum()),
+        f"{verified['check_burst_arrival'].mean() * 100:.1f}%",
+    ]
+    return table
+
+
+def build_review_triage(risk_table: pd.DataFrame) -> pd.DataFrame:
+    """Sort the check-by-hand pile by the kind of evidence against each response."""
+    frame = risk_table.copy()
+    median_minutes = verified_median_minutes(frame)
+
+    frame["Points from the person"] = sum(
+        frame[key].astype(int) * CHECK_WEIGHTS[key] for key in PERSON_CHECKS
+    )
+    frame["Points from arrival timing"] = sum(
+        frame[key].astype(int) * CHECK_WEIGHTS[key] for key in CHANNEL_CHECKS
+    )
+    serious_person = [k for k in PERSON_CHECKS if CHECK_SEVERITY_BY_KEY[k] == "Serious"]
+    frame["Serious check about the person"] = frame[serious_person].any(axis=1)
+    frame["Slower than a typical verified caregiver"] = frame["Survey minutes"].ge(median_minutes)
+
+    plan = pd.Series("", index=frame.index, dtype="object")
+    held = frame["Recommended action"].eq(ACTION_REVIEW)
+
+    plan[frame["Recommended action"].eq(ACTION_PAY)] = PLAN_PAY
+    plan[frame["Recommended action"].eq(ACTION_REJECT)] = PLAN_REJECT
+    plan[held & frame["Points from the person"].eq(0)] = PLAN_RELEASE_ARRIVAL
+    plan[held & frame["Points from the person"].ge(1)] = PLAN_READ_SAMPLE
+    plan[
+        held
+        & frame["Points from the person"].ge(1)
+        & frame["Slower than a typical verified caregiver"]
+    ] = PLAN_RELEASE_SLOW
+    # A response with nothing timed cannot be judged on speed, so it becomes a
+    # completion question.  A serious check about the person outranks that,
+    # because there is something to read either way.
+    plan[held & frame["Sections timed"].eq(0)] = PLAN_COMPLETION
+    plan[held & frame["Serious check about the person"]] = PLAN_READ_ALL
+
+    frame["Review plan"] = plan
+    reason = frame["Review plan"].map(TRIAGE_REASONS).fillna(frame["Why this action"])
+    # The sampling group holds two different situations, so say which is which
+    # rather than describing every one of them as fast.
+    unfinished = (
+        frame["Review plan"].eq(PLAN_READ_SAMPLE) & ~frame["Timed end to end"]
+    )
+    reason[unfinished] = (
+        "Only mild checks fired, but the survey was never finished, so there is no "
+        "whole-survey time to compare against the verified caregivers."
+    )
+    frame["Why this plan"] = reason
+    frame["Final plan"] = np.where(held, frame["Review plan"], frame["Recommended action"])
+    frame.attrs["median_minutes"] = median_minutes
+    return frame
+
+
+def build_triage_summary(triaged: pd.DataFrame) -> pd.DataFrame:
+    """How the check-by-hand pile splits, and what each group costs to work."""
+    held = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Recommended action"].eq(ACTION_REVIEW)
+    ]
+    rows = []
+    for plan in TRIAGE_ORDER:
+        block = held[held["Review plan"].eq(plan)]
+        if block.empty:
+            continue
+        rows.append(
+            {
+                "Review plan": plan,
+                "Online sign-ups": len(block),
+                "Share of the held pile": f"{len(block) / len(held) * 100:.1f}%",
+                "Middle survey time (minutes)": (
+                    round(float(block["Survey minutes"].median()), 2)
+                    if block["Survey minutes"].notna().any()
+                    else "no time recorded"
+                ),
+                "Responses a person actually reads": (
+                    0
+                    if plan in {PLAN_RELEASE_ARRIVAL, PLAN_RELEASE_SLOW, PLAN_COMPLETION}
+                    else len(block)
+                    if plan == PLAN_READ_ALL
+                    else recommended_sample_size(len(block))
+                ),
+                "Why": TRIAGE_REASONS[plan],
+            }
+        )
+    table = pd.DataFrame(rows)
+    total_read = int(pd.to_numeric(table["Responses a person actually reads"]).sum())
+    table.attrs["held_total"] = len(held)
+    table.attrs["total_read"] = total_read
+    return table
+
+
+def recommended_sample_size(group_size: int, confidence: float = 0.95, ceiling: float = 0.05) -> int:
+    """How many to read so a clean sample rules out more than `ceiling` bad.
+
+    If a person reads this many at random and finds none that are fake, we can
+    say at 95 percent confidence that no more than 5 in 100 of the group is
+    fake.  The arithmetic is the plain binomial one and takes no account of the
+    group being finite, so it errs on the side of reading more.
+    """
+    if group_size <= 0:
+        return 0
+    needed = int(np.ceil(np.log(1 - confidence) / np.log(1 - ceiling)))
+    return int(min(needed, group_size))
+
+
+def build_sample_plan_table(triaged: pd.DataFrame) -> pd.DataFrame:
+    """What each possible sample size buys, for the group that needs sampling."""
+    held = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Review plan"].eq(PLAN_READ_SAMPLE)
+    ]
+    group_size = len(held)
+    rows = []
+    for sample in (20, 30, 45, 59, 75, 100, 150, group_size):
+        if sample > group_size:
+            continue
+        ceiling = 1 - 0.05 ** (1 / sample)
+        rows.append(
+            {
+                "Responses read at random": sample,
+                "Hours at 8 minutes each": round(sample * 8 / 60, 1),
+                "If none of them are fake, at most this share of the group is fake": f"{ceiling * 100:.1f}%",
+                "Which is at most this many responses": int(np.ceil(ceiling * group_size)),
+                "Suggested": "Yes" if sample == recommended_sample_size(group_size) else "",
+            }
+        )
+    table = pd.DataFrame(rows).drop_duplicates(subset=["Responses read at random"])
+    table.attrs["group_size"] = group_size
+    return table
+
+
+def build_triage_check_mix(triaged: pd.DataFrame) -> pd.DataFrame:
+    """The exact check combinations inside each review plan."""
+    held = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Recommended action"].eq(ACTION_REVIEW)
+    ]
+    counts = (
+        held.groupby(["Review plan", "Which checks were broken"])
+        .size()
+        .reset_index(name="Online sign-ups")
+    )
+    counts["Review plan"] = pd.Categorical(counts["Review plan"], TRIAGE_ORDER, ordered=True)
+    return counts.sort_values(["Review plan", "Online sign-ups"], ascending=[True, False]).reset_index(
+        drop=True
+    )
+
+
+def build_triage_time_comparison(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Each review plan next to the caregivers we know are real."""
+    median_minutes = verified_median_minutes(triaged)
+    verified = triaged[triaged["Group"].eq("Caregivers we verified")]
+    held = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Recommended action"].eq(ACTION_REVIEW)
+    ]
+    refused = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Recommended action"].eq(ACTION_REJECT)
+    ]
+
+    def summarise(label: str, block: pd.DataFrame) -> dict[str, object]:
+        minutes = block["Survey minutes"].dropna()
+        attitudes = block["Attitudes minutes"].dropna()
+        return {
+            "Group": label,
+            "Responses": len(block),
+            "Middle whole-survey time (minutes)": round(float(minutes.median()), 2) if len(minutes) else "no time recorded",
+            "Middle thoughts and feelings time (minutes)": round(float(attitudes.median()), 2) if len(attitudes) else "no time recorded",
+            "Against the typical verified caregiver": (
+                "no time recorded"
+                if not len(minutes)
+                else "slower"
+                if minutes.median() >= median_minutes
+                else "faster"
+            ),
+        }
+
+    rows = [summarise("Caregivers we verified", verified)]
+    for plan in TRIAGE_ORDER:
+        block = held[held["Review plan"].eq(plan)]
+        if not block.empty:
+            rows.append(summarise(plan, block))
+    rows.append(summarise("Online sign-ups we refuse", refused))
+    return pd.DataFrame(rows)
+
+
+def build_final_plan_summary(triaged: pd.DataFrame) -> pd.DataFrame:
+    """One table with the end state for every response in both studies."""
+    counts = pd.crosstab(triaged["Final plan"], triaged["Group"])
+    counts = counts.reindex(columns=["Caregivers we verified", "Online sign-ups"], fill_value=0)
+    order = [PLAN_PAY] + TRIAGE_ORDER + [PLAN_REJECT]
+    counts = counts.reindex([p for p in order if p in counts.index])
+    table = counts.reset_index()
+    table.columns = ["Final plan", "Verified caregivers", "Online sign-ups"]
+    table["All responses"] = table["Verified caregivers"] + table["Online sign-ups"]
+    table["Someone reads it"] = table["Final plan"].map(
+        {
+            PLAN_PAY: "No",
+            PLAN_RELEASE_ARRIVAL: "No",
+            PLAN_RELEASE_SLOW: "No",
+            PLAN_READ_SAMPLE: "A sample of them",
+            PLAN_READ_ALL: "Yes, every one",
+            PLAN_COMPLETION: "No, this needs a completion rule first",
+            PLAN_REJECT: "No",
+        }
+    )
+    return table
+
+
+def build_read_by_hand_list(triaged: pd.DataFrame) -> pd.DataFrame:
+    """The responses a person genuinely has to open, one by one."""
+    columns = [
+        "Study",
+        "Record ID",
+        "Whole survey minutes",
+        "Thoughts and feelings minutes",
+        "Which checks were broken",
+        "Risk score",
+        "Review plan",
+        "Why this plan",
+    ]
+    frame = triaged[triaged["Review plan"].eq(PLAN_READ_ALL)][columns]
+    return frame.sort_values(["Study", "Record ID"]).reset_index(drop=True)
+
+
+def build_sample_to_read(triaged: pd.DataFrame, seed: int = TIME_BAND_SEED) -> pd.DataFrame:
+    """A drawn-in-advance random sample of the group that needs sampling."""
+    pool = triaged[
+        triaged["Group"].eq("Online sign-ups") & triaged["Review plan"].eq(PLAN_READ_SAMPLE)
+    ]
+    size = recommended_sample_size(len(pool))
+    columns = [
+        "Study",
+        "Record ID",
+        "Whole survey minutes",
+        "Thoughts and feelings minutes",
+        "Which checks were broken",
+        "Risk score",
+    ]
+    sample = pool.sample(n=size, random_state=seed)[columns].copy()
+    sample = sample.sort_values("Record ID").reset_index(drop=True)
+    sample.insert(0, "Read in this order", range(1, len(sample) + 1))
+    sample["Real caregiver"] = ""
+    sample["Notes"] = ""
+    sample["Who read it"] = ""
+    return sample
