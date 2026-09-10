@@ -13,6 +13,7 @@ design-qa.md
 .env
 .env.*
 !.env.example
+.browser-profile/
 .streamlit/secrets.toml
 *.pyc
 *.log

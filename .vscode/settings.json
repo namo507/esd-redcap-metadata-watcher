@@ -1,0 +1,18 @@
+{
+  "python.defaultInterpreterPath": "/Users/namomac/esd-redcap-metadata-watcher/.venv312/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "shared/tests",
+    "projects/redcap-metadata-watcher/tests",
+    "projects/nano-nico-recruitment/tests",
+    "projects/caregiver-cluster-analysis/tests"
+  ],
+  "terminal.integrated.env.osx": {
+    "PYTHONPATH": "${workspaceFolder}/shared:${workspaceFolder}/projects/redcap-metadata-watcher:${workspaceFolder}/projects/nano-nico-recruitment:${workspaceFolder}/projects/caregiver-cluster-analysis",
+    "GRAPH_EXPLORER_URL": "https://developer.microsoft.com/en-us/graph/graph-explorer",
+    "REDCAP_SSO_URL": "https://redcap.research.sc.edu/",
+    "BROWSER_PROFILE_DIR": ".browser-profile",
+    "BROWSER_HEADLESS": "false"
+  }
+}
