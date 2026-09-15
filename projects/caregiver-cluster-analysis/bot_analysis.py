@@ -5655,3 +5655,575 @@ def build_layout_choice_table() -> pd.DataFrame:
             },
         ]
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Stakeholder-facing helpers
+#
+# These functions produce the tables, charts, and workbook sheets for the
+# refactored stakeholder-friendly notebook.  They reuse the canonical
+# risk-table pipeline; nothing here creates a parallel scoring path.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Plain-language categories for the rule key, mapped from the `area` field
+# in SCORED_CHECKS.
+_STAKEHOLDER_CATEGORIES: dict[str, str] = {
+    "Whole survey timing": "Survey timing",
+    "Thoughts and feelings timing": "Survey timing",
+    "Section timing": "Survey timing",
+    "Rating blocks": "Response pattern",
+    "Whole questionnaire": "Duplicate content",
+    "Arrival time": "Arrival timing",
+    "Open text": "Duplicate content",
+    "Family Information": "Family consistency",
+    "Demographics": "Demographics",
+    "Email address": "Email",
+}
+
+# Explicit column labels to prevent the two scales from ever being mixed
+# in an unlabeled field.
+STAKEHOLDER_SCORE_COLUMN = "Proposed stakeholder score (Mild = 1, Serious = 5)"
+OPERATIONAL_SCORE_COLUMN = "Current operational score (Mild = 1, Serious = 2)"
+OPERATIONAL_ACTION_COLUMN = "Current operational action"
+
+
+def build_stakeholder_executive_summary(triaged: pd.DataFrame) -> dict:
+    """Dynamically computed KPI values for the executive summary.
+
+    Returns a dict so the notebook can unpack exactly the values it needs
+    into ``display(Markdown(...))``.  Every count comes from the current
+    data—nothing is hard-coded.
+    """
+    verified = triaged[triaged["Group"].eq("Caregivers we verified")]
+    online = triaged[triaged["Group"].eq("Online sign-ups")]
+
+    pay_online = int(online["Recommended action"].eq(ACTION_PAY).sum())
+    review_online = int(online["Recommended action"].eq(ACTION_REVIEW).sum())
+    reject_online = int(online["Recommended action"].eq(ACTION_REJECT).sum())
+
+    pay_verified = int(verified["Recommended action"].eq(ACTION_PAY).sum())
+    review_verified = int(verified["Recommended action"].eq(ACTION_REVIEW).sum())
+    reject_verified = int(verified["Recommended action"].eq(ACTION_REJECT).sum())
+
+    # How many held responses someone actually has to open
+    if "Final plan" in triaged.columns:
+        held_online = online[online["Recommended action"].eq(ACTION_REVIEW)]
+        reads = 0
+        for plan in TRIAGE_ORDER:
+            block = held_online[held_online["Review plan"].eq(plan)]
+            if block.empty:
+                continue
+            if plan == PLAN_READ_ALL:
+                reads += len(block)
+            elif plan == PLAN_READ_SAMPLE:
+                reads += recommended_sample_size(len(block))
+            # PLAN_RELEASE_ARRIVAL, PLAN_RELEASE_SLOW, PLAN_COMPLETION → 0
+    else:
+        reads = review_online  # fallback: assume all held are read
+
+    return {
+        "verified_total": len(verified),
+        "online_total": len(online),
+        "all_total": len(triaged),
+        "pay_online": pay_online,
+        "review_online": review_online,
+        "reject_online": reject_online,
+        "pay_verified": pay_verified,
+        "review_verified": review_verified,
+        "reject_verified": reject_verified,
+        "pay_all": pay_online + pay_verified,
+        "review_all": review_online + review_verified,
+        "reject_all": reject_online + reject_verified,
+        "false_refusals": reject_verified,
+        "manual_reads_needed": reads,
+    }
+
+
+def _stakeholder_common(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Shared base for the stakeholder rule list and grid.
+
+    Uses the same canonical data as ``_rules_common`` but applies the
+    explicitly-labeled column names required by the stakeholder notebook.
+    """
+    frame = _rules_common(triaged)
+    # Rename to the explicit labels mandated by the scoring-policy constraint
+    frame[STAKEHOLDER_SCORE_COLUMN] = frame[SCORE_HEAVY_COLUMN]
+    frame[OPERATIONAL_SCORE_COLUMN] = frame[SCORE_AGREED_COLUMN]
+    frame[OPERATIONAL_ACTION_COLUMN] = frame["Recommended action"]
+    frame["Final review plan"] = frame.get("Final plan", frame["Recommended action"])
+    return frame
+
+
+def build_stakeholder_rule_list(triaged: pd.DataFrame) -> pd.DataFrame:
+    """One row per response with the rules written into a readable cell.
+
+    Column order matches the specification exactly.  Scores are computed
+    from Boolean rule columns, not parsed from display text.
+    """
+    frame = _stakeholder_common(triaged)
+    matrix = frame[[CODE_TO_KEY[c] for c in CODE_ORDER]].to_numpy()
+    codes = np.array(CODE_ORDER)
+    names = np.array([CHECK_NAMES[CODE_TO_KEY[c]] for c in CODE_ORDER])
+
+    frame["Rules violated"] = [
+        ", ".join(codes[row]) if row.any() else "None" for row in matrix
+    ]
+    frame["Rules violated, in plain language"] = [
+        "; ".join(names[row]) if row.any() else "No rules triggered" for row in matrix
+    ]
+    columns = [
+        "Study",
+        "Record ID",
+        "Response key",
+        "Rules violated",
+        "Rules violated, in plain language",
+        "Total Rules Violated",
+        "Serious Rules Violated",
+        "Mild Rules Violated",
+        STAKEHOLDER_SCORE_COLUMN,
+        OPERATIONAL_SCORE_COLUMN,
+        OPERATIONAL_ACTION_COLUMN,
+        "Final review plan",
+    ]
+    listing = frame[columns].copy()
+    return listing.sort_values(
+        ["Study", STAKEHOLDER_SCORE_COLUMN, OPERATIONAL_SCORE_COLUMN, "Record ID"],
+        ascending=[True, False, False, True],
+    ).reset_index(drop=True)
+
+
+def build_stakeholder_rule_grid(triaged: pd.DataFrame) -> pd.DataFrame:
+    """One Yes/No column per rule, filterable in Excel.
+
+    Same row count and sort as the list view.
+    """
+    frame = _stakeholder_common(triaged)
+    for code in CODE_ORDER:
+        frame[code] = np.where(frame[CODE_TO_KEY[code]], "Yes", "No")
+    columns = (
+        ["Study", "Record ID", "Response key"]
+        + CODE_ORDER
+        + [
+            "Total Rules Violated",
+            "Serious Rules Violated",
+            "Mild Rules Violated",
+            STAKEHOLDER_SCORE_COLUMN,
+            OPERATIONAL_SCORE_COLUMN,
+            OPERATIONAL_ACTION_COLUMN,
+            "Final review plan",
+        ]
+    )
+    grid = frame[columns].copy()
+    return grid.sort_values(
+        ["Study", STAKEHOLDER_SCORE_COLUMN, OPERATIONAL_SCORE_COLUMN, "Record ID"],
+        ascending=[True, False, False, True],
+    ).reset_index(drop=True)
+
+
+def build_stakeholder_rule_key(triaged: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """Compact rule key with plain-language categories.
+
+    Columns: Code, Plain-language description, Category, Severity,
+    Current operational points, Proposed stakeholder points.
+    """
+    rows = []
+    for code in CODE_ORDER:
+        key = CODE_TO_KEY[code]
+        check = next(c for c in SCORED_CHECKS if str(c["key"]) == key)
+        severity = CHECK_SEVERITY_BY_KEY[key]
+        rows.append({
+            "Code": code,
+            "Plain-language description": CHECK_NAMES[key],
+            "Category": _STAKEHOLDER_CATEGORIES.get(str(check["area"]), str(check["area"])),
+            "Severity": severity,
+            "Current operational points": CHECK_WEIGHTS[key],
+            "Proposed stakeholder points": (
+                HEAVY_SERIOUS_POINTS if severity == "Serious" else HEAVY_MILD_POINTS
+            ),
+        })
+    table = pd.DataFrame(rows)
+    # Add fire-rate columns when data is available
+    if triaged is not None:
+        verified = triaged[triaged["Group"].eq("Caregivers we verified")]
+        online = triaged[triaged["Group"].eq("Online sign-ups")]
+        fired_verified = []
+        fired_online = []
+        for code in CODE_ORDER:
+            key = CODE_TO_KEY[code]
+            fired_verified.append(int(verified[key].sum()) if key in verified.columns else 0)
+            fired_online.append(int(online[key].sum()) if key in online.columns else 0)
+        table["Known-real caregivers flagged"] = fired_verified
+        table["Online sign-ups flagged"] = fired_online
+    return table
+
+
+def build_operational_cutoff_sensitivity(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Cutoff-sensitivity table for the current operational 1/2 scale.
+
+    For each tested cutoff, shows online refusals, known-real refusals,
+    plain-language interpretation, and approval status.
+    """
+    frame = _rules_common(triaged)
+    verified = frame[frame["Group"].eq("Caregivers we verified")]
+    online = frame[frame["Group"].eq("Online sign-ups")]
+
+    rows = []
+    for cut in range(1, 8):
+        refused_online = int((online[SCORE_AGREED_COLUMN] >= cut).sum())
+        refused_verified = int((verified[SCORE_AGREED_COLUMN] >= cut).sum())
+        pct_online = refused_online / len(online) * 100 if len(online) else 0
+        pct_verified = refused_verified / len(verified) * 100 if len(verified) else 0
+        rows.append({
+            "Cutoff": cut,
+            "Scale": "Current operational (Mild = 1, Serious = 2)",
+            "Online sign-ups refused": refused_online,
+            "% of online sign-ups refused": f"{pct_online:.1f}%",
+            "Known-real caregivers refused": refused_verified,
+            "% of known-real caregivers refused": f"{pct_verified:.1f}%",
+            "Plain-language interpretation": {
+                1: "Any check at all means refusal",
+                2: "Any two mild checks, or any serious check, means refusal",
+                3: "Three mild checks, or one serious plus one mild",
+                4: "Two serious checks, or one serious plus two mild",
+                5: "Two serious checks plus one mild, or five mild",
+                6: "Three serious checks, or two serious plus two mild",
+                7: "Three serious checks plus one mild",
+            }.get(cut, ""),
+            "Status": (
+                "Currently in use" if cut == REJECT_SCORE
+                else "Scenario only"
+            ),
+        })
+    return pd.DataFrame(rows)
+
+
+def build_stakeholder_cutoff_sensitivity(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Cutoff-sensitivity table for the proposed 1/5 scale.
+
+    Dynamically identifies the lowest cutoff with zero known-real refusals
+    and labels it as a candidate for discussion, not an approved policy.
+    """
+    frame = _rules_common(triaged)
+    verified = frame[frame["Group"].eq("Caregivers we verified")]
+    online = frame[frame["Group"].eq("Online sign-ups")]
+
+    cutoffs = [3, 5, 6, 7, 8, 10, 12]
+    rows = []
+    first_zero_refusal_cutoff = None
+    for cut in cutoffs:
+        refused_online = int((online[SCORE_HEAVY_COLUMN] >= cut).sum())
+        refused_verified = int((verified[SCORE_HEAVY_COLUMN] >= cut).sum())
+        pct_online = refused_online / len(online) * 100 if len(online) else 0
+        pct_verified = refused_verified / len(verified) * 100 if len(verified) else 0
+
+        if refused_verified == 0 and first_zero_refusal_cutoff is None:
+            first_zero_refusal_cutoff = cut
+            status = "Candidate cutoff for stakeholder discussion; not an approved policy"
+        elif cut == 3:
+            status = "Same number as the operational cutoff, but much harsher on this scale"
+        else:
+            status = "Scenario only"
+
+        rows.append({
+            "Cutoff": cut,
+            "Scale": "Proposed stakeholder (Mild = 1, Serious = 5)",
+            "Online sign-ups refused": refused_online,
+            "% of online sign-ups refused": f"{pct_online:.1f}%",
+            "Known-real caregivers refused": refused_verified,
+            "% of known-real caregivers refused": f"{pct_verified:.1f}%",
+            "Plain-language interpretation": {
+                3: "Refuses any three mild rules, and any single serious rule",
+                5: "Refuses any single serious rule on its own",
+                6: "Refuses a serious rule once anything else joins it",
+                7: "Refuses a serious rule with two mild ones, or two serious rules",
+                8: "Refuses a serious rule with three mild ones, or two serious rules",
+                10: "Refuses two serious rules",
+                12: "Refuses two serious rules with two mild ones",
+            }.get(cut, ""),
+            "Status": status,
+        })
+    table = pd.DataFrame(rows)
+    table.attrs["first_zero_refusal_cutoff"] = first_zero_refusal_cutoff
+    return table
+
+
+def plot_stakeholder_action_summary(
+    triaged: pd.DataFrame,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Grouped horizontal bar chart: Pay now / Check by hand / Do not pay.
+
+    Online sign-ups shown prominently; known-real reference in secondary style.
+    Green / amber / red with text labels, colour-blind safe.
+    """
+    kpis = build_stakeholder_executive_summary(triaged)
+
+    action_colors = {
+        ACTION_PAY: "#2E7D32",      # green
+        ACTION_REVIEW: "#E65100",    # amber
+        ACTION_REJECT: "#C62828",    # red
+    }
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(9, 3.5))
+    else:
+        fig = ax.get_figure()
+
+    actions = ACTION_ORDER
+    online_vals = [kpis["pay_online"], kpis["review_online"], kpis["reject_online"]]
+    verified_vals = [kpis["pay_verified"], kpis["review_verified"], kpis["reject_verified"]]
+
+    y = np.arange(len(actions))
+    bar_height = 0.35
+
+    bars_online = ax.barh(
+        y - bar_height / 2, online_vals, bar_height,
+        label="Online sign-ups",
+        color=[action_colors[a] for a in actions],
+        edgecolor="white", linewidth=0.5,
+    )
+    bars_verified = ax.barh(
+        y + bar_height / 2, verified_vals, bar_height,
+        label="Known-real caregivers",
+        color=[action_colors[a] for a in actions],
+        alpha=0.4,
+        edgecolor="white", linewidth=0.5,
+    )
+
+    # Text labels
+    for bar, val in zip(bars_online, online_vals):
+        ax.text(bar.get_width() + 5, bar.get_y() + bar.get_height() / 2,
+                f"{val:,}", va="center", fontsize=10, fontweight="bold")
+    for bar, val in zip(bars_verified, verified_vals):
+        ax.text(bar.get_width() + 5, bar.get_y() + bar.get_height() / 2,
+                f"{val:,}", va="center", fontsize=9, alpha=0.7)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(actions, fontsize=11)
+    ax.invert_yaxis()
+    ax.set_xlabel("Number of responses")
+    ax.set_title("Current operational actions", fontsize=12, fontweight="bold", pad=10)
+    ax.legend(loc="lower right", fontsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def plot_stakeholder_rule_frequency(
+    triaged: pd.DataFrame,
+    ax: Optional[plt.Axes] = None,
+) -> plt.Figure:
+    """Compact horizontal bar chart showing rule frequency by study.
+
+    Auto-detects rules with unusually high study-level rates (>50% of
+    one group) and returns them as metadata for narrative interpretation.
+    """
+    verified = triaged[triaged["Group"].eq("Caregivers we verified")]
+    online = triaged[triaged["Group"].eq("Online sign-ups")]
+
+    codes = []
+    verified_rates = []
+    online_rates = []
+    for code in CODE_ORDER:
+        key = CODE_TO_KEY[code]
+        codes.append(code)
+        vr = verified[key].sum() / len(verified) * 100 if len(verified) else 0
+        orr = online[key].sum() / len(online) * 100 if len(online) else 0
+        verified_rates.append(float(vr))
+        online_rates.append(float(orr))
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(9, 5))
+    else:
+        fig = ax.get_figure()
+
+    y = np.arange(len(codes))
+    bar_height = 0.35
+
+    ax.barh(y - bar_height / 2, online_rates, bar_height,
+            label="Online sign-ups", color="#1F5A7A", edgecolor="white", linewidth=0.5)
+    ax.barh(y + bar_height / 2, verified_rates, bar_height,
+            label="Known-real caregivers", color="#B08A2E", edgecolor="white", linewidth=0.5)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(codes, fontsize=10)
+    ax.invert_yaxis()
+    ax.set_xlabel("% of responses flagged")
+    ax.set_title("Screening rule frequency by study", fontsize=12, fontweight="bold", pad=10)
+    ax.legend(loc="lower right", fontsize=9)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+
+    # Detect rules with unusually high rates in one group
+    high_rate_rules = []
+    for i, code in enumerate(codes):
+        if online_rates[i] > 50 or verified_rates[i] > 50:
+            high_rate_rules.append({
+                "code": code,
+                "online_rate": online_rates[i],
+                "verified_rate": verified_rates[i],
+            })
+    fig._high_rate_rules = high_rate_rules  # stash for narrative use
+    return fig
+
+
+def _stakeholder_conditional_format(worksheet, col_letter: str, max_row: int, rule_type: str) -> None:
+    """Apply conditional formatting to a column in the stakeholder workbook."""
+    from openpyxl.formatting.rule import CellIsRule
+    from openpyxl.styles import PatternFill
+
+    green_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+    red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
+    amber_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
+
+    cell_range = f"{col_letter}2:{col_letter}{max_row}"
+
+    if rule_type == "yes_no":
+        worksheet.conditional_formatting.add(
+            cell_range, CellIsRule(operator="equal", formula=['"Yes"'], fill=red_fill)
+        )
+        worksheet.conditional_formatting.add(
+            cell_range, CellIsRule(operator="equal", formula=['"No"'], fill=green_fill)
+        )
+    elif rule_type == "action":
+        worksheet.conditional_formatting.add(
+            cell_range, CellIsRule(operator="equal", formula=[f'"{ACTION_PAY}"'], fill=green_fill)
+        )
+        worksheet.conditional_formatting.add(
+            cell_range, CellIsRule(operator="equal", formula=[f'"{ACTION_REVIEW}"'], fill=amber_fill)
+        )
+        worksheet.conditional_formatting.add(
+            cell_range, CellIsRule(operator="equal", formula=[f'"{ACTION_REJECT}"'], fill=red_fill)
+        )
+
+
+def export_stakeholder_screening_workbook(
+    triaged: pd.DataFrame,
+    output_dir: Path,
+    filename: str = "ESD_Response_Screening_Stakeholder_View.xlsx",
+) -> Path:
+    """Write the stakeholder-facing screening workbook.
+
+    Five sheets: Executive Summary, Record Rule Summary, Rule Grid,
+    Rule Key, Policy Sensitivity.
+
+    No email addresses.  The restricted master workbook is not touched.
+    """
+    kpis = build_stakeholder_executive_summary(triaged)
+    rule_list = build_stakeholder_rule_list(triaged)
+    rule_grid = build_stakeholder_rule_grid(triaged)
+    rule_key = build_stakeholder_rule_key(triaged)
+    operational_sensitivity = build_operational_cutoff_sensitivity(triaged)
+    stakeholder_sensitivity = build_stakeholder_cutoff_sensitivity(triaged)
+    triage = build_triage_summary(triaged)
+
+    # Executive summary as a tidy table
+    exec_rows = [
+        ("Known-real caregiver responses", kpis["verified_total"]),
+        ("Online sign-up responses", kpis["online_total"]),
+        ("Online responses cleared for payment", kpis["pay_online"]),
+        ("Online responses requiring review", kpis["review_online"]),
+        ("Online responses recommended not to pay", kpis["reject_online"]),
+        ("Known-real caregivers incorrectly refused (current policy)", kpis["false_refusals"]),
+        ("Held responses requiring manual reads", kpis["manual_reads_needed"]),
+    ]
+    exec_df = pd.DataFrame(exec_rows, columns=["Metric", "Value"])
+
+    excel_path = output_dir / filename
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        # Sheet 1: Executive Summary
+        exec_df.to_excel(writer, sheet_name="Executive Summary", index=False, startrow=3)
+        ws = writer.sheets["Executive Summary"]
+        _style_sheet_heading(ws, "A1", "Caregiver Survey Response Screening")
+        _style_sheet_note(
+            ws, "A2",
+            "Screening rules identify responses that may need additional review. "
+            "A triggered rule does not, by itself, prove that a response was submitted by a bot.",
+        )
+
+        # Add triage summary below the KPIs
+        triage_start = 3 + len(exec_df) + 3
+        if not triage.empty:
+            triage.to_excel(
+                writer, sheet_name="Executive Summary", index=False,
+                startrow=triage_start,
+            )
+
+        # Sheet 2: Record Rule Summary (list view)
+        rule_list.to_excel(writer, sheet_name="Record Rule Summary", index=False, startrow=2)
+        ws2 = writer.sheets["Record Rule Summary"]
+        _style_sheet_heading(ws2, "A1", "Record Rule Summary")
+        _style_sheet_note(
+            ws2, "A2",
+            "One row per response. The rules each response triggered are written in "
+            "codes and again in plain language.",
+        )
+
+        # Sheet 3: Rule Grid
+        rule_grid.to_excel(writer, sheet_name="Rule Grid", index=False, startrow=2)
+        ws3 = writer.sheets["Rule Grid"]
+        _style_sheet_heading(ws3, "A1", "Rule Grid")
+        _style_sheet_note(
+            ws3, "A2",
+            "One row per response with a Yes/No column for each of the 14 rules. "
+            "Use this sheet for filtering and sorting by individual rules.",
+        )
+
+        # Sheet 4: Rule Key
+        rule_key.to_excel(writer, sheet_name="Rule Key", index=False, startrow=2)
+        ws4 = writer.sheets["Rule Key"]
+        _style_sheet_heading(ws4, "A1", "Rule Key")
+        _style_sheet_note(
+            ws4, "A2",
+            "R1–R9 are the nine original rules. E1–E5 are supplemental checks added "
+            "after the September review meeting.",
+        )
+
+        # Sheet 5: Policy Sensitivity
+        operational_sensitivity.to_excel(
+            writer, sheet_name="Policy Sensitivity", index=False, startrow=3,
+        )
+        sep_row = 3 + len(operational_sensitivity) + 3
+        stakeholder_sensitivity.to_excel(
+            writer, sheet_name="Policy Sensitivity", index=False, startrow=sep_row,
+        )
+        ws5 = writer.sheets["Policy Sensitivity"]
+        _style_sheet_heading(ws5, "A1", "Policy Sensitivity")
+        _style_sheet_note(
+            ws5, "A2",
+            "Two separate sensitivity tables — one for each scoring scale. "
+            "Results from the two scales must never be compared in the same row.",
+        )
+
+        # Apply formatting to all sheets
+        book = writer.book
+        for sheet_name in ("Record Rule Summary", "Rule Grid"):
+            ws = book[sheet_name]
+            _autosize_sheet(ws, wrap_text=False, freeze_panes="D4", apply_filter=True)
+
+            # Conditional formatting for action column
+            max_row = ws.max_row
+            for col_cells in ws.iter_cols(min_row=1, max_row=1):
+                for cell in col_cells:
+                    if cell.value == OPERATIONAL_ACTION_COLUMN:
+                        _stakeholder_conditional_format(
+                            ws, get_column_letter(cell.column), max_row, "action",
+                        )
+
+            # Conditional formatting for Yes/No rule columns (grid only)
+            if sheet_name == "Rule Grid":
+                for col_cells in ws.iter_cols(min_row=1, max_row=1):
+                    for cell in col_cells:
+                        if cell.value in CODE_ORDER:
+                            _stakeholder_conditional_format(
+                                ws, get_column_letter(cell.column), max_row, "yes_no",
+                            )
+
+        for sheet_name in ("Executive Summary", "Rule Key", "Policy Sensitivity"):
+            _autosize_sheet(
+                book[sheet_name], wrap_text=True, freeze_panes=None, apply_filter=False,
+            )
+
+    return excel_path
