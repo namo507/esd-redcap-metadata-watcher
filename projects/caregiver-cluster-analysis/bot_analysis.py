@@ -8,8 +8,10 @@ caches without duplicating computation logic.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 from typing import Optional
@@ -77,7 +79,13 @@ CATEGORY_ORDER = [
 PROJECT_LABELS: dict[str, str] = {
     "clean_4797": "Study 1 - verified caregiver sample",
     "dirty_4581": "Study 2 - online recruitment sample",
+    "bilingual_5749": "Study 3 - bilingual sample",
+    "icis_4931": "Study 4 - ICIS sample",
 }
+
+# The reference study whose verified caregivers calibrate every timing limit.
+# Everything else is a recruited sample that gets screened against it.
+REFERENCE_PROJECT = "clean_4797"
 
 PAYMENT_DECISION_LABELS: dict[str, str] = {
     "auto_eligible": "Cleared for payment now",
@@ -273,26 +281,191 @@ def load_record_classification(output_dir: Path) -> pd.DataFrame:
     return df
 
 
+# ── Bilingual field folding ─────────────────────────────────────────────────
+#
+# The bilingual project asks every question twice, once in English and once in
+# Spanish, and gives the Spanish copy the same variable name with an "_s" (or
+# "_sp") on the end.  A respondent answers one language or the other, never
+# both.  Left alone, that would make the bilingual study look like it has
+# twice as many questions as every other study, and would split one person's
+# answers across two columns so that no rule could see them.
+#
+# Folding the Spanish twin back onto its English base fixes both problems:
+# the two languages become one variable, one answer, counted once.
+
+_LANGUAGE_SUFFIX = re.compile(r"^(?P<base>.+?)_(?:s|sp)(?P<checkbox>___.+)?$")
+
+
+def canonical_field_name(column: str) -> Optional[str]:
+    """The English base name behind a Spanish twin column, or None.
+
+    ``q114_s`` becomes ``q114`` and ``fif_childrens_ages_s___3`` becomes
+    ``fif_childrens_ages___3``.  Returns None for a column that does not look
+    like a Spanish twin at all.
+    """
+    match = _LANGUAGE_SUFFIX.match(column)
+    if match is None:
+        return None
+    return match.group("base") + (match.group("checkbox") or "")
+
+
+def fold_language_twins(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fold every Spanish twin column onto its English base column.
+
+    Returns the folded frame and a report of what was folded, so the workbook
+    can show exactly which variables were treated as one.  A column is only
+    folded when its English base is present in the same study, which is what
+    keeps a field that merely ends in "_s" from being mistaken for a twin.
+    """
+    columns = set(frame.columns)
+    folded = frame.copy()
+    rows: list[dict[str, object]] = []
+
+    for column in sorted(columns):
+        base = canonical_field_name(column)
+        if base is None:
+            continue
+        if base in columns:
+            english = folded[base].astype("string").fillna("")
+            spanish = folded[column].astype("string").fillna("")
+            answered_in_spanish = int(
+                english.str.strip().eq("").__and__(spanish.str.strip().ne("")).sum()
+            )
+            folded[base] = english.where(english.str.strip().ne(""), spanish)
+            folded = folded.drop(columns=[column])
+            rows.append(
+                {
+                    "Spanish variable": column,
+                    "Folded onto": base,
+                    "How it was handled": "Merged into the English variable",
+                    "Answers taken from the Spanish version": answered_in_spanish,
+                }
+            )
+        else:
+            folded = folded.rename(columns={column: base})
+            rows.append(
+                {
+                    "Spanish variable": column,
+                    "Folded onto": base,
+                    "How it was handled": "Renamed; this study has no English twin",
+                    "Answers taken from the Spanish version": int(
+                        folded[base].astype("string").fillna("").str.strip().ne("").sum()
+                    ),
+                }
+            )
+
+    report = pd.DataFrame(
+        rows,
+        columns=[
+            "Spanish variable",
+            "Folded onto",
+            "How it was handled",
+            "Answers taken from the Spanish version",
+        ],
+    )
+    return folded, report
+
+
+def fold_metadata_twins(metadata: pd.DataFrame) -> pd.DataFrame:
+    """The same folding applied to a study's field list."""
+    folded = metadata.copy()
+    folded["field_name"] = [
+        canonical_field_name(str(name)) or str(name) for name in folded["field_name"]
+    ]
+    return folded.drop_duplicates("field_name", keep="first").reset_index(drop=True)
+
+
+# ── Study registry, discovered from config.yaml ─────────────────────────────
+
+def build_study_registry(project_dir: Path) -> dict[str, dict[str, object]]:
+    """Every study the configuration knows about, keyed by its short name.
+
+    Adding a token to ``.env`` and a block to ``config.yaml`` is all it takes
+    for a new study to flow through every table below.  A study with no entry
+    in ``PROJECT_LABELS`` is given a readable label from its description, so
+    nothing has to be edited here first.
+    """
+    projects = load_config(project_dir)["redcap"]["projects"]
+    registry: dict[str, dict[str, object]] = {}
+    for index, (key, settings) in enumerate(projects.items(), start=1):
+        label = PROJECT_LABELS.get(key)
+        if label is None:
+            description = str(settings.get("description", key)).strip()
+            label = f"Study {index} - {description}" if description else f"Study {index} - {key}"
+            PROJECT_LABELS[key] = label
+        STUDY_SHORT_NAMES.setdefault(
+            key,
+            "Caregivers we verified" if key == REFERENCE_PROJECT else "Online sign-ups",
+        )
+        registry[key] = {
+            "key": key,
+            "project_id": int(settings["project_id"]),
+            "token_env": str(settings["token_env"]),
+            "description": str(settings.get("description", "")),
+            "label": PROJECT_LABELS[key],
+            "is_reference": key == REFERENCE_PROJECT,
+        }
+    return registry
+
+
 def _load_project_records(cache_dir: Path, project_id: int, source_project: str) -> pd.DataFrame:
     matches = sorted(cache_dir.glob(f"{project_id}_record_*.parquet"))
     if not matches:
         raise FileNotFoundError(f"No {project_id} record cache found.")
     df = pd.read_parquet(matches[-1]).copy()
+    df, _ = fold_language_twins(df)
     df["record_id"] = df["record_id"].astype(str)
     df["source_project"] = source_project
+    df["project_id"] = project_id
     return df
 
 
-def load_combined_records(cache_dir: Path) -> pd.DataFrame:
-    """Load the latest REDCap record caches for both studies."""
-    return pd.concat(
-        [
-            _load_project_records(cache_dir, 4797, "clean_4797"),
-            _load_project_records(cache_dir, 4581, "dirty_4581"),
-        ],
-        ignore_index=True,
-        sort=False,
-    )
+def _load_raw_project_records(cache_dir: Path, project_id: int) -> pd.DataFrame:
+    """A study's answers exactly as REDCap exported them, before any folding."""
+    matches = sorted(cache_dir.glob(f"{project_id}_record_*.parquet"))
+    if not matches:
+        raise FileNotFoundError(f"No {project_id} record cache found.")
+    return pd.read_parquet(matches[-1])
+
+
+def _load_project_metadata(cache_dir: Path, project_id: int) -> pd.DataFrame:
+    matches = sorted(cache_dir.glob(f"{project_id}_metadata_*.parquet"))
+    if not matches:
+        raise FileNotFoundError(f"No {project_id} metadata cache found.")
+    return fold_metadata_twins(pd.read_parquet(matches[-1]))
+
+
+def load_combined_records(
+    cache_dir: Path,
+    project_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Every configured study's answers in one frame, bilingual twins folded.
+
+    The studies come from ``config.yaml`` rather than a hard-coded pair, so a
+    newly added token appears here without any edit to this function.
+    """
+    if project_dir is None:
+        project_dir = cache_dir.parent
+    registry = build_study_registry(project_dir)
+    frames = [
+        _load_project_records(cache_dir, int(study["project_id"]), key)
+        for key, study in registry.items()
+    ]
+    return pd.concat(frames, ignore_index=True, sort=False)
+
+
+def load_combined_metadata(
+    cache_dir: Path,
+    project_dir: Optional[Path] = None,
+) -> dict[str, pd.DataFrame]:
+    """Each study's field list, bilingual twins folded, keyed by study."""
+    if project_dir is None:
+        project_dir = cache_dir.parent
+    registry = build_study_registry(project_dir)
+    return {
+        key: _load_project_metadata(cache_dir, int(study["project_id"]))
+        for key, study in registry.items()
+    }
 
 
 # ── Classification helper ───────────────────────────────────────────────────
@@ -2049,9 +2222,15 @@ CHECK_SURVEY_AREAS: dict[str, str] = {
     "rule_R9": "Demographics",
 }
 
+# The analytic role each study plays.  The reference study is the known-real
+# yardstick; every other study is a recruited sample screened against it.
+# Which project a response came from stays in the "Study" column, so adding a
+# new token never changes how any of these views are computed.
 STUDY_SHORT_NAMES: dict[str, str] = {
     "clean_4797": "Caregivers we verified",
     "dirty_4581": "Online sign-ups",
+    "bilingual_5749": "Online sign-ups",
+    "icis_4931": "Online sign-ups",
 }
 
 STUDY_COLORS: dict[str, str] = {
@@ -2082,6 +2261,7 @@ def _minutes_to_words(minutes: float) -> str:
 def build_screen_inputs(
     output_dir: Path,
     cache_dir: Optional[Path] = None,
+    project_dir: Optional[Path] = None,
 ) -> pd.DataFrame:
     """One tidy record-level frame behind every screening-evidence view.
 
@@ -2095,11 +2275,16 @@ def build_screen_inputs(
     """
     if cache_dir is None:
         cache_dir = output_dir.parent / "data_cache"
+    if project_dir is None:
+        project_dir = output_dir.parent
 
-    flags = load_record_flags(output_dir).copy()
+    # Rules are recomputed here for every configured study rather than read
+    # from the two-study file the pipeline committed, so a study added later
+    # is screened on exactly the same terms as the studies already here.
+    flags = compute_screening_flags(project_dir, cache_dir).copy()
     flags["record_id"] = flags["record_id"].astype(str)
 
-    records = load_combined_records(cache_dir).copy()
+    records = load_combined_records(cache_dir, project_dir).copy()
     records["record_id"] = records["record_id"].astype(str)
     for column in TIME_FIELDS:
         records[column] = pd.to_numeric(records[column], errors="coerce")
@@ -2134,6 +2319,543 @@ def build_screen_inputs(
     is_bot = frame["source_project"].eq("dirty_4581") & frame["record_id"].isin(confirmed)
     frame.loc[is_bot, "Payment Decision"] = "Confirmed bot / reject"
     return frame
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# The screening rules, computed for every configured study
+#
+# The published pipeline works out rules R1-R9 for the two studies it was
+# written against and saves them to record_flags.parquet.  Adding a study
+# used to mean re-running that whole pipeline.  The engine below applies the
+# very same rule definitions, and the very same helper functions imported
+# straight from the pipeline module, to every study in config.yaml.
+#
+# Every threshold is still read off the verified caregivers in the reference
+# study, so a newly added study is measured against the same yardstick as the
+# studies that came before it and the numbers stay comparable.
+# ══════════════════════════════════════════════════════════════════════════
+
+RULE_CODES_R = [f"rule_R{index}" for index in range(1, 10)]
+
+COMPLETION_FIELDS = [
+    "family_information_form_complete",
+    "values_complete",
+    "tfa_complete",
+    "demographics_complete",
+]
+
+# One concept, several possible variable names.  The studies do not all use
+# the same name for the caregiver's age or for the email address, so each
+# concept lists the names it may appear under, best first.  A study that
+# carries none of them simply cannot set off the rules that need it, and the
+# Study Differences sheet says so out loud.
+# "age_elig" deliberately does not appear here.  It reads "Are you over the
+# age of 18?" and is answered 1 or 2, so treating it as an age in years would
+# put every single respondent outside the plausible range.  The age in years
+# is "age_check_demo" where the survey calculates it, and "age_confirm_elig"
+# ("What is your age?") otherwise.
+FIELD_ALIASES: dict[str, list[str]] = {
+    "caregiver_age": ["age_check_demo", "age_confirm_elig"],
+    "postcode": ["zip_demo"],
+    "country": ["demo_country"],
+    "children_count": ["fif_num_children"],
+    "child_birth_year": ["dob_child1"],
+    "autistic_children": ["fif_num_autistic"],
+}
+
+
+def resolve_alias(
+    frame: pd.DataFrame,
+    concept: str,
+    available: Optional[set[str]] = None,
+) -> Optional[str]:
+    """The first variable name for `concept` that this study actually has.
+
+    `available` must be given when `frame` holds several studies stacked
+    together.  Stacking fills a study's missing columns with blanks, so the
+    column looks present everywhere, and the fallback name a study really uses
+    would never be reached.
+    """
+    names = available if available is not None else set(frame.columns)
+    for candidate in FIELD_ALIASES[concept]:
+        if candidate in names:
+            return candidate
+    return None
+
+
+def _alias_numeric(
+    frame: pd.DataFrame,
+    concept: str,
+    available: Optional[set[str]] = None,
+) -> pd.Series:
+    field = resolve_alias(frame, concept, available)
+    if field is None:
+        return pd.Series(np.nan, index=frame.index, dtype=float)
+    return pd.to_numeric(frame[field], errors="coerce")
+
+
+def _alias_numeric_by_study(
+    combined: pd.DataFrame,
+    concept: str,
+    study_fields: dict[str, set[str]],
+) -> pd.Series:
+    """`concept` read for every response, under whichever name its study uses."""
+    result = pd.Series(np.nan, index=combined.index, dtype=float)
+    for key, fields in study_fields.items():
+        block = combined.index[combined["source_project"].eq(key)]
+        if not len(block):
+            continue
+        field = resolve_alias(combined, concept, fields)
+        if field is None or field not in combined.columns:
+            continue
+        result.loc[block] = pd.to_numeric(combined.loc[block, field], errors="coerce")
+    return result
+
+
+# A language switch bolted onto a branching rule, as the bilingual study
+# writes it.  It selects which language a question appears in; it says nothing
+# about whether an answer is allowed, so it is removed before two studies'
+# branching rules are compared.
+_LANGUAGE_GATE = re.compile(
+    r"""\s*(?:and|or)?\s*\(?\s*\[english_spanish\]\s*(?:=|<>)\s*['"]?\d+['"]?\s*\)?""",
+    re.IGNORECASE,
+)
+
+# A connective left stranded at either end once the language clause is cut out.
+_DANGLING_CONNECTIVE = re.compile(r"^\s*(?:and|or)\s+|\s+(?:and|or)\s*$", re.IGNORECASE)
+
+
+def _strip_language_gate(logic: str) -> str:
+    """The branching rule with any language-selection clause removed.
+
+    A question shown only in Spanish carries ``[english_spanish] = '2'`` and
+    nothing else, so cutting the clause can leave an empty rule or a stranded
+    "and".  Both are tidied up, which is what lets the same question in two
+    studies be recognised as the same question.
+    """
+    stripped = _LANGUAGE_GATE.sub(" ", str(logic))
+    stripped = _DANGLING_CONNECTIVE.sub("", stripped)
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def compute_screening_flags(
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Rules R1-R9, the suspicion count, and the tier, for every study.
+
+    The heavy lifting is delegated to the published pipeline's own helper
+    functions, so this cannot drift away from the rules the study team
+    already agreed to.  What is new is only the reach: all four studies
+    instead of two, and the bilingual study's two languages folded into one.
+    """
+    from caregiver_analysis_pipeline import (  # noqa: PLC0415 - kept lazy, pulls sklearn
+        _any_answered,
+        _branch_condition_mask,
+        _flag_bursts,
+        _max_open_text_similarity,
+        _nonempty,
+        _normalize_branching_logic,
+        _numeric,
+        _open_text_fields,
+        _resolve_export_columns,
+        identify_likert_fields,
+    )
+
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+
+    config = load_config(project_dir)
+    rules_cfg = config["fraud_rules"]
+    registry = build_study_registry(project_dir)
+
+    combined = load_combined_records(cache_dir, project_dir).reset_index(drop=True)
+    metadata_by_study = load_combined_metadata(cache_dir, project_dir)
+
+    # Only fields every study shares can carry a comparable fingerprint, so
+    # the Likert set is the intersection across all of them.
+    shared_fields = set.intersection(
+        *[set(meta["field_name"]) for meta in metadata_by_study.values()]
+    )
+    combined_meta = (
+        pd.concat(metadata_by_study.values(), ignore_index=True)
+        .drop_duplicates("field_name", keep="first")
+    )
+    likert_by_scale = identify_likert_fields(
+        combined_meta.loc[combined_meta["field_name"].isin(shared_fields)],
+        set(combined.columns),
+    )
+    study_fields = {key: set(meta["field_name"]) for key, meta in metadata_by_study.items()}
+    likert_fields = [
+        field for size in sorted(likert_by_scale) for field in likert_by_scale[size]
+    ]
+    if len(likert_fields) < 20:
+        raise RuntimeError(
+            f"Only {len(likert_fields)} Likert fields are shared by every study; "
+            "the duplicate-answer-sheet check would not be trustworthy."
+        )
+
+    # ── Features ────────────────────────────────────────────────────────────
+    features = pd.DataFrame(index=combined.index)
+    for short_name, field in zip(("fif", "val", "tfa", "demo"), TIME_FIELDS):
+        features[f"feat_time_{short_name}"] = _numeric(combined, field)
+    features["feat_total_time_min"] = features[
+        [f"feat_time_{name}" for name in ("fif", "val", "tfa", "demo")]
+    ].sum(axis=1, min_count=len(TIME_FIELDS))
+
+    likert_numeric = combined[likert_fields].apply(pd.to_numeric, errors="coerce")
+    for size, fields in likert_by_scale.items():
+        features[f"feat_sd_likert_{size}"] = likert_numeric[fields].std(axis=1, ddof=1)
+
+    open_text_fields = _open_text_fields(combined_meta, set(combined.columns))
+    if open_text_fields:
+        open_text = combined[open_text_fields].fillna("").astype(str)
+        joined = open_text.apply(
+            lambda row: " ".join(value.strip() for value in row if value.strip()), axis=1
+        )
+        features["feat_open_text_max_sim"] = _max_open_text_similarity(joined)
+    else:
+        features["feat_open_text_max_sim"] = 0.0
+
+    stamp_columns = [column for column in combined if column.endswith("_timestamp")]
+    features["submission_timestamp"] = (
+        combined[stamp_columns].apply(pd.to_datetime, errors="coerce").max(axis=1)
+        if stamp_columns
+        else pd.Series(pd.NaT, index=combined.index)
+    )
+    completion = pd.DataFrame(
+        {field: _numeric(combined, field).eq(2) for field in COMPLETION_FIELDS if field in combined}
+    )
+    features["feat_completed_all"] = completion.all(axis=1)
+
+    # ── The reference group every limit is read off ─────────────────────────
+    reference_index = combined.index[
+        combined["source_project"].eq(REFERENCE_PROJECT)
+        & features["feat_completed_all"]
+        & features["feat_total_time_min"].notna()
+    ]
+    if len(reference_index) < 30:
+        raise RuntimeError(
+            f"The reference study has only {len(reference_index)} completed, fully timed "
+            "responses, which is too few to set a speed limit from."
+        )
+
+    rules = pd.DataFrame(False, index=combined.index, columns=RULE_CODES_R)
+
+    # R1, R2 - fixed floors published in config.yaml
+    rules["rule_R1"] = (
+        features["feat_total_time_min"].round(2)
+        .lt(float(rules_cfg["total_time_floor_min"])).fillna(False)
+    )
+    rules["rule_R2"] = (
+        features["feat_time_tfa"].lt(float(rules_cfg["tfa_time_floor_min"])).fillna(False)
+    )
+
+    # R3 - a section below the reference group's own floor
+    rule_r3 = pd.Series(False, index=combined.index)
+    for short_name in ("fif", "val", "tfa", "demo"):
+        field = f"feat_time_{short_name}"
+        floor = features.loc[reference_index, field].quantile(
+            float(rules_cfg["instrument_fast_quantile"])
+        )
+        rule_r3 |= features[field].lt(floor).fillna(False)
+    rules["rule_R3"] = rule_r3
+
+    # R4 - the same answer repeated down a rating block
+    rule_r4 = pd.Series(False, index=combined.index)
+    for size in (4, 5, 6, 7):
+        field = f"feat_sd_likert_{size}"
+        if field not in features:
+            continue
+        reference_values = features.loc[reference_index, field].dropna()
+        if reference_values.empty:
+            continue
+        threshold = float(reference_values.quantile(float(rules_cfg["straightline_quantile"])))
+        rule_r4 |= features[field].le(threshold).fillna(False)
+    rules["rule_R4"] = rule_r4
+
+    # R5 - an answer sheet identical to another response
+    answered_fraction = likert_numeric.notna().mean(axis=1)
+    fingerprints = (
+        likert_numeric.fillna("<NA>").astype(str).agg("|".join, axis=1)
+        .map(lambda value: hashlib.sha256(value.encode("utf-8")).hexdigest())
+    )
+    rules["rule_R5"] = fingerprints.duplicated(keep=False) & answered_fraction.ge(
+        float(rules_cfg["duplicate_min_answer_fraction"])
+    )
+
+    # R6 - arrived in a burst, judged inside each study's own arrival stream
+    reference_times = (
+        features.loc[reference_index, "submission_timestamp"].dropna().sort_values()
+    )
+    gaps = reference_times.diff().dt.total_seconds().dropna()
+    positive_gaps = gaps.loc[gaps.gt(0)]
+    burst_window = float(positive_gaps.quantile(float(rules_cfg["burst_window_quantile"])))
+    burst_window = min(
+        max(burst_window, float(rules_cfg["burst_window_floor_seconds"])),
+        float(rules_cfg["burst_window_ceiling_seconds"]),
+    )
+    for key in registry:
+        block = combined.index[combined["source_project"].eq(key)]
+        rules.loc[block, "rule_R6"] = _flag_bursts(
+            features.loc[block, "submission_timestamp"],
+            burst_window,
+            int(rules_cfg["burst_min_submissions"]),
+        )
+
+    # R7 - a written comment nearly identical to another
+    rules["rule_R7"] = features["feat_open_text_max_sim"].gt(
+        float(rules_cfg["open_text_similarity_threshold"])
+    )
+
+    # ── R8 - answers that contradict the survey's own branching ─────────────
+    rule_r8 = pd.Series(False, index=combined.index)
+    branching_notes: list[dict[str, object]] = []
+
+    followup_fields = [
+        str(row.field_name)
+        for row in combined_meta.itertuples(index=False)
+        if "[fif_num_autistic]" in str(getattr(row, "branching_logic", ""))
+        and str(row.field_name) in combined.columns
+    ]
+    if followup_fields:
+        rule_r8 |= (
+            _alias_numeric_by_study(combined, "autistic_children", study_fields).eq(0)
+            & _nonempty(combined, followup_fields).any(axis=1)
+        )
+
+    branching_cfg = rules_cfg.get("branching_audit", {})
+
+    def logic_matches(study_key: str, field_name: str, expected: str) -> bool:
+        """Does this study's own field list carry the branching logic we expect?
+
+        The bilingual study writes the same gate with a language clause bolted
+        on, as in ``... and [english_spanish] = '2'``.  That clause decides
+        which language a question is shown in, not whether the answer is
+        allowed, so it is stripped before the comparison.  Without that, every
+        branching check would quietly skip the bilingual study.
+        """
+        meta = metadata_by_study[study_key]
+        row = meta.loc[meta["field_name"].eq(field_name)]
+        if row.empty:
+            return False
+        observed = _strip_language_gate(str(row.iloc[0].get("branching_logic", "")))
+        return _normalize_branching_logic(observed) == _normalize_branching_logic(
+            _strip_language_gate(expected)
+        )
+
+    for pair_cfg in branching_cfg.get("mutually_exclusive_pairs", []):
+        for study_key in registry:
+            block = combined.index[combined["source_project"].eq(study_key)]
+            if not len(block):
+                continue
+            study_frame = combined.loc[block]
+            resolved: list[str] = []
+            applies = True
+            for field_cfg in pair_cfg.get("fields", []):
+                field_name = str(field_cfg["field"])
+                if not logic_matches(
+                    study_key, field_name, str(field_cfg["expected_branching_logic"])
+                ):
+                    applies = False
+                    break
+                lookup = {
+                    str(row["field_name"]): row
+                    for _, row in metadata_by_study[study_key].iterrows()
+                }
+                columns, _ = _resolve_export_columns(study_frame, lookup, field_name)
+                resolved.extend(columns)
+            if not applies or not resolved:
+                branching_notes.append(
+                    {
+                        "Study": PROJECT_LABELS[study_key],
+                        "Check": str(pair_cfg["label"]),
+                        "Applied": "No",
+                        "Why": "This study's branching logic does not match the audited rule",
+                    }
+                )
+                continue
+            hits = _nonempty(study_frame, resolved).sum(axis=1).ge(2)
+            rule_r8.loc[block] |= hits
+            branching_notes.append(
+                {
+                    "Study": PROJECT_LABELS[study_key],
+                    "Check": str(pair_cfg["label"]),
+                    "Applied": "Yes",
+                    "Why": f"{int(hits.sum())} response(s) answered both sides of a pair that cannot both apply",
+                }
+            )
+
+    for followup_cfg in branching_cfg.get("orphaned_followups", []):
+        dependent_field = str(followup_cfg["dependent_field"])
+        for study_key in registry:
+            block = combined.index[combined["source_project"].eq(study_key)]
+            if not len(block):
+                continue
+            study_frame = combined.loc[block]
+            if not logic_matches(
+                study_key, dependent_field, str(followup_cfg["expected_branching_logic"])
+            ):
+                branching_notes.append(
+                    {
+                        "Study": PROJECT_LABELS[study_key],
+                        "Check": str(followup_cfg["label"]),
+                        "Applied": "No",
+                        "Why": "This study's branching logic does not match the audited rule",
+                    }
+                )
+                continue
+            lookup = {
+                str(row["field_name"]): row
+                for _, row in metadata_by_study[study_key].iterrows()
+            }
+            columns, is_checkbox = _resolve_export_columns(study_frame, lookup, dependent_field)
+            if not columns:
+                continue
+            answered = _any_answered(study_frame, columns, checkbox=is_checkbox)
+            allowed = pd.Series(False, index=study_frame.index)
+            for condition in followup_cfg.get("allowed_when_any", []):
+                allowed |= _branch_condition_mask(study_frame, condition).fillna(False)
+            hits = answered & ~allowed
+            rule_r8.loc[block] |= hits
+            branching_notes.append(
+                {
+                    "Study": PROJECT_LABELS[study_key],
+                    "Check": str(followup_cfg["label"]),
+                    "Applied": "Yes",
+                    "Why": f"{int(hits.sum())} response(s) answered a follow-up that should have been hidden",
+                }
+            )
+
+    age_band_columns = sorted(c for c in combined if c.startswith("fif_childrens_ages___"))
+    if age_band_columns:
+        bands_selected = (
+            combined[age_band_columns].apply(pd.to_numeric, errors="coerce").eq(1).sum(axis=1)
+        )
+        children = _alias_numeric_by_study(combined, "children_count", study_fields)
+        # Several children can share one age band, so only more bands than
+        # children is impossible.
+        rule_r8 |= children.notna() & bands_selected.gt(children)
+    rules["rule_R8"] = rule_r8
+
+    # ── R9 - demographics that cannot all be true at once ───────────────────
+    rule_r9 = pd.Series(False, index=combined.index)
+    caregiver_age = _alias_numeric_by_study(combined, "caregiver_age", study_fields)
+    age_floor = float(rules_cfg["plausible_caregiver_age_min"])
+    age_ceiling = float(rules_cfg["plausible_caregiver_age_max"])
+    rule_r9 |= (
+        caregiver_age.notna() & caregiver_age.ne(0)
+        & ~caregiver_age.between(age_floor, age_ceiling)
+    )
+
+    for key, fields in study_fields.items():
+        block = combined.index[combined["source_project"].eq(key)]
+        postcode_field = resolve_alias(combined, "postcode", fields)
+        country_field = resolve_alias(combined, "country", fields)
+        if not len(block) or not postcode_field or not country_field:
+            continue
+        postcode = combined.loc[block, postcode_field].fillna("").astype(str).str.strip()
+        in_the_us = pd.to_numeric(combined.loc[block, country_field], errors="coerce").eq(1)
+        rule_r9.loc[block] |= (
+            in_the_us & postcode.ne("") & ~postcode.str.fullmatch(r"\d{5}(?:-\d{4})?")
+        )
+
+    birth_year = _alias_numeric_by_study(combined, "child_birth_year", study_fields)
+    if birth_year.notna().any():
+        from datetime import datetime as _datetime  # noqa: PLC0415
+
+        age_at_first_birth = caregiver_age - (_datetime.now().year - birth_year)
+        usable = caregiver_age.between(age_floor, age_ceiling) & birth_year.notna()
+        rule_r9 |= usable & ~age_at_first_birth.between(10, 60)
+    rules["rule_R9"] = rule_r9
+
+    # ── Tier, exactly as the published pipeline defines it ──────────────────
+    serious = rules[["rule_R1", "rule_R2", "rule_R5", "rule_R8", "rule_R9"]].any(axis=1)
+    suspicion = rules[["rule_R3", "rule_R4", "rule_R6", "rule_R7"]].sum(axis=1)
+    tier = pd.Series(4, index=combined.index, dtype=int)
+    tier.loc[suspicion.eq(1)] = 3
+    tier.loc[suspicion.ge(2)] = 2
+    tier.loc[serious] = 1
+
+    flags = pd.concat(
+        [
+            combined[["source_project", "project_id", "record_id"]].reset_index(drop=True),
+            rules.reset_index(drop=True),
+        ],
+        axis=1,
+    )
+    flags["rule_R10"] = False
+    flags["suspicion_rule_count"] = suspicion.to_numpy()
+    flags["tier"] = tier.to_numpy()
+    flags["tier_label"] = flags["tier"].map(
+        {1: "Confirmed invalid", 2: "High suspicion", 3: "Uncertain", 4: "Pass"}
+    )
+    flags["uid"] = flags["project_id"].astype(str) + "_" + flags["record_id"].astype(str)
+    flags.attrs["burst_window_seconds"] = burst_window
+    flags.attrs["reference_n"] = int(len(reference_index))
+    flags.attrs["likert_fields"] = len(likert_fields)
+    flags.attrs["branching_notes"] = branching_notes
+    return flags
+
+
+# Rules whose reach was deliberately widened when the screening was extended
+# to every study.  The published pipeline restricted the branching audits to
+# the online recruitment study, because that was the only study being screened
+# at the time.  The meeting asked for the rules to run everywhere, so a study
+# that was never audited before can pick up a flag it would always have had.
+# A response the pipeline flagged and this engine does not is never acceptable
+# and is still reported as a failure.
+SCOPE_WIDENED_RULES: dict[str, str] = {
+    "R8": (
+        "The branching audits now run on every study, not just the online "
+        "recruitment study, so a response in another study can newly fire."
+    ),
+}
+
+
+def verify_flags_against_pipeline(
+    flags: pd.DataFrame,
+    output_dir: Path,
+) -> pd.DataFrame:
+    """Check the engine against the published pipeline, rule by rule.
+
+    The pipeline's committed record_flags.parquet covers the two original
+    studies.  Those responses must come out of this engine exactly as the
+    pipeline left them, otherwise extending the reach has changed the
+    answers, and that would have to be explained before anything is paid.
+    """
+    published = load_record_flags(output_dir).copy()
+    published["record_id"] = published["record_id"].astype(str)
+    merged = published.merge(
+        flags, on=["source_project", "record_id"], suffixes=("_published", "_recomputed")
+    )
+    rows = []
+    for rule in RULE_CODES_R:
+        code = rule.replace("rule_", "")
+        left = merged[f"{rule}_published"].astype(bool)
+        right = merged[f"{rule}_recomputed"].astype(bool)
+        disagreements = int((left != right).sum())
+        if disagreements == 0:
+            verdict, note = "Yes", "Identical to the published pipeline"
+        elif code in SCOPE_WIDENED_RULES and not int((left & ~right).sum()):
+            verdict, note = "Yes, scope widened", SCOPE_WIDENED_RULES[code]
+        else:
+            verdict, note = "No", "Unexplained difference - do not use until resolved"
+        rows.append(
+            {
+                "Rule": code,
+                "Responses compared": len(merged),
+                "Published pipeline fired": int(left.sum()),
+                "This engine fired": int(right.sum()),
+                "Responses that disagree": disagreements,
+                "Match": verdict,
+                "Note": note,
+            }
+        )
+    table = pd.DataFrame(rows)
+    table.attrs["all_match"] = bool(table["Match"].eq("Yes").all())
+    table.attrs["all_explained"] = bool(table["Match"].ne("No").all())
+    return table
 
 
 def _decide(serious: pd.Series, supporting: pd.Series) -> pd.Series:
@@ -4019,7 +4741,7 @@ def check_redcap_audit_access(project_dir: Path) -> pd.DataFrame:
 
 # ── Timing, read straight from the survey system's own fields ───────────────
 
-def build_timing_detail(cache_dir: Path) -> pd.DataFrame:
+def build_timing_detail(cache_dir: Path, project_dir: Optional[Path] = None) -> pd.DataFrame:
     """Per-response timing, taken from the survey system's timing fields.
 
     The survey records how long each of the four sections took and stamps the
@@ -4027,7 +4749,7 @@ def build_timing_detail(cache_dir: Path) -> pd.DataFrame:
     audit trail we can reach with a read-only key, so they carry the work the
     system-wide audit log would otherwise do.
     """
-    records = load_combined_records(cache_dir).copy()
+    records = load_combined_records(cache_dir, project_dir).copy()
     records["record_id"] = records["record_id"].astype(str)
 
     frame = records[["source_project", "record_id"]].copy()
@@ -4086,6 +4808,7 @@ def build_time_limit_bands(
     cache_dir: Optional[Path] = None,
     repeats: int = TIME_BAND_REPEATS,
     seed: int = TIME_BAND_SEED,
+    project_dir: Optional[Path] = None,
 ) -> pd.DataFrame:
     """Put an uncertainty band around every time limit.
 
@@ -4098,11 +4821,11 @@ def build_time_limit_bands(
     if cache_dir is None:
         cache_dir = output_dir.parent / "data_cache"
 
-    records = load_combined_records(cache_dir).copy()
+    records = load_combined_records(cache_dir, project_dir).copy()
     for field in TIME_FIELDS:
         records[field] = pd.to_numeric(records[field], errors="coerce")
     totals = records[TIME_FIELDS].sum(axis=1, min_count=len(TIME_FIELDS))
-    verified = records[records["source_project"].eq("clean_4797") & totals.notna()].copy()
+    verified = records[records["source_project"].eq(REFERENCE_PROJECT) & totals.notna()].copy()
     verified["_total"] = verified[TIME_FIELDS].sum(axis=1)
 
     generator = np.random.default_rng(seed)
@@ -4191,13 +4914,13 @@ def build_risk_table(
     if project_dir is None:
         project_dir = output_dir.parent
 
-    screen = build_screen_inputs(output_dir, cache_dir)
-    timing = build_timing_detail(cache_dir)
-    bands = build_time_limit_bands(output_dir, cache_dir)
+    screen = build_screen_inputs(output_dir, cache_dir, project_dir)
+    timing = build_timing_detail(cache_dir, project_dir)
+    bands = build_time_limit_bands(output_dir, cache_dir, project_dir=project_dir)
     survey_low, survey_high = bands.attrs["survey_band"]
     attitudes_low, attitudes_high = bands.attrs["attitudes_band"]
 
-    records = load_combined_records(cache_dir).copy()
+    records = load_combined_records(cache_dir, project_dir).copy()
     records["record_id"] = records["record_id"].astype(str)
     emails = _email_series(records)
     finished = pd.to_numeric(records.get("demographics_complete"), errors="coerce").fillna(0)
@@ -5210,6 +5933,427 @@ def build_review_triage(risk_table: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# The final review plan: four labels, one decision per response
+#
+# The earlier version of this column mixed an operational decision in with a
+# sampling instruction, so a reader could not tell what was going to happen to
+# a response.  The September meeting cut it down to four labels, and that is
+# what column L now carries.  Nothing else belongs in it.
+#
+# Column K keeps the score-based category, which is derived purely from the
+# points a response scored.  Column L is the operational decision.  The two
+# are allowed to differ, and that difference is the point: K says what the
+# score alone would do, L says what the team is actually going to do.
+# ══════════════════════════════════════════════════════════════════════════
+
+FINAL_PAY = "Pay Now"
+FINAL_REJECT = "Do Not Pay"
+FINAL_BURST = "Arrived in a Burst (R6)"
+FINAL_HAND = "Review by Hand"
+
+FINAL_PLAN_ORDER = [FINAL_PAY, FINAL_HAND, FINAL_BURST, FINAL_REJECT]
+
+# Multiple serious rules is what "Do Not Pay" means, as agreed in the meeting.
+SERIOUS_RULES_FOR_REJECTION = 2
+
+# Whether arriving in a burst outranks an individually evidenced refusal.
+#
+# The meeting asked for two things that meet head-on: every R6 response should
+# carry the burst label, and a response with several serious rules against it
+# should read "Do Not Pay".  Two hundred and seventy-seven responses are both.
+#
+# Column L holds one label, so one of the two has to win, and the refusal does:
+# those responses have individual evidence against them, not just the shape of
+# the traffic they arrived in, and letting the burst label win would empty the
+# "Do Not Pay" category down to five responses.  Every R6 response is still
+# tagged in its own "Arrived in a burst (R6)" column, so the whole burst can be
+# filtered in one click whatever label it ended up with.
+#
+# Setting this to True flips the precedence, and nothing else needs changing.
+BURST_OUTRANKS_REJECTION = False
+
+FINAL_PLAN_MEANING: dict[str, str] = {
+    FINAL_PAY: "No violations, or only mild ones this response has already answered for.",
+    FINAL_HAND: "Someone opens this response and reads it.",
+    FINAL_BURST: (
+        "Arrived inside a cluster of near-simultaneous sign-ups. This describes the "
+        "traffic, not the person, so the cluster is decided as one group."
+    ),
+    FINAL_REJECT: "Several serious rules fired against this response on its own evidence.",
+}
+
+
+def build_final_review_plan(triaged: pd.DataFrame) -> pd.DataFrame:
+    """Add the four-label final review plan and everything that explains it.
+
+    The hand-review pile is not capped at a round number.  It is what is left
+    once the burst has been set aside as a group, once the responses with
+    several serious rules have been refused, and once the responses that took
+    longer than a typical verified caregiver have been let through.  What
+    survives all three is a response with individual evidence against it that
+    its own timing does not answer.
+    """
+    frame = triaged.copy()
+
+    serious = frame["Serious checks broken"]
+    burst = frame["check_burst_arrival"].astype(bool)
+    person_points = frame["Points from the person"]
+    slower = frame["Slower than a typical verified caregiver"].astype(bool)
+    timed = frame["Sections timed"].gt(0)
+
+    rejected = serious.ge(SERIOUS_RULES_FOR_REJECTION)
+    # Two ways into the hand-review pile.
+    #
+    # The first is a serious rule.  A serious rule describes a contradiction in
+    # what somebody answered, and taking a long time over the survey does not
+    # make a contradiction go away, so a serious rule is never released on pace.
+    # One serious rule means somebody reads it; two or more means refusal.
+    #
+    # The second is milder evidence about the person that this response's own
+    # pace does not answer: it broke a rule, it was not slower than a typical
+    # verified caregiver, and enough of it was timed for that to be a real
+    # comparison rather than a guess.
+    needs_reading = serious.ge(1) | (person_points.ge(1) & ~slower & timed)
+
+    plan = pd.Series(FINAL_PAY, index=frame.index, dtype="object")
+    if BURST_OUTRANKS_REJECTION:
+        plan[needs_reading] = FINAL_HAND
+        plan[rejected] = FINAL_REJECT
+        plan[burst] = FINAL_BURST
+    else:
+        plan[needs_reading] = FINAL_HAND
+        plan[burst] = FINAL_BURST
+        plan[rejected] = FINAL_REJECT
+
+    frame["Final review plan"] = plan
+
+    why = pd.Series("", index=frame.index, dtype="object")
+    why[plan.eq(FINAL_PAY)] = "No rules fired, or only mild ones"
+    why[plan.eq(FINAL_PAY) & frame["Risk score"].ge(1) & slower] = (
+        "Only mild rules fired, and this response took longer than a typical verified caregiver"
+    )
+    why[plan.eq(FINAL_PAY) & frame["Risk score"].ge(1) & ~timed] = (
+        "Only mild rules fired, and no section has a recorded time to judge the pace against"
+    )
+    why[plan.eq(FINAL_HAND)] = (
+        "Rules fired that describe what this person answered, and the response was "
+        "not slower than a typical verified caregiver"
+    )
+    why[plan.eq(FINAL_HAND) & serious.ge(1)] = (
+        "A serious rule fired, describing a contradiction in what was answered. "
+        "Pace cannot explain that away, so somebody reads it."
+    )
+    why[plan.eq(FINAL_BURST)] = (
+        "Arrived within the burst window of other sign-ups; decided as part of that cluster"
+    )
+    why[plan.eq(FINAL_REJECT)] = (
+        f"{SERIOUS_RULES_FOR_REJECTION} or more serious rules fired on this response's own evidence"
+    )
+    frame["Why this final plan"] = why
+
+    # Every R6 response carries the burst tag whatever label it ended up with,
+    # so the whole cluster stays filterable in one click.
+    frame["Arrived in a burst (R6)"] = np.where(burst, "Yes", "No")
+
+    # The score-based category, kept apart from the operational decision so the
+    # two can be compared rather than confused.
+    frame["Score-based category"] = frame["Recommended action"]
+
+    # What the cluster analysis downstream is allowed to use.  Bots and
+    # anything still flagged are out; only responses cleared outright are in.
+    frame["Include in Analysis"] = np.where(plan.eq(FINAL_PAY), 1, 0)
+    return frame
+
+
+def build_final_plan_counts(planned: pd.DataFrame) -> pd.DataFrame:
+    """How the four labels fall across the studies.
+
+    The recruited-sample column is the one that matters for workload and for
+    money.  The reference study is a known-real yardstick that is already
+    verified, so its rows are carried for validation and are not a payment
+    queue.
+    """
+    counts = pd.crosstab(planned["Final review plan"], planned["Study"])
+    counts = counts.reindex([p for p in FINAL_PLAN_ORDER if p in counts.index]).fillna(0)
+    table = counts.astype(int).reset_index()
+    table.insert(1, "What it means", table["Final review plan"].map(FINAL_PLAN_MEANING))
+    study_columns = [c for c in table.columns if c not in {"Final review plan", "What it means"}]
+    table["All studies"] = table[study_columns].sum(axis=1)
+
+    reference_label = PROJECT_LABELS.get(REFERENCE_PROJECT)
+    recruited = [c for c in study_columns if c != reference_label]
+    table["Recruited samples only"] = table[recruited].sum(axis=1) if recruited else 0
+
+    table["Goes into the cluster analysis"] = np.where(
+        table["Final review plan"].eq(FINAL_PAY), "Yes", "No"
+    )
+    return table
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Study metadata: what each project is, and how the projects differ
+#
+# The meeting asked for two reference sheets to sit alongside the record list:
+# one saying what each project number actually is, and one saying where the
+# four surveys stop agreeing with each other.  Both are generated, never typed,
+# so they cannot fall out of date with the data.
+# ══════════════════════════════════════════════════════════════════════════
+
+def _study_timestamps(records: pd.DataFrame) -> pd.Series:
+    """The best available moment for each response, across every stamp field."""
+    stamp_columns = [column for column in records if column.endswith("_timestamp")]
+    if not stamp_columns:
+        return pd.Series(pd.NaT, index=records.index)
+    return records[stamp_columns].apply(pd.to_datetime, errors="coerce").max(axis=1)
+
+
+def build_study_data_dictionary(
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """One row per study: what it is, how big it is, and when it ran.
+
+    The "Notes" column is filled in automatically with anything the data shows
+    that a reader would otherwise have to discover for themselves.  "Team
+    notes" is left empty on purpose, for people to write in.
+    """
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+    registry = build_study_registry(project_dir)
+    records = load_combined_records(cache_dir, project_dir)
+    study_fields = {
+        key: set(_load_project_metadata(cache_dir, int(study["project_id"]))["field_name"])
+        for key, study in registry.items()
+    }
+
+    rows: list[dict[str, object]] = []
+    for key, study in registry.items():
+        block = records[records["source_project"].eq(key)]
+        started = pd.to_datetime(block.get("eligibility_timestamp"), errors="coerce")
+        any_stamp = _study_timestamps(block)
+        no_start = int(started.isna().sum())
+
+        notes: list[str] = []
+        if study["is_reference"]:
+            notes.append(
+                "Reference study. Every speed limit and burst window is read off the "
+                "verified caregivers here."
+            )
+        if no_start:
+            notes.append(
+                f"{no_start:,} of {len(block):,} responses carry no survey start time. "
+                "Responses imported from another project keep their answers but not "
+                "their timing, so no timing or arrival rule can reach them."
+            )
+        # Only the bilingual survey carries a language switch.  Reading it off
+        # the combined frame would find the column on every study, because
+        # stacking the studies fills the gap with blanks, so the study's own
+        # field list is what decides.
+        if "english_spanish" in study_fields.get(key, set()):
+            chosen = block["english_spanish"].astype("string").fillna("").str.strip()
+            answered = int(chosen.ne("").sum())
+            notes.append(
+                f"Bilingual survey, English and Spanish. {answered:,} of {len(block):,} "
+                "responses recorded a language choice; the two copies of each question "
+                "are folded into one variable and counted once."
+            )
+
+        rows.append(
+            {
+                "REDCap PID": int(study["project_id"]),
+                "Project name": study["description"] or study["label"],
+                "Study": study["label"],
+                "Role in the screening": (
+                    "Reference - known-real caregivers"
+                    if study["is_reference"]
+                    else "Screened recruitment sample"
+                ),
+                "Responses": len(block),
+                "First survey date": (
+                    any_stamp.min().date().isoformat() if any_stamp.notna().any() else "none recorded"
+                ),
+                "Last survey date": (
+                    any_stamp.max().date().isoformat() if any_stamp.notna().any() else "none recorded"
+                ),
+                "Responses with no recorded start time": no_start,
+                "Token in .env": study["token_env"],
+                "Notes": " ".join(notes) if notes else "Nothing unusual.",
+                "Team notes": "",
+            }
+        )
+    return pd.DataFrame(rows).sort_values("REDCap PID").reset_index(drop=True)
+
+
+def build_study_differences(
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Where the four surveys stop agreeing with each other.
+
+    Three kinds of difference are reported, because all three can change what a
+    rule sees: a question one study asks and another does not, a question that
+    changed its answer type or its allowed range, and a question whose
+    branching logic differs.
+    """
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+    registry = build_study_registry(project_dir)
+    metadata_by_study = load_combined_metadata(cache_dir, project_dir)
+    records = load_combined_records(cache_dir, project_dir)
+
+    study_keys = list(registry)
+    labels = {key: PROJECT_LABELS[key] for key in study_keys}
+    field_sets = {key: set(meta["field_name"]) for key, meta in metadata_by_study.items()}
+    every_field = set().union(*field_sets.values())
+    shared = set.intersection(*field_sets.values())
+
+    rows: list[dict[str, object]] = []
+
+    # 1. Questions that are not in every study
+    for field in sorted(every_field - shared):
+        present = [labels[key] for key in study_keys if field in field_sets[key]]
+        missing = [labels[key] for key in study_keys if field not in field_sets[key]]
+        rows.append(
+            {
+                "Kind of difference": "Question is missing from some studies",
+                "Variable": field,
+                "Studies that have it": "; ".join(present),
+                "Studies that do not": "; ".join(missing),
+                "Detail": "No rule that needs this question can reach the studies that lack it.",
+            }
+        )
+
+    # 2. Questions that changed type or allowed range
+    for field in sorted(shared):
+        seen: dict[tuple[str, str, str], list[str]] = {}
+        for key in study_keys:
+            meta = metadata_by_study[key]
+            row = meta.loc[meta["field_name"].eq(field)].iloc[0]
+            signature = (
+                str(row.get("field_type", "")),
+                str(row.get("text_validation_min", "")),
+                str(row.get("text_validation_max", "")),
+            )
+            seen.setdefault(signature, []).append(labels[key])
+        if len(seen) > 1:
+            detail = " | ".join(
+                f"{'/'.join(studies)}: type={sig[0] or 'none'}, "
+                f"range={sig[1] or 'none'}-{sig[2] or 'none'}"
+                for sig, studies in seen.items()
+            )
+            rows.append(
+                {
+                    "Kind of difference": "Answer type or allowed range differs",
+                    "Variable": field,
+                    "Studies that have it": "; ".join(labels[key] for key in study_keys),
+                    "Studies that do not": "",
+                    "Detail": detail,
+                }
+            )
+
+    # 3. Questions whose branching logic differs, once the bilingual study's
+    #    language switch is set aside
+    for field in sorted(shared):
+        seen_logic: dict[str, list[str]] = {}
+        for key in study_keys:
+            meta = metadata_by_study[key]
+            row = meta.loc[meta["field_name"].eq(field)].iloc[0]
+            logic = _strip_language_gate(str(row.get("branching_logic", "")))
+            seen_logic.setdefault(logic, []).append(labels[key])
+        if len(seen_logic) > 1:
+            detail = " | ".join(
+                f"{'/'.join(studies)}: {logic or 'always shown'}"
+                for logic, studies in seen_logic.items()
+            )
+            rows.append(
+                {
+                    "Kind of difference": "Branching logic differs",
+                    "Variable": field,
+                    "Studies that have it": "; ".join(labels[key] for key in study_keys),
+                    "Studies that do not": "",
+                    "Detail": detail[:500],
+                }
+            )
+
+    # 4. The concepts a rule needs, and the variable each study keeps them under
+    for concept, candidates in FIELD_ALIASES.items():
+        resolved: dict[str, list[str]] = {}
+        for key in study_keys:
+            name = resolve_alias(records, concept, field_sets[key]) or "not present"
+            resolved.setdefault(name, []).append(labels[key])
+        if len(resolved) > 1:
+            rows.append(
+                {
+                    "Kind of difference": "Same thing, different variable name",
+                    "Variable": " / ".join(candidates),
+                    "Studies that have it": "; ".join(
+                        f"{'/'.join(studies)} uses {name}" for name, studies in resolved.items()
+                    ),
+                    "Studies that do not": "",
+                    "Detail": (
+                        f"The screening looks for '{concept}' under each of these names in turn, "
+                        "so every study is measured on the same thing."
+                    ),
+                }
+            )
+
+    table = pd.DataFrame(
+        rows,
+        columns=[
+            "Kind of difference",
+            "Variable",
+            "Studies that have it",
+            "Studies that do not",
+            "Detail",
+        ],
+    )
+    return table.sort_values(["Kind of difference", "Variable"]).reset_index(drop=True)
+
+
+def build_bilingual_field_map(
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+) -> pd.DataFrame:
+    """Every Spanish variable folded onto its English twin, and what it carried.
+
+    This is the sheet to check when someone asks whether the bilingual study
+    was double-counted.  Each row is one question that exists twice in REDCap
+    and once in the screening.
+    """
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+    registry = build_study_registry(project_dir)
+
+    frames = []
+    for key, study in registry.items():
+        matches = sorted(cache_dir.glob(f"{study['project_id']}_record_*.parquet"))
+        if not matches:
+            continue
+        raw = pd.read_parquet(matches[-1])
+        _, report = fold_language_twins(raw)
+        if report.empty:
+            continue
+        report.insert(0, "Study", study["label"])
+        report.insert(1, "REDCap PID", int(study["project_id"]))
+        frames.append(report)
+
+    if not frames:
+        return pd.DataFrame(
+            columns=[
+                "Study",
+                "REDCap PID",
+                "Spanish variable",
+                "Folded onto",
+                "How it was handled",
+                "Answers taken from the Spanish version",
+            ]
+        )
+    return pd.concat(frames, ignore_index=True).sort_values(
+        ["Study", "Folded onto"]
+    ).reset_index(drop=True)
+
+
 def build_triage_summary(triaged: pd.DataFrame) -> pd.DataFrame:
     """How the check-by-hand pile splits, and what each group costs to work."""
     held = triaged[
@@ -6069,7 +7213,13 @@ def plot_stakeholder_rule_frequency(
     return fig
 
 
-def _stakeholder_conditional_format(worksheet, col_letter: str, max_row: int, rule_type: str) -> None:
+def _stakeholder_conditional_format(
+    worksheet,
+    col_letter: str,
+    max_row: int,
+    rule_type: str,
+    first_data_row: int = 2,
+) -> None:
     """Apply conditional formatting to a column in the stakeholder workbook."""
     from openpyxl.formatting.rule import CellIsRule
     from openpyxl.styles import PatternFill
@@ -6078,7 +7228,7 @@ def _stakeholder_conditional_format(worksheet, col_letter: str, max_row: int, ru
     red_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
     amber_fill = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 
-    cell_range = f"{col_letter}2:{col_letter}{max_row}"
+    cell_range = f"{col_letter}{first_data_row}:{col_letter}{max_row}"
 
     if rule_type == "yes_no":
         worksheet.conditional_formatting.add(
@@ -6096,6 +7246,30 @@ def _stakeholder_conditional_format(worksheet, col_letter: str, max_row: int, ru
         )
         worksheet.conditional_formatting.add(
             cell_range, CellIsRule(operator="equal", formula=[f'"{ACTION_REJECT}"'], fill=red_fill)
+        )
+
+
+def _final_plan_conditional_format(worksheet, col_letter: str, max_row: int,
+                                   first_data_row: int = 2) -> None:
+    """Colour column L so the four labels are told apart at a glance."""
+    from openpyxl.formatting.rule import CellIsRule
+    from openpyxl.styles import PatternFill
+
+    fills = {
+        FINAL_PAY: "C6EFCE",      # green - money goes out
+        FINAL_HAND: "FFEB9C",     # amber - somebody reads it
+        FINAL_BURST: "DDEBF7",    # blue  - decided as a cluster
+        FINAL_REJECT: "FFC7CE",   # red   - refused
+    }
+    cell_range = f"{col_letter}{first_data_row}:{col_letter}{max_row}"
+    for label, colour in fills.items():
+        worksheet.conditional_formatting.add(
+            cell_range,
+            CellIsRule(
+                operator="equal",
+                formula=[f'"{label}"'],
+                fill=PatternFill(start_color=colour, end_color=colour, fill_type="solid"),
+            ),
         )
 
 
@@ -6227,3 +7401,385 @@ def export_stakeholder_screening_workbook(
             )
 
     return excel_path
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# The rules-and-records workbook
+#
+# This is the file the study team works from: one row per response, the rules
+# it broke, what the score alone would do with it, what is actually going to
+# happen to it, and whether the cluster analysis may use it.
+#
+# Column letters are fixed on purpose.  Column K is the score-based category
+# and column L is the final review plan, because that is how the meeting
+# refers to them.  Anything added later goes to the right of column M so those
+# two letters keep their meaning.
+# ══════════════════════════════════════════════════════════════════════════
+
+RECORDS_SHEET_COLUMNS = [
+    "Study",                                    # A
+    "REDCap PID",                               # B
+    "Record ID",                                # C
+    "Response key",                             # D
+    "Rules violated",                           # E
+    "Rules violated, in plain language",        # F
+    "Total Rules Violated",                     # G
+    "Serious Rules Violated",                   # H
+    "Mild Rules Violated",                      # I
+    OPERATIONAL_SCORE_COLUMN,                   # J
+    "Score-based category",                     # K
+    "Final review plan",                        # L
+    "Include in Analysis",                      # M
+    "Email address",                            # N
+    "Arrived in a burst (R6)",                  # O
+    "Why this final plan",                      # P
+    STAKEHOLDER_SCORE_COLUMN,                   # Q
+]
+
+GRID_HEAD_COLUMNS = ["Study", "REDCap PID", "Record ID", "Response key"]
+
+GRID_TAIL_COLUMNS = [
+    "Total Rules Violated",
+    "Serious Rules Violated",
+    "Mild Rules Violated",
+    OPERATIONAL_SCORE_COLUMN,
+    "Score-based category",
+    "Final review plan",
+    "Include in Analysis",
+    "Email address",
+    "Arrived in a burst (R6)",
+]
+
+
+def _records_base(planned: pd.DataFrame) -> pd.DataFrame:
+    """Shared groundwork for both record layouts."""
+    frame = _stakeholder_common(planned)
+    frame["REDCap PID"] = planned["project_id"].astype(int).to_numpy()
+    frame["Email address"] = planned.get(
+        "Email address", pd.Series("", index=planned.index)
+    ).fillna("").to_numpy()
+    for column in (
+        "Final review plan",
+        "Score-based category",
+        "Include in Analysis",
+        "Arrived in a burst (R6)",
+        "Why this final plan",
+    ):
+        frame[column] = planned[column].to_numpy()
+    return frame
+
+
+def _sort_records(frame: pd.DataFrame) -> pd.DataFrame:
+    """Worst first inside each study, so the top of the sheet is the work."""
+    order = pd.Categorical(
+        frame["Final review plan"], categories=FINAL_PLAN_ORDER[::-1], ordered=True
+    )
+    return (
+        frame.assign(_plan=order)
+        .sort_values(
+            ["Study", "_plan", OPERATIONAL_SCORE_COLUMN, "Record ID"],
+            ascending=[True, True, False, True],
+        )
+        .drop(columns="_plan")
+        .reset_index(drop=True)
+    )
+
+
+def build_records_sheet(planned: pd.DataFrame) -> pd.DataFrame:
+    """One row per response, with the rules written out in words."""
+    frame = _records_base(planned)
+    matrix = frame[[CODE_TO_KEY[code] for code in CODE_ORDER]].to_numpy()
+    codes = np.array(CODE_ORDER)
+    names = np.array([CHECK_NAMES[CODE_TO_KEY[code]] for code in CODE_ORDER])
+
+    frame["Rules violated"] = [
+        ", ".join(codes[row]) if row.any() else "None" for row in matrix
+    ]
+    frame["Rules violated, in plain language"] = [
+        "; ".join(names[row]) if row.any() else "No rules triggered" for row in matrix
+    ]
+    return _sort_records(frame)[RECORDS_SHEET_COLUMNS]
+
+
+def build_records_grid(planned: pd.DataFrame) -> pd.DataFrame:
+    """The same responses with a Yes/No column for every rule."""
+    frame = _records_base(planned)
+    for code in CODE_ORDER:
+        frame[code] = np.where(frame[CODE_TO_KEY[code]], "Yes", "No")
+    columns = GRID_HEAD_COLUMNS + CODE_ORDER + GRID_TAIL_COLUMNS
+    return _sort_records(frame)[columns]
+
+
+def build_hand_review_sheet(planned: pd.DataFrame) -> pd.DataFrame:
+    """The responses a person opens and reads, with room to record the verdict."""
+    frame = build_records_sheet(planned)
+    sheet = frame[frame["Final review plan"].eq(FINAL_HAND)].copy()
+    sheet = sheet[
+        [
+            "Study",
+            "REDCap PID",
+            "Record ID",
+            "Response key",
+            "Email address",
+            "Rules violated",
+            "Rules violated, in plain language",
+            OPERATIONAL_SCORE_COLUMN,
+            "Why this final plan",
+        ]
+    ].reset_index(drop=True)
+    sheet.insert(0, "Read in this order", range(1, len(sheet) + 1))
+    sheet["Real caregiver? (yes/no)"] = ""
+    sheet["Pay after review? (yes/no)"] = ""
+    sheet["Who read it"] = ""
+    sheet["Reviewer notes"] = ""
+    return sheet
+
+
+def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
+    """Everything cleared for a gift card, ready to hand to operations."""
+    frame = build_records_sheet(planned)
+    sheet = frame[frame["Final review plan"].eq(FINAL_PAY)].copy()
+    sheet = sheet[
+        [
+            "Study",
+            "REDCap PID",
+            "Record ID",
+            "Response key",
+            "Email address",
+            "Rules violated",
+            OPERATIONAL_SCORE_COLUMN,
+            "Why this final plan",
+            "Include in Analysis",
+        ]
+    ].reset_index(drop=True)
+    sheet["Gift card sent? (yes/no)"] = ""
+    sheet["Date sent"] = ""
+    return sheet
+
+
+def build_column_guide() -> pd.DataFrame:
+    """What every column on the records sheet means, letter by letter."""
+    meanings = {
+        "Study": "Which of the four surveys this response came from.",
+        "REDCap PID": "The REDCap project number, so a row can be matched back to its project.",
+        "Record ID": "The record number inside that project. Numbers restart in every project.",
+        "Response key": "Project number and record number together. Unique across all studies.",
+        "Rules violated": "The short codes of every rule this response triggered.",
+        "Rules violated, in plain language": "The same rules written out in words.",
+        "Total Rules Violated": "How many rules fired in total.",
+        "Serious Rules Violated": "How many of those were serious.",
+        "Mild Rules Violated": "How many of those were mild.",
+        OPERATIONAL_SCORE_COLUMN: "Serious rules count 2 points, mild rules count 1.",
+        "Score-based category": (
+            "What the score alone would do: 0 points pays, 1-2 holds, 3 or more refuses. "
+            "This is the score speaking, not a decision."
+        ),
+        "Final review plan": (
+            "The operational decision, one of exactly four labels. This is what actually "
+            "happens to the response."
+        ),
+        "Include in Analysis": (
+            "1 if the cluster analysis may use this response, 0 if not. Only responses "
+            "cleared for payment outright are a 1."
+        ),
+        "Email address": "Where the gift card goes. Blank if the response never gave one.",
+        "Arrived in a burst (R6)": (
+            "Yes for every response that triggered R6, whatever label it ended up with, "
+            "so the whole burst can be filtered in one click."
+        ),
+        "Why this final plan": "The reason this response ended up with the label it has.",
+        STAKEHOLDER_SCORE_COLUMN: (
+            "The alternative scale discussed in the meeting, where a serious rule counts 5. "
+            "Carried for comparison only; no decision is made from it."
+        ),
+    }
+    rows = []
+    for index, column in enumerate(RECORDS_SHEET_COLUMNS):
+        rows.append(
+            {
+                "Column": get_column_letter(index + 1),
+                "Heading": column,
+                "What it means": meanings[column],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_final_plan_key() -> pd.DataFrame:
+    """The four labels column L is allowed to contain, and nothing else."""
+    rules = {
+        FINAL_REJECT: (
+            f"{SERIOUS_RULES_FOR_REJECTION} or more serious rules fired on this "
+            "response's own evidence."
+        ),
+        FINAL_PAY: "No rules fired, or only mild ones the response has already answered for.",
+        FINAL_BURST: (
+            "R6 fired, alone or alongside other rules, and the response was not already "
+            "refused on several serious rules of its own."
+        ),
+        FINAL_HAND: (
+            "Either one serious rule fired, which pace can never explain away, or milder "
+            "rules fired about what this person answered and the response was not slower "
+            "than a typical verified caregiver with enough of it timed to tell."
+        ),
+    }
+    return pd.DataFrame(
+        [
+            {
+                "Label": label,
+                "When a response gets it": rules[label],
+                "What it means": FINAL_PLAN_MEANING[label],
+                "Goes into the cluster analysis": "Yes" if label == FINAL_PAY else "No",
+            }
+            for label in FINAL_PLAN_ORDER
+        ]
+    )
+
+
+def export_rules_records_workbook(
+    planned: pd.DataFrame,
+    project_dir: Path,
+    cache_dir: Optional[Path] = None,
+    output_path: Optional[Path] = None,
+    verification: Optional[pd.DataFrame] = None,
+) -> Path:
+    """Write the workbook the study team works from.
+
+    Every sheet is generated from the data in front of it, so re-running this
+    after a fresh pull is all it takes to bring the file up to date.
+    """
+    if cache_dir is None:
+        cache_dir = project_dir / "data_cache"
+    if output_path is None:
+        output_path = project_dir / "ESD_Response_Screening_Rules_Records.xlsx"
+
+    records = build_records_sheet(planned)
+    grid = build_records_grid(planned)
+    rule_key = build_stakeholder_rule_key(planned)
+    plan_counts = build_final_plan_counts(planned)
+    plan_key = build_final_plan_key()
+    column_guide = build_column_guide()
+    data_dictionary = build_study_data_dictionary(project_dir, cache_dir)
+    differences = build_study_differences(project_dir, cache_dir)
+    bilingual = build_bilingual_field_map(project_dir, cache_dir)
+    hand_review = build_hand_review_sheet(planned)
+    payments = build_payment_list_sheet(planned)
+
+    sheets: list[tuple[str, pd.DataFrame, str]] = [
+        (
+            "Data Dictionary",
+            data_dictionary,
+            "One row per REDCap project: what it is, how many responses it holds, when it "
+            "ran, and anything about it a reader needs to know. The 'Team notes' column is "
+            "left empty for people to write in.",
+        ),
+        (
+            "Final Review Plan",
+            plan_counts,
+            "How the four labels in column L fall across the studies. These four labels are "
+            "the only values column L can take. 'Recruited samples only' leaves out the "
+            "reference study, whose caregivers are already known to be real and are not a "
+            "payment queue, so that column is the real workload and the real spend.",
+        ),
+        (
+            "Record Rule Summary",
+            records,
+            "One row per response. Column K is what the score alone would do. Column L is "
+            "what is actually going to happen. Column M says whether the cluster analysis "
+            "may use the response.",
+        ),
+        (
+            "Rule Grid",
+            grid,
+            "The same responses with a Yes/No column for each of the 14 rules. Use this "
+            "sheet to filter on one rule or to count how often two rules travel together.",
+        ),
+        (
+            "Hand Review List",
+            hand_review,
+            "The responses someone opens and reads, in reading order, with empty columns "
+            "for the verdict.",
+        ),
+        (
+            "Payment List",
+            payments,
+            "Every response cleared for a gift card, with the address to send it to.",
+        ),
+        (
+            "Rule Key",
+            rule_key,
+            "What each rule code means, how seriously it is treated, and how often it fired "
+            "in each group.",
+        ),
+        (
+            "Final Plan Key",
+            plan_key,
+            "The four labels column L is allowed to contain, and the rule that assigns each "
+            "one. Sampling instructions are deliberately not among them.",
+        ),
+        (
+            "Column Guide",
+            column_guide,
+            "Every column on the Record Rule Summary sheet, by letter.",
+        ),
+        (
+            "Study Differences",
+            differences,
+            "Where the four surveys stop agreeing with each other: questions one study asks "
+            "and another does not, answer types that changed, branching logic that differs, "
+            "and the same thing kept under different variable names.",
+        ),
+        (
+            "Bilingual Field Map",
+            bilingual,
+            "Every Spanish variable folded onto its English twin. Each row is one question "
+            "that exists twice in REDCap and once in the screening, so the bilingual study "
+            "is never counted twice.",
+        ),
+    ]
+    if verification is not None:
+        sheets.append(
+            (
+                "Rule Verification",
+                verification,
+                "This engine checked against the published pipeline on the responses the "
+                "pipeline covered. Every rule must match, or be a difference that is "
+                "explained in the Note column.",
+            )
+        )
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        for name, frame, note in sheets:
+            frame.to_excel(writer, sheet_name=name, index=False, startrow=2)
+            worksheet = writer.sheets[name]
+            _style_sheet_heading(worksheet, "A1", name)
+            _style_sheet_note(worksheet, "A2", note)
+
+        book = writer.book
+        wide_sheets = {"Record Rule Summary", "Rule Grid", "Hand Review List", "Payment List"}
+        for name, frame, _ in sheets:
+            worksheet = book[name]
+            if name in wide_sheets:
+                _autosize_sheet(
+                    worksheet, wrap_text=False, freeze_panes="E4", apply_filter=True
+                )
+                max_row = worksheet.max_row
+                for column_cells in worksheet.iter_cols(min_row=3, max_row=3):
+                    for cell in column_cells:
+                        letter = get_column_letter(cell.column)
+                        if cell.value == "Final review plan":
+                            _final_plan_conditional_format(worksheet, letter, max_row, 4)
+                        elif cell.value == "Score-based category":
+                            _stakeholder_conditional_format(
+                                worksheet, letter, max_row, "action", 4
+                            )
+                        elif cell.value in CODE_ORDER:
+                            _stakeholder_conditional_format(
+                                worksheet, letter, max_row, "yes_no", 4
+                            )
+            else:
+                _autosize_sheet(
+                    worksheet, wrap_text=True, freeze_panes=None, apply_filter=False
+                )
+
+    return output_path

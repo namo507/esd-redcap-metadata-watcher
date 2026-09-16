@@ -388,6 +388,136 @@ serious rule scores 5, so a line of 3, 4, or 5 makes one serious rule an
 automatic refusal (affects 3 records), and five mild rules also reach 5, tying
 with one serious rule. `build_scale_comparison` shows both effects.
 
+## Four studies, one screening (September 2026)
+
+The screening used to cover two REDCap projects. It now covers every project
+listed under `redcap.projects` in `config.yaml`:
+
+| PID | Study | Role | Responses |
+|----:|-------|------|----------:|
+| 4797 | Verified caregiver sample | Reference: sets every limit | 177 |
+| 4581 | Online recruitment sample | Screened | 1,779 |
+| 5749 | Bilingual sample (English/Spanish) | Screened | 520 |
+| 4931 | ICIS sample | Screened | 10 |
+
+**Adding a study takes no code.** Put its token in `.env`, add a block to
+`config.yaml`, and `build_study_registry` picks it up; every table, chart, and
+workbook sheet widens to include it. Project 4700 is archived and is not pulled:
+its responses were migrated into 5749, which is why 449 of 5749's 520 rows carry
+answers but no survey timestamps. Imported rows keep what people typed and lose
+when they typed it, so no timing or arrival rule can reach them. The Data
+Dictionary sheet says so per study.
+
+### The rules are recomputed, not re-read
+
+`caregiver_analysis_pipeline.py` still owns the published two-study result and
+writes `record_flags.parquet`. It deliberately loads **only** the projects that
+carry an `expected_records` count, because that count is what pins a cohort so it
+cannot move underneath a published figure.
+
+`bot_analysis.compute_screening_flags` applies the same rule definitions — using
+the pipeline's own helper functions, imported rather than copied — to every
+configured study. `verify_flags_against_pipeline` then checks the two overlapping
+studies rule by rule. R1–R7 and R9 reproduce the published pipeline exactly, on
+all 1,956 responses. R8 fires once more, because the branching audits now run on
+every study instead of only 4581; a response the pipeline flagged is never
+unflagged, and the tests enforce that.
+
+### The bilingual study is counted once
+
+Project 5749 asks every question twice and names the Spanish copy after the
+English one with `_s` on the end (`q114` / `q114_s`,
+`fif_childrens_ages___3` / `fif_childrens_ages_s___3`). A respondent answers one
+language, never both.
+
+`fold_language_twins` merges each Spanish column into its English base before any
+rule runs, which collapses 5749 from 715 columns to 389 — the same shape as the
+other three studies — and moves 1,042 answers out of columns no rule reads. A
+column is only folded when its English base exists in the same study, so a field
+that merely ends in `_s` is never mistaken for a twin. The **Bilingual Field Map**
+sheet lists all 330 pairs.
+
+Branching logic in 5749 carries an extra language clause
+(`... and [english_spanish] = '2'`). `_strip_language_gate` removes it before two
+studies' rules are compared; without that, every branching check would silently
+skip the bilingual study.
+
+### Same thing, different variable name
+
+Studies do not agree on what to call things. `FIELD_ALIASES` maps a concept to
+the names it may appear under, best first, and resolution happens **per study**:
+stacking the studies fills missing columns with blanks, so a naive lookup would
+find the wrong name everywhere.
+
+| Concept | 4797, 4931 | 4581 | 5749 |
+|---------|------------|------|------|
+| Caregiver age | `age_check_demo` | absent | `age_confirm_elig` |
+| Child birth year | `dob_child1` | absent | `dob_child1` |
+
+`age_elig` is deliberately **not** an age alias. It reads "Are you over the age of
+18?" and is answered 1 or 2; treating it as an age in years flags every single
+respondent. The **Study Differences** sheet generates this table and the rest of
+the disagreements between the four surveys.
+
+## The final review plan: four labels (column L)
+
+Column L of `ESD_Response_Screening_Rules_Records.xlsx` now carries exactly four
+labels and nothing else. The earlier version mixed an operational decision in
+with a sampling instruction, so a reader could not tell what was going to happen
+to a response.
+
+| Label | Rule | All studies | Recruited only |
+|-------|------|------------:|---------------:|
+| **Do Not Pay** | 2 or more serious rules on the response's own evidence | 282 | 282 |
+| **Arrived in a Burst (R6)** | R6 fired, alone or with others | 1,405 | 1,399 |
+| **Review by Hand** | One serious rule, or milder person-level evidence its own pace does not answer | 82 | 66 |
+| **Pay Now** | No rules, or only mild ones already answered for | 717 | 562 |
+
+**Column K keeps the score-based category** (0 points pays, 1–2 holds, 3+
+refuses). **Column L is the operational decision.** The two are allowed to
+differ, and that difference is the point: K says what the score alone would do,
+L says what the team is going to do.
+
+**Precedence.** 277 responses are both refusable on their own evidence and part
+of the burst. Column L holds one label, so the refusal wins: those responses have
+individual evidence against them, not just the shape of the traffic they arrived
+in, and letting the burst label win would empty "Do Not Pay" down to five rows.
+Every R6 response still carries a separate **Arrived in a burst (R6)** tag
+whatever label it ended up with, so the whole cluster filters in one click.
+`BURST_OUTRANKS_REJECTION` flips the precedence if the team decides otherwise.
+
+**A serious rule is never released on pace.** Taking a long time over the survey
+does not make a contradiction go away. One serious rule means somebody reads it;
+two or more means refusal. This is enforced by a test.
+
+**The hand-review pile is not capped at a round number.** It is what is left once
+the burst is set aside as a group, the multiple-serious responses are refused, and
+the responses slower than a typical verified caregiver are let through: 66 in the
+recruited samples, against the ~60 the meeting said was feasible. The reference
+study's 16 are excluded from that figure because its caregivers are already known
+to be real and were never a payment queue.
+
+**Include in Analysis (column M)** is 1 exactly when column L reads "Pay Now", and
+0 otherwise. The cluster analysis filters on it.
+
+### Workbook sheets
+
+`export_rules_records_workbook` writes twelve sheets, all generated from the data
+in front of them:
+
+| Sheet | What it is |
+|-------|------------|
+| Data Dictionary | PID, project name, first/last survey dates, auto notes, blank **Team notes** |
+| Final Review Plan | The four labels by study, with a recruited-only column |
+| Record Rule Summary | One row per response. A=Study, B=REDCap PID, K=score category, L=final plan, M=include |
+| Rule Grid | The same rows with Yes/No per rule, for filtering |
+| Hand Review List | The 82 to read, in order, with blank verdict columns |
+| Payment List | The 717 cleared, with the address to send the gift card to |
+| Rule Key / Final Plan Key / Column Guide | Legends, including what every column letter means |
+| Study Differences | Where the four surveys stop agreeing |
+| Bilingual Field Map | Every Spanish variable folded onto its English twin |
+| Rule Verification | This engine checked against the published pipeline |
+
 ### Survey system access
 
 `refresh_redcap_cache` pulls records, metadata, and instruments for **both**

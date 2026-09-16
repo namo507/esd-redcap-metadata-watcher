@@ -215,7 +215,20 @@ def _load_or_pull_content(
 
 
 def load_redcap_sources(project_dir: Path, config: dict) -> SourceBundle:
-    """Load hashed daily caches or pull both REDCap projects with strict checks."""
+    """Load hashed daily caches or pull both REDCap projects with strict checks.
+
+    Only the projects carrying an ``expected_records`` count in config.yaml are
+    loaded here.  That count is what pins a cohort so it cannot move underneath
+    a published result, and this pipeline's rules, its 131-caregiver timing
+    reference and its committed record_flags.parquet are all calibrated on the
+    two cohorts that carry one.
+
+    Studies added afterwards are still collecting and have no pinned size, so
+    they are screened by ``bot_analysis.compute_screening_flags`` instead, which
+    applies these same rules to every configured study.  Letting them in here
+    would quietly change a published artefact that other work is checked
+    against.
+    """
 
     repository_root = project_dir.parents[1]
     load_dotenv(repository_root / ".env", override=False)
@@ -232,7 +245,17 @@ def load_redcap_sources(project_dir: Path, config: dict) -> SourceBundle:
     metadata: dict[str, pd.DataFrame] = {}
     instruments: dict[str, pd.DataFrame] = {}
     inventory_rows: list[dict] = []
-    for source_name, source_cfg in redcap_cfg["projects"].items():
+    pinned_projects = {
+        name: cfg
+        for name, cfg in redcap_cfg["projects"].items()
+        if "expected_records" in cfg
+    }
+    if not pinned_projects:
+        raise RuntimeError(
+            "No project in config.yaml carries an expected_records count, so there is "
+            "no pinned cohort for this pipeline to run on."
+        )
+    for source_name, source_cfg in pinned_projects.items():
         token_name = source_cfg["token_env"]
         token = os.environ.get(token_name, "").strip()
         if not token:
