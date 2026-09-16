@@ -19,10 +19,20 @@ redcap:
       token_env: TOKEN_CLEAN_4797
       expected_records: 177
       csv_fallback: InfantAutismScreenin-FullDataset_DATA_2026-01-20_0940.csv
+      description: "Infant Autism Screening (verified caregiver sample)"
     dirty_4581:
       project_id: 4581
       token_env: TOKEN_DIRTY_4581
       expected_records: 1779
+      description: "Infant Autism Screening (online recruitment sample)"
+    bilingual_5749:
+      project_id: 5749
+      token_env: TOKEN_BILINGUAL_5749
+      description: "Infant Autism Screening-27Sep25_bilingual-13Jul26"
+    icis_4931:
+      project_id: 4931
+      token_env: TOKEN_ICIS_4931
+      description: "Infant Autism Screening - ICIS"
 
 fraud_rules:
   total_time_floor_min: 11.57
