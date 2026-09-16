@@ -478,13 +478,38 @@ refuses). **Column L is the operational decision.** The two are allowed to
 differ, and that difference is the point: K says what the score alone would do,
 L says what the team is going to do.
 
-**Precedence.** 277 responses are both refusable on their own evidence and part
-of the burst. Column L holds one label, so the refusal wins: those responses have
-individual evidence against them, not just the shape of the traffic they arrived
-in, and letting the burst label win would empty "Do Not Pay" down to five rows.
-Every R6 response still carries a separate **Arrived in a burst (R6)** tag
-whatever label it ended up with, so the whole cluster filters in one click.
-`BURST_OUTRANKS_REJECTION` flips the precedence if the team decides otherwise.
+### Why a refusal outranks the burst
+
+The meeting asked for two things that meet head-on: every R6 response should carry
+the burst label "alone or with others", and a response with several serious rules
+should read "Do Not Pay". 277 responses are both, and column L holds one label.
+
+**The refusal wins, and the data settles it rather than taste.** R6 fires on 94% of
+study 4581, because nearly everyone signed up on one day:
+
+| Study | R6 fires on |
+|-------|------------:|
+| 4581 online recruitment | **94.2%** (1,676 / 1,779) |
+| 4797 verified reference | 3.4% (6 / 177) |
+| 5749 bilingual | 0% |
+| 4931 ICIS | 0% |
+
+A signal covering 94% of a study cannot tell one response in it from another — the
+code has said so since the two-study version, which is why `CHANNEL_CHECKS` holds
+R6 apart from `PERSON_CHECKS`. Letting it win the label would stamp "Arrived in a
+Burst" on 94% of the rows in the study that matters most, leave "Do Not Pay" with
+**five rows in the whole workbook**, and hide the individual evidence against 277
+responses behind a description of the day's traffic.
+
+The case the notes actually complained about is R4 + R6 — two mild rules, never a
+refusal under any reading, and it gets the burst label either way. "Alone or with
+others" was written to stop the timing-release logic overriding the burst label,
+and it still does exactly that: a test asserts every non-refused R6 response reads
+"Arrived in a Burst".
+
+Nothing is lost by this order. Every R6 response carries a separate **Arrived in a
+burst (R6)** tag whatever label it ended up with, so the full 1,682 filter in one
+click. `BURST_OUTRANKS_REJECTION` flips it if the team ever wants the other order.
 
 **A serious rule is never released on pace.** Taking a long time over the survey
 does not make a contradiction go away. One serious rule means somebody reads it;
@@ -500,6 +525,22 @@ to be real and were never a payment queue.
 **Include in Analysis (column M)** is 1 exactly when column L reads "Pay Now", and
 0 otherwise. The cluster analysis filters on it.
 
+### The one payment question no rule can answer
+
+**160 of the 717 responses cleared for payment never finished the survey.**
+Abandoning a survey breaks no screening rule, so no rule can decide whether it
+earns a gift card — that is the policy question the meeting left open, and paying
+them quietly would have answered it by default.
+
+They are sorted to the top of the **Payment List** sheet and marked in a
+**Needs a decision before paying** column. The **Unfinished Surveys** sheet counts
+them per study.
+
+This is *not* the same as the **356 responses that finished the survey but carry no
+timing at all**, which were migrated in from project 4700 and lost their timestamps
+in the move. Those are complete responses. The two look identical if you only look
+at `Sections timed`, which is why `Survey finished` is a separate column.
+
 ### Workbook sheets
 
 `export_rules_records_workbook` writes twelve sheets, all generated from the data
@@ -512,7 +553,8 @@ in front of them:
 | Record Rule Summary | One row per response. A=Study, B=REDCap PID, K=score category, L=final plan, M=include |
 | Rule Grid | The same rows with Yes/No per rule, for filtering |
 | Hand Review List | The 82 to read, in order, with blank verdict columns |
-| Payment List | The 717 cleared, with the address to send the gift card to |
+| Payment List | The 717 cleared, with the address to send the gift card to; unfinished surveys sorted to the top and marked |
+| Unfinished Surveys | How many cleared responses never finished, kept apart from the migrated ones that finished but lost their timing |
 | Rule Key / Final Plan Key / Column Guide | Legends, including what every column letter means |
 | Study Differences | Where the four surveys stop agreeing |
 | Bilingual Field Map | Every Spanish variable folded onto its English twin |

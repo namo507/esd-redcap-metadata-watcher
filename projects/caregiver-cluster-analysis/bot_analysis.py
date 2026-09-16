@@ -5960,17 +5960,26 @@ SERIOUS_RULES_FOR_REJECTION = 2
 # Whether arriving in a burst outranks an individually evidenced refusal.
 #
 # The meeting asked for two things that meet head-on: every R6 response should
-# carry the burst label, and a response with several serious rules against it
-# should read "Do Not Pay".  Two hundred and seventy-seven responses are both.
+# carry the burst label "alone or with others", and a response with several
+# serious rules against it should read "Do Not Pay".  277 responses are both.
+# Column L holds one label, so one of the two has to win.
 #
-# Column L holds one label, so one of the two has to win, and the refusal does:
-# those responses have individual evidence against them, not just the shape of
-# the traffic they arrived in, and letting the burst label win would empty the
-# "Do Not Pay" category down to five responses.  Every R6 response is still
-# tagged in its own "Arrived in a burst (R6)" column, so the whole burst can be
-# filtered in one click whatever label it ended up with.
+# The refusal wins, for a reason the data settles rather than taste.  R6 fires
+# on 94% of the online recruitment study, because nearly everyone who signed up
+# did so on one day.  A signal that covers 94% of a study cannot tell one
+# response in it from another.  Letting it win would stamp "Arrived in a Burst"
+# on 94% of the rows in the study that matters most, leave "Do Not Pay" with
+# five rows in the whole workbook, and hide the individual evidence against 277
+# responses behind a description of the day's traffic.
 #
-# Setting this to True flips the precedence, and nothing else needs changing.
+# The case the meeting actually complained about is R4 + R6, two mild rules,
+# which is never a refusal under any reading and gets the burst label either
+# way.  "Alone or with others" was written to stop the timing-release logic
+# overriding the burst label, and it still does exactly that.
+#
+# Nothing is lost by this order: every R6 response is tagged in its own
+# "Arrived in a burst (R6)" column, so the whole burst filters in one click
+# whatever label it carries.  Setting this to True flips the precedence.
 BURST_OUTRANKS_REJECTION = False
 
 FINAL_PLAN_MEANING: dict[str, str] = {
@@ -6055,6 +6064,20 @@ def build_final_review_plan(triaged: pd.DataFrame) -> pd.DataFrame:
     # Every R6 response carries the burst tag whatever label it ended up with,
     # so the whole cluster stays filterable in one click.
     frame["Arrived in a burst (R6)"] = np.where(burst, "Yes", "No")
+
+    # Whether the survey was actually finished, and how much of it was timed.
+    #
+    # These two are kept apart on purpose, because they answer different
+    # questions and the bilingual study makes the difference matter.  Responses
+    # migrated into it kept every answer and lost every timestamp, so they read
+    # as finished with nothing timed.  A response that was abandoned halfway
+    # reads as unfinished.  Both are untimed; only one of them is a survey
+    # somebody completed.
+    finished = frame.get("_finished_demographics")
+    if finished is None:
+        finished = pd.Series(False, index=frame.index)
+    frame["Survey finished"] = np.where(finished.fillna(False).astype(bool), "Yes", "No")
+    frame["Sections timed"] = frame["Sections timed"].astype(int)
 
     # The score-based category, kept apart from the operational decision so the
     # two can be compared rather than confused.
@@ -7432,8 +7455,10 @@ RECORDS_SHEET_COLUMNS = [
     "Include in Analysis",                      # M
     "Email address",                            # N
     "Arrived in a burst (R6)",                  # O
-    "Why this final plan",                      # P
-    STAKEHOLDER_SCORE_COLUMN,                   # Q
+    "Survey finished",                          # P
+    "Sections timed",                           # Q
+    "Why this final plan",                      # R
+    STAKEHOLDER_SCORE_COLUMN,                   # S
 ]
 
 GRID_HEAD_COLUMNS = ["Study", "REDCap PID", "Record ID", "Response key"]
@@ -7448,6 +7473,8 @@ GRID_TAIL_COLUMNS = [
     "Include in Analysis",
     "Email address",
     "Arrived in a burst (R6)",
+    "Survey finished",
+    "Sections timed",
 ]
 
 
@@ -7463,6 +7490,8 @@ def _records_base(planned: pd.DataFrame) -> pd.DataFrame:
         "Score-based category",
         "Include in Analysis",
         "Arrived in a burst (R6)",
+        "Survey finished",
+        "Sections timed",
         "Why this final plan",
     ):
         frame[column] = planned[column].to_numpy()
@@ -7536,7 +7565,15 @@ def build_hand_review_sheet(planned: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
-    """Everything cleared for a gift card, ready to hand to operations."""
+    """Everything cleared for a gift card, ready to hand to operations.
+
+    Whether an unfinished survey earns a gift card is a policy question the
+    September meeting left open, and no screening rule can answer it: somebody
+    who abandons a survey breaks no rule by doing so.  Rather than decide it
+    quietly by paying them, the unfinished responses are sorted to the top of
+    this sheet and marked, so the question is answered by the people whose
+    decision it is, at the moment the money goes out.
+    """
     frame = build_records_sheet(planned)
     sheet = frame[frame["Final review plan"].eq(FINAL_PAY)].copy()
     sheet = sheet[
@@ -7546,15 +7583,69 @@ def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
             "Record ID",
             "Response key",
             "Email address",
+            "Survey finished",
+            "Sections timed",
             "Rules violated",
             OPERATIONAL_SCORE_COLUMN,
             "Why this final plan",
             "Include in Analysis",
         ]
-    ].reset_index(drop=True)
+    ]
+    sheet.insert(
+        5,
+        "Needs a decision before paying",
+        np.where(
+            sheet["Survey finished"].eq("No"),
+            "Yes - survey was never finished",
+            "",
+        ),
+    )
+    sheet = sheet.sort_values(
+        ["Needs a decision before paying", "Study", "Record ID"],
+        ascending=[False, True, True],
+    ).reset_index(drop=True)
     sheet["Gift card sent? (yes/no)"] = ""
     sheet["Date sent"] = ""
     return sheet
+
+
+def build_unfinished_survey_summary(planned: pd.DataFrame) -> pd.DataFrame:
+    """How many responses cleared for payment never finished the survey.
+
+    Separated from the responses that finished but carry no timing, because
+    those two look identical in the data and mean opposite things.  A migrated
+    response kept every answer and lost every timestamp.  An abandoned one never
+    had the answers in the first place.
+    """
+    cleared = planned[planned["Final review plan"].eq(FINAL_PAY)]
+    rows = []
+    for study, block in cleared.groupby("Study"):
+        finished = block["Survey finished"].eq("Yes")
+        timed = block["Sections timed"].gt(0)
+        rows.append(
+            {
+                "Study": study,
+                "Cleared for payment": len(block),
+                "Finished the survey": int(finished.sum()),
+                "Never finished it": int((~finished).sum()),
+                "Finished but untimed (migrated)": int((finished & ~timed).sum()),
+            }
+        )
+    table = pd.DataFrame(rows)
+    total = {
+        "Study": "All studies",
+        "Cleared for payment": int(table["Cleared for payment"].sum()),
+        "Finished the survey": int(table["Finished the survey"].sum()),
+        "Never finished it": int(table["Never finished it"].sum()),
+        "Finished but untimed (migrated)": int(table["Finished but untimed (migrated)"].sum()),
+    }
+    table = pd.concat([table, pd.DataFrame([total])], ignore_index=True)
+    table["Question for the team"] = np.where(
+        table["Never finished it"].gt(0),
+        "Does an unfinished survey earn a gift card?",
+        "",
+    )
+    return table
 
 
 def build_column_guide() -> pd.DataFrame:
@@ -7586,6 +7677,15 @@ def build_column_guide() -> pd.DataFrame:
         "Arrived in a burst (R6)": (
             "Yes for every response that triggered R6, whatever label it ended up with, "
             "so the whole burst can be filtered in one click."
+        ),
+        "Survey finished": (
+            "Whether the last section was completed. Whether an unfinished survey earns a "
+            "gift card is a policy question, not a screening one, and is still open."
+        ),
+        "Sections timed": (
+            "How many of the four sections have a recorded time, out of four. Zero means no "
+            "timing rule could reach this response at all, which is true of every response "
+            "migrated in from another project."
         ),
         "Why this final plan": "The reason this response ended up with the label it has.",
         STAKEHOLDER_SCORE_COLUMN: (
@@ -7664,6 +7764,7 @@ def export_rules_records_workbook(
     bilingual = build_bilingual_field_map(project_dir, cache_dir)
     hand_review = build_hand_review_sheet(planned)
     payments = build_payment_list_sheet(planned)
+    unfinished = build_unfinished_survey_summary(planned)
 
     sheets: list[tuple[str, pd.DataFrame, str]] = [
         (
@@ -7703,7 +7804,18 @@ def export_rules_records_workbook(
         (
             "Payment List",
             payments,
-            "Every response cleared for a gift card, with the address to send it to.",
+            "Every response cleared for a gift card, with the address to send it to. "
+            "Responses that never finished the survey are sorted to the top and marked: "
+            "whether they earn a gift card is a policy decision nobody has taken yet, and "
+            "no screening rule can take it for you.",
+        ),
+        (
+            "Unfinished Surveys",
+            unfinished,
+            "How many of the responses cleared for payment never finished the survey, kept "
+            "apart from those that finished but carry no timing because they were migrated "
+            "in from another project. The two look identical in the data and mean opposite "
+            "things.",
         ),
         (
             "Rule Key",

@@ -162,11 +162,64 @@ def test_column_k_is_the_score_and_column_l_is_the_decision() -> None:
     assert ba.RECORDS_SHEET_COLUMNS[10] == "Score-based category"
     assert ba.RECORDS_SHEET_COLUMNS[11] == "Final review plan"
     assert ba.RECORDS_SHEET_COLUMNS[12] == "Include in Analysis"
+    # Anything added later goes to the right of M so those letters keep meaning.
+    assert ba.RECORDS_SHEET_COLUMNS.index("Survey finished") > 12
+    assert ba.RECORDS_SHEET_COLUMNS.index("Sections timed") > 12
 
 
 def test_every_burst_response_carries_the_burst_tag(planned) -> None:
     tagged = planned["Arrived in a burst (R6)"].eq("Yes")
     assert (tagged == planned["check_burst_arrival"].astype(bool)).all()
+
+
+def test_an_individually_evidenced_refusal_outranks_the_burst(planned) -> None:
+    """The decision taken in September, locked in.
+
+    R6 covers 94% of the online recruitment study, so it cannot rank one
+    response in that study against another. A response with several serious
+    rules against it keeps the label that says so.
+    """
+    assert ba.BURST_OUTRANKS_REJECTION is False
+    both = (
+        planned["Serious checks broken"].ge(ba.SERIOUS_RULES_FOR_REJECTION)
+        & planned["check_burst_arrival"].astype(bool)
+    )
+    assert both.any(), "no overlap to test; the fixture has changed shape"
+    assert planned.loc[both, "Final review plan"].eq(ba.FINAL_REJECT).all()
+
+
+def test_the_burst_label_still_wins_over_a_hand_read(planned) -> None:
+    """What "alone or with others" was actually written to fix.
+
+    R4 + R6 is two mild rules. It is never a refusal, and it must come out as
+    the burst label rather than as a timing-based release or a hand read.
+    """
+    mild_burst = (
+        planned["check_burst_arrival"].astype(bool)
+        & planned["Serious checks broken"].lt(ba.SERIOUS_RULES_FOR_REJECTION)
+    )
+    assert planned.loc[mild_burst, "Final review plan"].eq(ba.FINAL_BURST).all()
+
+
+def test_unfinished_surveys_are_flagged_rather_than_paid_quietly(planned) -> None:
+    """Whether an abandoned survey earns a gift card is nobody's rule to decide."""
+    payments = ba.build_payment_list_sheet(planned)
+    unfinished = payments["Survey finished"].eq("No")
+    if not unfinished.any():
+        pytest.skip("every cleared response finished the survey")
+    assert payments.loc[unfinished, "Needs a decision before paying"].ne("").all()
+    # Marked rows sort to the top, so nobody has to go looking for them.
+    assert payments["Needs a decision before paying"].ne("").to_numpy()[: int(unfinished.sum())].all()
+
+
+def test_finished_but_untimed_is_not_confused_with_unfinished(planned) -> None:
+    """Migrated responses kept their answers and lost their timestamps."""
+    summary = ba.build_unfinished_survey_summary(planned)
+    totals = summary.loc[summary["Study"].eq("All studies")].iloc[0]
+    assert totals["Cleared for payment"] == totals["Finished the survey"] + totals["Never finished it"]
+    # A migrated response is finished, so it must never be counted as unfinished.
+    migrated = planned["Survey finished"].eq("Yes") & planned["Sections timed"].eq(0)
+    assert planned.loc[migrated, "Survey finished"].eq("Yes").all()
 
 
 def test_include_in_analysis_is_one_exactly_for_pay_now(planned) -> None:
