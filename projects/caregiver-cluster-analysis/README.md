@@ -541,6 +541,43 @@ timing at all**, which were migrated in from project 4700 and lost their timesta
 in the move. Those are complete responses. The two look identical if you only look
 at `Sections timed`, which is why `Survey finished` is a separate column.
 
+### Can we actually reach these people?
+
+A gift card goes to an email address, so the address is the last thing standing
+between the screening and the money. A response can pass every rule and still be
+unpayable, and the rules will never say so, because nothing about an address is a
+rule. `demo_email` is the only field anyone actually fills in — `email_elig` is
+empty in all four studies, and `demo_email_confirm` only ever mirrors it — and the
+bilingual study's `demo_email_s` folds into it like everything else.
+
+| Check | Responses | Of those, cleared for payment |
+|-------|----------:|------------------------------:|
+| Has an address we can reach | 2,096 | 551 |
+| No address: survey never finished | 377 | 160 |
+| No address: survey finished, none given | 13 | 6 |
+| **Address shared with another response** | **19** | **13** |
+| **Address is the form's example text** | **3** | **3** |
+| The two copies of the address differ | 7 | 1 |
+| University (.edu) address | 16 | 13 |
+
+The two bolded rows are money leaving twice. Thirteen responses on the payment
+list share six addresses between them, all in the bilingual study, and three of
+those are `email@domain.com` — the placeholder REDCap shows in the empty box.
+
+These columns sit to the right of M on every record sheet: `Email domain`,
+`University email address`, `Responses sharing this address`,
+`Confirmation matches`, `Why no address`, `Can be paid`, and `Co-parent contact`
+(a second contact belonging to a different person, shown so a reviewer has
+somewhere else to look, never used as the payee).
+
+`Why no address` matters more than it looks: 377 of the 390 blanks belong to
+people who stopped before the question was asked, which is not the same as
+reaching it and refusing. Only 13 finished the survey and gave nothing.
+
+The **Payment List** marks every row needing a decision, and **Address Problems**
+lists all 416 exceptions with the 180 that currently block a payment sorted to the
+top — those being the only ones nobody would otherwise look at.
+
 ### Workbook sheets
 
 `export_rules_records_workbook` writes twelve sheets, all generated from the data
@@ -555,6 +592,8 @@ in front of them:
 | Hand Review List | The 82 to read, in order, with blank verdict columns |
 | Payment List | The 717 cleared, with the address to send the gift card to; unfinished surveys sorted to the top and marked |
 | Unfinished Surveys | How many cleared responses never finished, kept apart from the migrated ones that finished but lost their timing |
+| Email Checks | Whether each response has an address anyone can actually reach |
+| Address Problems | Every missing, shared, mistyped or placeholder address; payment-blocking ones first |
 | Rule Key / Final Plan Key / Column Guide | Legends, including what every column letter means |
 | Study Differences | Where the four surveys stop agreeing |
 | Bilingual Field Map | Every Spanish variable folded onto its English twin |

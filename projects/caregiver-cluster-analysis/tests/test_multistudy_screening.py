@@ -222,6 +222,89 @@ def test_finished_but_untimed_is_not_confused_with_unfinished(planned) -> None:
     assert planned.loc[migrated, "Survey finished"].eq("Yes").all()
 
 
+# ── The address a gift card is actually sent to ─────────────────────────────
+
+def test_every_record_sheet_carries_the_address(planned) -> None:
+    for sheet in (
+        ba.build_records_sheet(planned),
+        ba.build_records_grid(planned),
+        ba.build_hand_review_sheet(planned),
+        ba.build_payment_list_sheet(planned),
+    ):
+        assert "Email address" in sheet.columns
+
+
+def test_the_address_column_captures_every_address_in_the_data(planned) -> None:
+    """Nothing typed into an email field may be missing from the sheet."""
+    records = ba.load_combined_records(CACHE_DIR, PROJECT_DIR)
+    records["record_id"] = records["record_id"].astype(str)
+    source = records[["source_project", "record_id"]].copy()
+    source["raw"] = (
+        records["demo_email"].astype("string").fillna("").str.strip().str.lower()
+    )
+    merged = planned.merge(source, on=["source_project", "record_id"], how="left")
+    has_raw = merged["raw"].str.contains("@", regex=False, na=False)
+    on_sheet = merged["Email address"].astype(str).str.contains("@", regex=False)
+    assert (has_raw & ~on_sheet).sum() == 0, "an address in the data never reached the sheet"
+
+
+def test_a_missing_address_always_says_why(planned) -> None:
+    missing = ~planned["Email address"].astype(str).str.contains("@", regex=False)
+    assert planned.loc[missing, "Why no address"].ne("").all()
+    assert planned.loc[~missing, "Why no address"].eq("").all()
+
+
+def test_a_shared_address_is_counted_and_flagged(planned) -> None:
+    address = planned["Email address"].astype("string").fillna("").str.strip().str.lower()
+    present = address.str.contains("@", regex=False)
+    expected = address.where(present).map(address[present].value_counts()).fillna(0).astype(int)
+    assert (planned["Responses sharing this address"] == expected).all()
+    assert (
+        planned["Address used more than once"].eq("Yes") == (present & expected.gt(1))
+    ).all()
+
+
+def test_an_unusable_address_never_passes_as_payable(planned) -> None:
+    payable = planned["Can be paid"].eq("Yes")
+    assert not (payable & planned["Address used more than once"].eq("Yes")).any()
+    assert not (payable & planned["Placeholder address"].eq("Yes")).any()
+    assert payable.eq(planned["Email address"].astype(str).str.contains("@")).sum() <= len(planned)
+
+
+def test_payment_list_marks_every_address_that_needs_a_decision(planned) -> None:
+    payments = ba.build_payment_list_sheet(planned)
+    needs = (
+        ~payments["Email address"].astype(str).str.contains("@", regex=False)
+        | payments["Responses sharing this address"].gt(1)
+        | payments["Confirmation matches"].eq("No - the two copies differ")
+        | payments["Survey finished"].eq("No")
+    )
+    assert payments.loc[needs, "Needs a decision before paying"].ne("").all()
+    assert payments.loc[~needs, "Needs a decision before paying"].eq("").all()
+
+
+def test_address_problems_sheet_lists_every_problem(planned) -> None:
+    problems = ba.build_email_validation_sheet(planned)
+    flagged = set(zip(problems["REDCap PID"].astype(str), problems["Record ID"].astype(str)))
+    expected = planned[
+        ~planned["Email address"].astype(str).str.contains("@", regex=False)
+        | planned["Address used more than once"].eq("Yes")
+        | planned["Placeholder address"].eq("Yes")
+        | planned["Confirmation matches"].eq("No - the two copies differ")
+    ]
+    assert flagged == set(
+        zip(expected["project_id"].astype(str), expected["record_id"].astype(str))
+    )
+
+
+def test_the_coparent_address_is_never_used_as_the_caregivers_own(planned) -> None:
+    """It belongs to a different person, so it must never become the payee."""
+    coparent = planned["Co-parent contact"].astype("string").fillna("").str.strip()
+    address = planned["Email address"].astype("string").fillna("").str.strip()
+    borrowed = coparent.str.contains("@", regex=False) & address.eq("")
+    assert not borrowed.any() or address[borrowed].eq("").all()
+
+
 def test_include_in_analysis_is_one_exactly_for_pay_now(planned) -> None:
     included = planned["Include in Analysis"].eq(1)
     assert (included == planned["Final review plan"].eq(ba.FINAL_PAY)).all()

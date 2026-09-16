@@ -4924,12 +4924,26 @@ def build_risk_table(
     records["record_id"] = records["record_id"].astype(str)
     emails = _email_series(records)
     finished = pd.to_numeric(records.get("demographics_complete"), errors="coerce").fillna(0)
+
+    def _clean(field: str) -> pd.Series:
+        if field not in records.columns:
+            return pd.Series("", index=records.index, dtype="object")
+        value = records[field].astype("string").fillna("").str.strip().str.lower()
+        return value.where(~value.isin({"nan", "none", "<na>"}), "").astype("object")
+
     email_frame = pd.DataFrame(
         {
             "source_project": records["source_project"],
             "record_id": records["record_id"],
             "Email address": emails,
             "Email domain": _email_domain(emails),
+            # The survey asks for the address twice.  Someone who types it out
+            # twice and gets two different answers is worth a second look.
+            "_email_confirmation": _clean("demo_email_confirm"),
+            # A second contact, and a different person's address.  It is never
+            # used as the caregiver's own, only shown so a reviewer has
+            # somewhere else to look.
+            "Co-parent contact": _clean("contact_coparent"),
             "_finished_demographics": finished.eq(2),
         }
     )
@@ -5025,6 +5039,7 @@ def build_risk_table(
     frame["Email domain seen only once"] = np.where(
         frame["Email domain"].isin(rare_domains), "Yes", "No"
     )
+    frame = _add_email_validation(frame)
 
     # ── Recommended action ──────────────────────────────────────────────────
     action = pd.Series(ACTION_PAY, index=frame.index, dtype="object")
@@ -5060,6 +5075,78 @@ def build_risk_table(
     )
 
     frame["Record ID"] = frame["record_id"]
+    return frame
+
+
+# Addresses that are obviously not a way to reach a person: the placeholder
+# REDCap shows in the box, and the domains people type when they want the form
+# to accept something and move on.
+PLACEHOLDER_EMAIL_DOMAINS = {
+    "domain.com",
+    "example.com",
+    "example.org",
+    "email.com",
+    "test.com",
+    "sample.com",
+}
+
+
+def _add_email_validation(frame: pd.DataFrame) -> pd.DataFrame:
+    """Everything about the address that helps decide whether a person is real.
+
+    A gift card goes to an address, so the address is the last thing standing
+    between the screening and the money.  These columns answer the questions a
+    reviewer actually asks: can I reach this person, has this address already
+    been paid, and did they type it consistently.
+    """
+    address = frame["Email address"].astype("string").fillna("").str.strip().str.lower()
+    present = address.str.contains("@", regex=False)
+
+    # How many other responses claim the same address.  One address on several
+    # responses is one person paid several times, or one script.
+    counts = address.where(present, pd.NA).value_counts()
+    shared = address.map(counts).fillna(0).astype(int)
+    frame["Responses sharing this address"] = np.where(present, shared, 0)
+    frame["Address used more than once"] = np.where(present & shared.gt(1), "Yes", "No")
+
+    frame["Placeholder address"] = np.where(
+        present & frame["Email domain"].isin(PLACEHOLDER_EMAIL_DOMAINS), "Yes", "No"
+    )
+
+    # The survey asks for the address twice and only stores the second copy
+    # when it was asked at all, so a blank confirmation is "not asked", not
+    # "mismatch".
+    confirmation = frame.get("_email_confirmation")
+    if confirmation is None:
+        confirmation = pd.Series("", index=frame.index, dtype="object")
+    confirmation = confirmation.astype("string").fillna("").str.strip().str.lower()
+    both_present = present & confirmation.str.contains("@", regex=False)
+    frame["Confirmation matches"] = np.select(
+        [~present, ~both_present, address.eq(confirmation)],
+        ["No address given", "Not asked twice", "Yes"],
+        default="No - the two copies differ",
+    )
+
+    # Saying why an address is missing matters more than saying that it is.
+    # Almost every blank belongs to somebody who stopped before the question
+    # was asked, which is not the same as refusing to give one.
+    finished = frame.get("_finished_demographics")
+    if finished is None:
+        finished = pd.Series(False, index=frame.index)
+    finished = finished.fillna(False).astype(bool)
+    frame["Why no address"] = np.select(
+        [present, ~finished],
+        ["", "The survey was never finished, so the address was never asked for"],
+        default="The survey was finished but no address was given",
+    )
+
+    frame["Can be paid"] = np.where(
+        present
+        & frame["Address used more than once"].eq("No")
+        & frame["Placeholder address"].eq("No"),
+        "Yes",
+        "No",
+    )
     return frame
 
 
@@ -7454,11 +7541,17 @@ RECORDS_SHEET_COLUMNS = [
     "Final review plan",                        # L
     "Include in Analysis",                      # M
     "Email address",                            # N
-    "Arrived in a burst (R6)",                  # O
-    "Survey finished",                          # P
-    "Sections timed",                           # Q
-    "Why this final plan",                      # R
-    STAKEHOLDER_SCORE_COLUMN,                   # S
+    "Email domain",                             # O
+    "University email address",                 # P
+    "Responses sharing this address",           # Q
+    "Confirmation matches",                     # R
+    "Why no address",                           # S
+    "Can be paid",                              # T
+    "Arrived in a burst (R6)",                  # U
+    "Survey finished",                          # V
+    "Sections timed",                           # W
+    "Why this final plan",                      # X
+    STAKEHOLDER_SCORE_COLUMN,                   # Y
 ]
 
 GRID_HEAD_COLUMNS = ["Study", "REDCap PID", "Record ID", "Response key"]
@@ -7472,6 +7565,11 @@ GRID_TAIL_COLUMNS = [
     "Final review plan",
     "Include in Analysis",
     "Email address",
+    "Email domain",
+    "University email address",
+    "Responses sharing this address",
+    "Confirmation matches",
+    "Can be paid",
     "Arrived in a burst (R6)",
     "Survey finished",
     "Sections timed",
@@ -7493,6 +7591,15 @@ def _records_base(planned: pd.DataFrame) -> pd.DataFrame:
         "Survey finished",
         "Sections timed",
         "Why this final plan",
+        "Email domain",
+        "University email address",
+        "Responses sharing this address",
+        "Address used more than once",
+        "Placeholder address",
+        "Confirmation matches",
+        "Why no address",
+        "Can be paid",
+        "Co-parent contact",
     ):
         frame[column] = planned[column].to_numpy()
     return frame
@@ -7514,8 +7621,13 @@ def _sort_records(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def build_records_sheet(planned: pd.DataFrame) -> pd.DataFrame:
-    """One row per response, with the rules written out in words."""
+def _records_full(planned: pd.DataFrame) -> pd.DataFrame:
+    """Every column a record sheet might want, in the sheets' own row order.
+
+    The narrower sheets pick their columns out of this rather than out of each
+    other, so a sheet that needs something the main record list does not carry
+    can still reach it.
+    """
     frame = _records_base(planned)
     matrix = frame[[CODE_TO_KEY[code] for code in CODE_ORDER]].to_numpy()
     codes = np.array(CODE_ORDER)
@@ -7527,21 +7639,25 @@ def build_records_sheet(planned: pd.DataFrame) -> pd.DataFrame:
     frame["Rules violated, in plain language"] = [
         "; ".join(names[row]) if row.any() else "No rules triggered" for row in matrix
     ]
-    return _sort_records(frame)[RECORDS_SHEET_COLUMNS]
+    return _sort_records(frame)
+
+
+def build_records_sheet(planned: pd.DataFrame) -> pd.DataFrame:
+    """One row per response, with the rules written out in words."""
+    return _records_full(planned)[RECORDS_SHEET_COLUMNS]
 
 
 def build_records_grid(planned: pd.DataFrame) -> pd.DataFrame:
     """The same responses with a Yes/No column for every rule."""
-    frame = _records_base(planned)
+    frame = _records_full(planned)
     for code in CODE_ORDER:
         frame[code] = np.where(frame[CODE_TO_KEY[code]], "Yes", "No")
-    columns = GRID_HEAD_COLUMNS + CODE_ORDER + GRID_TAIL_COLUMNS
-    return _sort_records(frame)[columns]
+    return frame[GRID_HEAD_COLUMNS + CODE_ORDER + GRID_TAIL_COLUMNS]
 
 
 def build_hand_review_sheet(planned: pd.DataFrame) -> pd.DataFrame:
     """The responses a person opens and reads, with room to record the verdict."""
-    frame = build_records_sheet(planned)
+    frame = _records_full(planned)
     sheet = frame[frame["Final review plan"].eq(FINAL_HAND)].copy()
     sheet = sheet[
         [
@@ -7550,6 +7666,13 @@ def build_hand_review_sheet(planned: pd.DataFrame) -> pd.DataFrame:
             "Record ID",
             "Response key",
             "Email address",
+            "Email domain",
+            "University email address",
+            "Responses sharing this address",
+            "Confirmation matches",
+            "Why no address",
+            "Co-parent contact",
+            "Survey finished",
             "Rules violated",
             "Rules violated, in plain language",
             OPERATIONAL_SCORE_COLUMN,
@@ -7574,7 +7697,7 @@ def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
     this sheet and marked, so the question is answered by the people whose
     decision it is, at the moment the money goes out.
     """
-    frame = build_records_sheet(planned)
+    frame = _records_full(planned)
     sheet = frame[frame["Final review plan"].eq(FINAL_PAY)].copy()
     sheet = sheet[
         [
@@ -7583,6 +7706,12 @@ def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
             "Record ID",
             "Response key",
             "Email address",
+            "Email domain",
+            "University email address",
+            "Responses sharing this address",
+            "Confirmation matches",
+            "Can be paid",
+            "Why no address",
             "Survey finished",
             "Sections timed",
             "Rules violated",
@@ -7591,15 +7720,22 @@ def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
             "Include in Analysis",
         ]
     ]
-    sheet.insert(
-        5,
-        "Needs a decision before paying",
-        np.where(
+    reasons = np.select(
+        [
+            sheet["Email address"].astype(str).str.contains("@") == False,  # noqa: E712
+            sheet["Responses sharing this address"].gt(1),
+            sheet["Confirmation matches"].eq("No - the two copies differ"),
             sheet["Survey finished"].eq("No"),
+        ],
+        [
+            "Yes - there is no address to send it to",
+            "Yes - another response claims the same address",
+            "Yes - the two copies of the address differ",
             "Yes - survey was never finished",
-            "",
-        ),
+        ],
+        default="",
     )
+    sheet.insert(5, "Needs a decision before paying", reasons)
     sheet = sheet.sort_values(
         ["Needs a decision before paying", "Study", "Record ID"],
         ascending=[False, True, True],
@@ -7607,6 +7743,97 @@ def build_payment_list_sheet(planned: pd.DataFrame) -> pd.DataFrame:
     sheet["Gift card sent? (yes/no)"] = ""
     sheet["Date sent"] = ""
     return sheet
+
+
+def build_email_validation_sheet(planned: pd.DataFrame) -> pd.DataFrame:
+    """Every response whose address needs a human decision before money moves.
+
+    A gift card goes to an address, so the address is the last thing standing
+    between the screening and the money.  This sheet is the exceptions only:
+    anything here should be looked at, and anything not here has an address
+    that is present, unique, and typed consistently.
+    """
+    frame = planned.copy()
+    address = frame["Email address"].astype("string").fillna("").str.strip()
+    present = address.str.contains("@", regex=False)
+
+    problems = pd.Series("", index=frame.index, dtype="object")
+    problems[frame["Confirmation matches"].eq("No - the two copies differ")] = (
+        "The two copies of the address do not match"
+    )
+    problems[frame["Placeholder address"].eq("Yes")] = (
+        "Not a real address; this is the example text from the form"
+    )
+    problems[frame["Address used more than once"].eq("Yes")] = (
+        "Another response claims the same address"
+    )
+    problems[~present] = frame.loc[~present, "Why no address"]
+
+    flagged = frame[problems.ne("")].copy()
+    flagged["What is wrong"] = problems[problems.ne("")]
+    if flagged.empty:
+        return pd.DataFrame(
+            columns=["Study", "REDCap PID", "Record ID", "What is wrong"]
+        )
+
+    sheet = flagged[
+        [
+            "Study",
+            "project_id",
+            "record_id",
+            "Email address",
+            "Co-parent contact",
+            "What is wrong",
+            "Responses sharing this address",
+            "Confirmation matches",
+            "Survey finished",
+            "Final review plan",
+            "Include in Analysis",
+        ]
+    ].rename(columns={"project_id": "REDCap PID", "record_id": "Record ID"})
+
+    # The ones that cost money come first: a response cleared for payment whose
+    # address is wrong is the only combination where nobody would otherwise look.
+    sheet["_urgent"] = sheet["Final review plan"].eq(FINAL_PAY)
+    sheet = sheet.sort_values(
+        ["_urgent", "What is wrong", "Email address", "Study"],
+        ascending=[False, True, True, True],
+    ).drop(columns="_urgent")
+    sheet.insert(
+        0,
+        "Blocks a payment",
+        np.where(sheet["Final review plan"].eq(FINAL_PAY), "Yes", "No"),
+    )
+    return sheet.reset_index(drop=True)
+
+
+def build_email_validation_summary(planned: pd.DataFrame) -> pd.DataFrame:
+    """A count of each kind of address problem, and how much of it costs money."""
+    cleared = planned["Final review plan"].eq(FINAL_PAY)
+    address = planned["Email address"].astype("string").fillna("").str.strip()
+    present = address.str.contains("@", regex=False)
+
+    checks = [
+        ("Has an address we can reach", present),
+        ("No address: the survey was never finished",
+         ~present & planned["Survey finished"].eq("No")),
+        ("No address: the survey was finished but none was given",
+         ~present & planned["Survey finished"].eq("Yes")),
+        ("Address shared with another response", planned["Address used more than once"].eq("Yes")),
+        ("Address is the example text from the form", planned["Placeholder address"].eq("Yes")),
+        ("The two copies of the address differ",
+         planned["Confirmation matches"].eq("No - the two copies differ")),
+        ("University (.edu) address", planned["University email address"].eq("Yes")),
+    ]
+    rows = [
+        {
+            "Check": label,
+            "Responses": int(mask.sum()),
+            "Of those, cleared for payment": int((mask & cleared).sum()),
+        }
+        for label, mask in checks
+    ]
+    return pd.DataFrame(rows)
 
 
 def build_unfinished_survey_summary(planned: pd.DataFrame) -> pd.DataFrame:
@@ -7677,6 +7904,32 @@ def build_column_guide() -> pd.DataFrame:
         "Arrived in a burst (R6)": (
             "Yes for every response that triggered R6, whatever label it ended up with, "
             "so the whole burst can be filtered in one click."
+        ),
+        "Email domain": (
+            "What comes after the @. Useful for spotting a run of responses from one place."
+        ),
+        "University email address": (
+            "Yes for a .edu address. The screening already treats one as evidence a person "
+            "is real, so it is shown rather than left buried in the scoring."
+        ),
+        "Responses sharing this address": (
+            "How many responses in total claim this address, counting this one. Anything "
+            "above 1 means paying it twice pays the same inbox twice."
+        ),
+        "Confirmation matches": (
+            "The survey asks for the address twice. This says whether the two copies agree."
+        ),
+        "Why no address": (
+            "Blank when there is one. Otherwise it says whether the person stopped before "
+            "the question was asked, or reached it and gave nothing."
+        ),
+        "Can be paid": (
+            "Yes only when the address is present, unique, and not the form's example text. "
+            "This is about the address alone and says nothing about the screening rules."
+        ),
+        "Co-parent contact": (
+            "A second contact from the survey. It belongs to a different person and is never "
+            "used as the caregiver's own address, only somewhere else for a reviewer to look."
         ),
         "Survey finished": (
             "Whether the last section was completed. Whether an unfinished survey earns a "
@@ -7765,6 +8018,8 @@ def export_rules_records_workbook(
     hand_review = build_hand_review_sheet(planned)
     payments = build_payment_list_sheet(planned)
     unfinished = build_unfinished_survey_summary(planned)
+    email_checks = build_email_validation_sheet(planned)
+    email_summary = build_email_validation_summary(planned)
 
     sheets: list[tuple[str, pd.DataFrame, str]] = [
         (
@@ -7808,6 +8063,21 @@ def export_rules_records_workbook(
             "Responses that never finished the survey are sorted to the top and marked: "
             "whether they earn a gift card is a policy decision nobody has taken yet, and "
             "no screening rule can take it for you.",
+        ),
+        (
+            "Email Checks",
+            email_summary,
+            "Whether each response has an address anyone can actually reach. A gift card "
+            "goes to an address, so this is the last thing standing between the screening "
+            "and the money.",
+        ),
+        (
+            "Address Problems",
+            email_checks,
+            "The exceptions only: every response whose address is missing, shared with "
+            "another response, typed two different ways, or is the example text from the "
+            "form. 'Blocks a payment' marks the ones currently cleared to be paid, which "
+            "are the only ones nobody would otherwise look at.",
         ),
         (
             "Unfinished Surveys",
