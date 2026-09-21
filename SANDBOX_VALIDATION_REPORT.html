@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REDCap Sandbox Validation Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        header h1 { font-size: 2em; margin-bottom: 8px; }
+        header p { font-size: 0.95em; opacity: 0.95; }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .stat-card h3 { color: #495057; font-size: 0.9em; text-transform: uppercase; margin-bottom: 8px; }
+        .stat-card .value { font-size: 2em; color: #667eea; font-weight: bold; }
+        .section {
+            padding: 30px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .section:last-child { border-bottom: none; }
+        .section h2 {
+            color: #667eea;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        .subsection {
+            margin-bottom: 30px;
+        }
+        .subsection h3 {
+            color: #495057;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 3px solid #764ba2;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        thead {
+            background: #667eea;
+            color: white;
+        }
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+        tbody tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        .mismatch-high { color: #dc3545; font-weight: 600; }
+        .status-ok { color: #28a745; }
+        .status-warning { color: #ffc107; font-weight: 600; }
+        .status-error { color: #dc3545; font-weight: 600; }
+        .action-plan {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .action-plan strong { color: #1565c0; }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+        .badge-success { background: #d4edda; color: #155724; }
+        .badge-danger { background: #f8d7da; color: #721c24; }
+        .badge-warning { background: #fff3cd; color: #856404; }
+        .badge-info { background: #d1ecf1; color: #0c5460; }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9em;
+            border-top: 2px solid #e9ecef;
+        }
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>REDCap Sandbox Field Consistency & Scoring Validation</h1>
+            <p>Comprehensive report on BS (PID 6207) and Caregiver (PID 6205) sandbox alignment with originals</p>
+        </header>
+
+        <div class="summary">
+            <div class="stat-card">
+                <h3>BS Sandbox Status</h3>
+                <div class="value" style="color: #28a745;">✓ ALIGNED</div>
+                <p style="color: #6c757d; font-size: 0.9em; margin-top: 8px;">All shared fields match original (PID 5484)</p>
+            </div>
+            <div class="stat-card">
+                <h3>Caregiver Sandbox Status</h3>
+                <div class="value" style="color: #28a745;">✓ ALIGNED</div>
+                <p style="color: #6c757d; font-size: 0.9em; margin-top: 8px;">All shared fields match original (PID 4218) + 1 helper field</p>
+            </div>
+            <div class="stat-card">
+                <h3>Data-Level Mismatches</h3>
+                <div class="value">53</div>
+                <p style="color: #6c757d; font-size: 0.9em; margin-top: 8px;">45 caregiver + 8 BS (stale values, not schema issues)</p>
+            </div>
+            <div class="stat-card">
+                <h3>Affected Records</h3>
+                <div class="value">53</div>
+                <p style="color: #6c757d; font-size: 0.9em; margin-top: 8px;">Unique record IDs requiring recalculation</p>
+            </div>
+        </div>
+
+        <!-- SECTION 1: Designer Field Consistency -->
+        <div class="section">
+            <h2>✓ Part 1: Designer Field Consistency (COMPLETE)</h2>
+            
+            <div class="subsection">
+                <h3>BS Sandbox (PID 6207) vs Original (PID 5484)</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Validation Metric</th>
+                            <th>Result</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Field Count Match</strong></td>
+                            <td>153 fields = 153 fields</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Missing Fields</strong></td>
+                            <td>0 fields</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Extra Fields</strong></td>
+                            <td>0 fields</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Shared Field Label Drift</strong></td>
+                            <td>0 fields differ (32 normalized)</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Field Order Drift</strong></td>
+                            <td>0 fields out of sequence</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subsection">
+                <h3>Caregiver Sandbox (PID 6205) vs Original (PID 4218)</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Validation Metric</th>
+                            <th>Result</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Field Count</strong></td>
+                            <td>218 (217 shared + 1 helper)</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Missing Shared Fields</strong></td>
+                            <td>0 fields</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Intentional Extra Field</strong></td>
+                            <td><code>csbs_totalss_auto</code> (helper, clearly labeled)</td>
+                            <td><span class="badge badge-info">ℹ HELPER</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Shared Field Label Drift</strong></td>
+                            <td>0 fields differ (22 normalized)</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Field Order Drift</strong></td>
+                            <td>0 shared fields out of sequence</td>
+                            <td><span class="badge badge-success">✓ PASS</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="action-plan">
+                <strong>✓ Designer Consistency Complete</strong> – All existing shared fields are now fully aligned with originals in label, type, and order. The caregiver sandbox's intentional helper field is clearly marked to avoid confusion.
+            </div>
+        </div>
+
+        <!-- SECTION 2: Affected Records Data -->
+        <div class="section">
+            <h2>Part 2: Data-Level Scoring Mismatches – Affected Records</h2>
+
+            <div class="subsection">
+                <h3>BS Sandbox (PID 6207) – 8 Records Needing Recalculation</h3>
+                <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">
+                    These records have stale percentile values that don't match their standard-score mappings.
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Record ID</th>
+                            <th>Event</th>
+                            <th>Field (Percentile)</th>
+                            <th>Current (Stale)</th>
+                            <th>Expected</th>
+                            <th>Source Standard Score</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>5009--2</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_understandingpercentile</code></td>
+                            <td class="mismatch-high">9</td>
+                            <td>84</td>
+                            <td>13</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5019--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_speechpercentile</code></td>
+                            <td class="mismatch-high">16</td>
+                            <td>1</td>
+                            <td>3</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5021--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_gesturespercentile</code></td>
+                            <td class="mismatch-high">26</td>
+                            <td>16</td>
+                            <td>7</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5073--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_symbolicpercentile</code></td>
+                            <td class="mismatch-high">10</td>
+                            <td>16</td>
+                            <td>7</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5108--2</strong></td>
+                            <td>9_months_arm_1</td>
+                            <td><code>csbsbs_speechpercentile</code></td>
+                            <td class="mismatch-high">17</td>
+                            <td>16</td>
+                            <td>7</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5111--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_totalpercentilepre</code></td>
+                            <td class="mismatch-high">75</td>
+                            <td>77</td>
+                            <td>111</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5124--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_totalpercent</code></td>
+                            <td class="mismatch-high">2</td>
+                            <td>4</td>
+                            <td>73</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5145--1</strong></td>
+                            <td>12_months_arm_1</td>
+                            <td><code>csbsbs_objectpercentilepre</code></td>
+                            <td class="mismatch-high">5</td>
+                            <td>25</td>
+                            <td>8</td>
+                            <td><span class="badge badge-warning">RECALC</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="subsection">
+                <h3>Caregiver Sandbox (PID 6205) – 45 Records Needing Recalculation</h3>
+                <p style="color: #6c757d; margin-bottom: 15px; font-size: 0.95em;">
+                    All have identical pattern: <code>cbscg_totalscore</code> is exactly 1 point too low. 
+                    Expected = Social + Speech + Symbolic composite scores.
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Record ID</th>
+                            <th>Event</th>
+                            <th>Social</th>
+                            <th>Speech</th>
+                            <th>Symbolic</th>
+                            <th>Current Total</th>
+                            <th>Expected Total</th>
+                            <th>Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>5001</strong></td>
+                            <td>Event 15133</td>
+                            <td>44</td>
+                            <td>17</td>
+                            <td>27</td>
+                            <td class="mismatch-high">87</td>
+                            <td>88</td>
+                            <td><span class="badge badge-danger">-1</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5004</strong></td>
+                            <td>Event 15131</td>
+                            <td>20</td>
+                            <td>10</td>
+                            <td>9</td>
+                            <td class="mismatch-high">38</td>
+                            <td>39</td>
+                            <td><span class="badge badge-danger">-1</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5005</strong></td>
+                            <td>Event 15134</td>
+                            <td>44</td>
+                            <td>32</td>
+                            <td>46</td>
+                            <td class="mismatch-high">121</td>
+                            <td>122</td>
+                            <td><span class="badge badge-danger">-1</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5007</strong></td>
+                            <td>Event 15133</td>
+                            <td>37</td>
+                            <td>12</td>
+                            <td>19</td>
+                            <td class="mismatch-high">67</td>
+                            <td>68</td>
+                            <td><span class="badge badge-danger">-1</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>5008</strong></td>
+                            <td>Event 15134</td>
+                            <td>46</td>
+                            <td>38</td>
+                            <td>45</td>
+                            <td class="mismatch-high">128</td>
+                            <td>129</td>
+                            <td><span class="badge badge-danger">-1</span></td>
+                        </tr>
+                        <tr>
+                            <td colspan="7" style="text-align: center; padding: 20px; background: #f8f9fa; font-weight: 600; color: #495057;">
+                                ... 40 more records with identical -1 pattern ...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p style="color: #6c757d; margin: 15px 0; font-size: 0.9em;">
+                    <strong>Note:</strong> Complete list of all 45 records available in terminal output or via REDCap API export. Pattern is consistent: all totals are exactly 1 point below expected sum.
+                </p>
+            </div>
+        </div>
+
+        <!-- SECTION 3: Remediation Plan -->
+        <div class="section">
+            <h2>Part 3: Safe Sandbox-Only Recalculation Plan</h2>
+
+            <div class="subsection">
+                <h3>BS Sandbox Remediation (PID 6207)</h3>
+                <div class="action-plan">
+                    <strong>Risk Level: LOW</strong> – Only 8 records in isolated sandbox with percentile-only mismatches
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Step</th>
+                            <th>Action</th>
+                            <th>REDCap Interface</th>
+                            <th>Expected Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>Navigate to each affected record's event</td>
+                            <td>Data Entry → Select record + event from list above</td>
+                            <td>Open data entry form in edit mode</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>Verify source standard score field is non-blank</td>
+                            <td>Check the "Source Standard Score" column value is present</td>
+                            <td>Confirm scoring source data exists</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>Save the record (no changes needed)</td>
+                            <td>Click "Save" button in form footer</td>
+                            <td>REDCap formulas recalculate percentile fields to match standard scores</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>Verify percentile field updated</td>
+                            <td>Reload page and confirm new value matches "Expected" column</td>
+                            <td>Percentile value now correct</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="margin-top: 20px; padding: 15px; background: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px;">
+                    <strong style="color: #2e7d32;">Automation Option:</strong> If your REDCap project has a data-access API and scoring module, you can batch-update all 8 percentile fields via REST API by re-saving each record.
+                </div>
+            </div>
+
+            <div class="subsection">
+                <h3>Caregiver Sandbox Remediation (PID 6205)</h3>
+                <div class="action-plan">
+                    <strong>Risk Level: LOW</strong> – Isolated sandbox with consistent -1 offset pattern (easy to verify and roll back if needed)
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Step</th>
+                            <th>Action</th>
+                            <th>REDCap Interface</th>
+                            <th>Expected Outcome</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1</strong></td>
+                            <td>Use Record Status Dashboard for bulk operations</td>
+                            <td>Project Setup → Record Status Dashboard (PID 6205)</td>
+                            <td>See all 45 affected records grouped by event</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2</strong></td>
+                            <td>For each record, open the csbs_caregiver form</td>
+                            <td>Click record ID → csbs_caregiver form instance</td>
+                            <td>Data entry form loads in edit mode</td>
+                        </tr>
+                        <tr>
+                            <td><strong>3</strong></td>
+                            <td>Verify all three composite fields are populated</td>
+                            <td>Check csbs_socialcomposite, csbs_speechcomposite, csbs_symboliccomposite</td>
+                            <td>Confirm all three contain numeric values</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4</strong></td>
+                            <td>Save the record (no changes needed)</td>
+                            <td>Click "Save" button at form bottom</td>
+                            <td>REDCap recalculates cbscg_totalscore from composite sum</td>
+                        </tr>
+                        <tr>
+                            <td><strong>5</strong></td>
+                            <td>Verify total score field updated</td>
+                            <td>Reload page, confirm cbscg_totalscore = Social+Speech+Symbolic</td>
+                            <td>All 45 records have corrected totals</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="margin-top: 20px; padding: 15px; background: #fce4ec; border-left: 4px solid #e91e63; border-radius: 4px;">
+                    <strong style="color: #880e4f;">Batch Approach (Recommended for 45 records):</strong>
+                    <ol style="margin: 10px 0 0 20px; color: #880e4f;">
+                        <li>Export raw data from PID 6205 csbs_caregiver form via Data Export Tools</li>
+                        <li>Identify records with (Social + Speech + Symbolic - 1) = cbscg_totalscore</li>
+                        <li>Create a simple re-import CSV touching only record ID + event + one dummy field</li>
+                        <li>Import via Data Import Tool → REDCap triggers form auto-calc on save</li>
+                        <li>Verify all totals corrected in a follow-up API query</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="subsection">
+                <h3>Verification Checklist</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>After Remediation</th>
+                            <th>Check Method</th>
+                            <th>Success Criteria</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>BS Percentiles</strong></td>
+                            <td>Run API query for all 8 records, compare percentiles</td>
+                            <td>0 mismatches between standard score and percentile mapping</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Caregiver Totals</strong></td>
+                            <td>Run API query for all 45 records, check total = sum of composites</td>
+                            <td>All totals equal exact sum with 0 remainder errors</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Designer Stability</strong></td>
+                            <td>Re-run field parity audit (original vs sandbox)</td>
+                            <td>No regression: 0 new label/order drifts introduced</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">
+            <strong>Report Generated:</strong> 2026-09-21 | <strong>Validation Scope:</strong> BS PID 6207 vs 5484 | Caregiver PID 6205 vs 4218<br>
+            <strong>Status:</strong> ✓ Designer Field Consistency Complete | ◐ Data-Level Remediation Pending
+        </div>
+    </div>
+</body>
+</html>
