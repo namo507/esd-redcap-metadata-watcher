@@ -408,11 +408,51 @@ def build_study_registry(project_dir: Path) -> dict[str, dict[str, object]]:
     return registry
 
 
+def _backfill_5749_timing_from_4700(df: pd.DataFrame, cache_dir: Path) -> pd.DataFrame:
+    """Backfill missing survey timestamps and section duration metrics for records 1-445 in 5749 from 4700."""
+    matches_4700 = sorted(cache_dir.glob("4700_record_*.parquet"))
+    if not matches_4700:
+        return df
+    try:
+        df_4700 = pd.read_parquet(matches_4700[-1])
+        df_out = df.copy()
+        timing_cols = [
+            "eligibility_timestamp",
+            "family_information_form_timestamp",
+            "get_time_fif", "get_min_fif", "get_secs_fif", "format_secs_fif", "survey_time_fif",
+            "values_timestamp",
+            "get_time_val", "get_min_val", "get_secs_val", "format_secs_val", "survey_time_val",
+            "tfa_timestamp",
+            "get_time_tfa", "get_min_tfa", "get_secs_tfa", "format_secs_tfa", "survey_time_tfa",
+            "demographics_timestamp",
+            "get_time_demo", "get_min_demo", "get_secs_demo", "format_secs_demo", "survey_time_demo",
+        ]
+        cols_to_transfer = [c for c in timing_cols if c in df_4700.columns and c in df_out.columns]
+        map_4700 = df_4700.set_index(df_4700["record_id"].astype(str))[cols_to_transfer]
+        rec_ids_str = df_out["record_id"].astype(str)
+
+        needs_fill = (
+            (df_out["eligibility_timestamp"].isna() | (df_out["eligibility_timestamp"] == ""))
+            & rec_ids_str.isin(map_4700.index)
+        )
+        if needs_fill.any():
+            target_ids = rec_ids_str[needs_fill]
+            for col in cols_to_transfer:
+                filled_vals = target_ids.map(map_4700[col])
+                valid_mask = needs_fill & filled_vals.notna() & (filled_vals != "")
+                df_out.loc[valid_mask, col] = filled_vals[valid_mask]
+        return df_out
+    except Exception:
+        return df
+
+
 def _load_project_records(cache_dir: Path, project_id: int, source_project: str) -> pd.DataFrame:
     matches = sorted(cache_dir.glob(f"{project_id}_record_*.parquet"))
     if not matches:
         raise FileNotFoundError(f"No {project_id} record cache found.")
     df = pd.read_parquet(matches[-1]).copy()
+    if project_id == 5749:
+        df = _backfill_5749_timing_from_4700(df, cache_dir)
     df, _ = fold_language_twins(df)
     df["record_id"] = df["record_id"].astype(str)
     df["source_project"] = source_project
@@ -425,7 +465,10 @@ def _load_raw_project_records(cache_dir: Path, project_id: int) -> pd.DataFrame:
     matches = sorted(cache_dir.glob(f"{project_id}_record_*.parquet"))
     if not matches:
         raise FileNotFoundError(f"No {project_id} record cache found.")
-    return pd.read_parquet(matches[-1])
+    df = pd.read_parquet(matches[-1]).copy()
+    if project_id == 5749:
+        df = _backfill_5749_timing_from_4700(df, cache_dir)
+    return df
 
 
 def _load_project_metadata(cache_dir: Path, project_id: int) -> pd.DataFrame:
