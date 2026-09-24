@@ -1,0 +1,24 @@
+Project Title,PID,custom link,public link,Created,Last Modified,Records (n),Population,Valid?,Notes
+Parent Perspectives on Infant ASD Diagnosis and TreatmentPID 4311,4311,https://redcap.link/infantautism,https://redcap.research.sc.edu/surveys/?s=K9EWCYLRDWJ7ETE8,05/13/2025 11:30pm,07/02/2025 1:12pm,10,NA,No,Test version
+old-Infant Autism Screening,4581,https://redcap.link/babyautismtest,https://redcap.research.sc.edu/surveys/?s=M9PC3NFWNWC8Y7T9,08/09/2025 8:10am,03/11/2026 3:49pm,"1,779",Global,Mixed,"Widely publicized, social media, etc. Which are real?"
+[archive] Infant Autism Screening-27Sep25,4700,https://redcap.link/infantscreen,https://redcap.research.sc.edu/surveys/?s=MNW9C4A9MLXAD8J7,09/09/2025 5:27pm,05/06/2026 11:42am,445,Second round attempt with new security/bot identification measures in place,Mixed,Linked from esdlabsc.com. Which are real?
+Infant Autism Screening,4797,https://redcap.link/autismscreen,https://redcap.research.sc.edu/surveys/?s=LXK9APPPR9ENM8N7,09/27/2025 9:12am,03/25/2026 2:14pm,177,CAN Registry,Yes,Confirmed Real
+Infant Autism Screening - ICIS,4931,.,https://redcap.research.sc.edu/surveys/?s=YAJRDWJ4FMDH4LRJ,10/24/2025 8:28am,11/14/2025 9:35am,10,ICIS Board,Yes,Confirmed Real
+Infant Autism Screening-27Sep25_bilingual-13Jul26,5749,https://redcap.link/uscautismstudy,https://redcap.research.sc.edu/surveys/?s=XDP3JXWPC87ECTHK,05/06/2026 11:42am,07/22/2026 7:37am,518,Prisma List,Mixed,Records 1-445 are from PID 4700. New records are valid.
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,,,,
+,,,,,,Next steps,,,
+,,,,,,,Diffs in survey questions between the 4700 and 4797 surveys (Labiba),,
+,,,,,,,"Send to group of 500 Prisma (do we need to send 4797 instead? If so, we need to translate that)",,
+,,,,,,,Diffs in responses between the 4 surveys in red above (Labiba),,
+,,,,,,,Diffs between 73 Prisma List; 177 real; 1779; 445 partially real?,,
+,,,,,,,Can we do any bot detection? (Labiba & Namit),,
+,,,,,,,Cluster analyses (Namit),,
+,,,,,,,Characterization/Outcome Variables for Clustering - do clusters differ on these variables?,,
+,,,,,,,Demographic,,
+,,,,,,,Values,,
+,,,,,,,Autism Knowledge,,
+,,,,,,,Screen vs Not,,
