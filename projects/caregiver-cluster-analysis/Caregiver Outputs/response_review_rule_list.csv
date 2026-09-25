@@ -1,0 +1,29 @@
+Item,Field Name,Flag,Rule ID,Status
+Survey completion speed (whole survey),"get_time_fif, get_time_val, get_time_tfa, get_time_demo",Total of 4 section times < 11.57 min — flags unusually fast completion,R1,Implemented
+Thoughts & Feelings section speed,get_time_tfa,TFA section time < 7.85 min,R2,Implemented
+Any section below time floor,"get_time_fif, get_time_val, get_time_tfa, get_time_demo","Individual section below floor (FIF<2.55, Val<0.22, TFA<6.67, Demo<0.95 min)",R3,Implemented
+Straight-lining in rating blocks,Values and TFA rating-scale items,"Rating block with >=4 items, >=80% answered, and SD < 0.15 — same answer repeated",R4,Implemented
+Identical response fingerprint,All rating-scale items (SHA-256 hash),Exact match on >=20 rating items with another record in same study,R5,Implemented
+Sign-up burst (cluster of submissions),eligibility_timestamp,>=2 other records started within ±120 seconds in same study,R6,Implemented
+Highly similar written responses,Free-text comment/explain/feedback fields,"TF-IDF cosine similarity > 0.90 on narratives (>=100 chars, >=20 words)",R7,Implemented
+Family count / branching inconsistency,"fif_num_autistic, fif_num_children, fif_childrens_ages","Impossible combinations: autistic > total children, age bands > child count, zero autism with gated follow-up answered",R8,Implemented
+Age or postal information,"age_confirm_elig, demo_momdob, zip_demo, dob_child1","Age outside 18-100, malformed US ZIP, or parent-birth-year interval outside 10-60",R9,Implemented
+Temporary/disposable email domain,"demo_email, email_elig","Email domain on known disposable/temporary list (e.g., mailinator, guerrillamail)",R10,Implemented
+Completed survey with no email,"demo_email, email_elig",All 4 sections complete but no participant email provided,R11,Implemented
+Overnight survey start,eligibility_timestamp,Survey started between midnight and 5am (REDCap local time),R12,Implemented
+What does a parent usually do in the situation pictured below? (Band-Aid attention check),elig_knee,Not checking 'Puts on a Band-Aid' or checking that in addition to other responses,R13,Implemented
+Pronouns and Gender,"pronouns_elig, demo_gender","Mismatched pronoun and gender responses (e.g., selecting 'she' and 'man')",R14,Implemented
+Disability vs. autism contradiction,"fif_child_needs, fif_num_autistic",Reports 'No' disability but identifies >=1 autistic child,R15,Implemented
+Free-text contains standalone word 'test',All text/notes fields,Record excluded pre-screening if any free-text field contains the standalone word 'test' (case-insensitive). Already applied as a source-level exclusion.,Excl-A,Implemented (exclusion)
+Free-text placeholder/nonsense detection,All comment/explain/feedback/reason fields,"Responses consisting only of placeholder text ('n/a', 'asdf', '123', repeated characters like 'aaaa'). Short but valid answers should NOT be flagged.",Proposed-G,Proposed — needs approval
+Education level vs. age cross-check,"demo_education, age_confirm_elig","Claimed education level is impossible given stated age (e.g., doctoral degree at age 20)",Proposed-F1,Proposed — needs approval
+Duplicate email across studies,"demo_email, email_elig",Same email address used across multiple study PIDs (not just within one study),Proposed-H1,Proposed — needs approval
+Email confirmation field mismatch,"demo_email, demo_email_confirm / demo_email2",Primary email and confirmation email do not match — may indicate copy-paste error or intentional variation,Proposed-H2,Implemented (contact hold)
+Very fast overall completion (< 5 min),Whole survey minutes,Survey completed in under 5 minutes total — extremely unlikely for genuine respondent,Proposed-I1,Proposed — needs approval
+Child birth year vs parent birth year impossible interval,"dob_child1, demo_momdob",Parent was <10 or >60 years old at first child's birth — already partially in R9 but could be its own hard-exclusion rule,Proposed-F2,Partially implemented in R9
+Prenatal testing mutually exclusive branching violation,"fif_pregnant, fif_prenatal_preg, fif_prenatal_no_preg","Answering both pregnant and non-pregnant follow-ups, or answering testing reasons without answering the prenatal gate",Proposed-B1,Proposed — needs approval
+Earlier diagnosis reason answered without gate,"fif_diag_earlier, fif_diag_early_yes, fif_diag_early_no",Submitting reasons for earlier diagnosis when respondent explicitly answered 'No' (or left blank) the gate question asking if child received an earlier diagnosis,Proposed-B2,Proposed — needs approval
+Country and Postal Code format mismatch,"demo_country, zip_demo, demo_state","Selecting US residence but providing non-US/Canadian alphanumeric postal code, or obvious dummy ZIP ('00000', '12345', <5 digits)",Proposed-F3,Proposed — needs approval
+Composite duplication score,Email hash + demographic pattern + timing + response fingerprint,"Multiple weak duplication signals combined (e.g., same email domain + similar timing + similar demographics without being the same person)",Proposed-H3,Proposed — needs approval
+Missing all timing data on complete survey,"get_time_fif/val/tfa/demo, completion status",All 4 sections marked complete but zero section-timing fields available — review for data integrity,Proposed-I2,Implemented (review concern)
+Non-numeric or impossible number-of-children response,fif_num_children,"Number of children field contains non-numeric value or impossible number (e.g., 0 children for a 'caregiver' survey)",Proposed-E1,Proposed — needs approval

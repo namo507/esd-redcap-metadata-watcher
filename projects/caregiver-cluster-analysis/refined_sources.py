@@ -83,12 +83,17 @@ def load_study_registry(project_dir: Path) -> dict[int, dict[str, Any]]:
         row = reference.loc[str(pid)]
         order, short = STUDY_ORDER[pid]
         title, population = row["Project Title"].strip(), row["Population"].strip()
+        display_title = title
+        display_pid = str(pid)
+        if pid == 5749:
+            display_title = f"{title} / [archive] Infant Autism Screening-27Sep25"
+            display_pid = f"{pid} / PID 4700"
         registry[pid] = {
             "source_project": source_project, "project_id": pid,
             "study_name": title, "population": population,
             "reference_validity": row["Valid?"], "reference_notes": row["Notes"],
             "reference_record_count": row["Records (n)"],
-            "display_label": f"Study {order} - {title} [{population}] (PID {pid})",
+            "display_label": f"Study {order} - {display_title} [{population}] (PID {display_pid})",
             "sheet_name": f"Study {order} - {short} (PID {pid})",
             "token_env": settings["token_env"],
         }
