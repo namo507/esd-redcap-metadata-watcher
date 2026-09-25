@@ -1,0 +1,12 @@
+Variable / Field Name,Form Name,Section Header,Field Type,Field Label,"Choices, Calculations, OR Slider Labels",Field Note,Text Validation Type OR Show Slider Number,Text Validation Min,Text Validation Max,Identifier?,Branching Logic (Show field only if...),Required Field?,Custom Alignment,Question Number (surveys only),Matrix Group Name,Matrix Ranking?,Field Annotation
+record_id,caregiver_verification,,text,Participant Record ID,,,,,,y,,,,,,,
+participant_email,caregiver_verification,Participant Contact Information,text,Please confirm your email address:,,Used to link your verification response to your study compensation,email,,,y,,y,,,,,
+verify_birth_year,caregiver_verification,Verification Questions,text,What year were you born? (YYYY),,"Enter 4-digit year, e.g., 1992",integer,1920,2008,y,,y,,1,,,
+verify_zip,caregiver_verification,,text,What is your 5-digit home ZIP code?,,5-digit US ZIP code,zipcode,,,,,y,,2,,,
+verify_num_children,caregiver_verification,,dropdown,How many children do you have?,"1, 1 | 2, 2 | 3, 3 | 4, 4 | 5, 5 | 6, 6 | 7, 7 | 8, 8+",,,,,,,y,,3,,,
+verify_education,caregiver_verification,,radio,What is your highest level of education completed?,"1, Less than 8th grade | 2, 9th-11th grade | 3, High school diploma or GED | 4, Some college courses | 5, Trade or Vocational School | 6, Associates or 2-year College Degree | 7, Bachelor's degree | 8, Master's degree | 9, Professional degree (MD, PhD, JD) | 10, Doctorate degree (PhD, EdD)",,,,,,,y,,4,,,
+verify_child_needs,caregiver_verification,,radio,Do any of your children have special needs or disabilities?,"1, Yes | 0, No",,,,,,,y,,5,,,
+verify_pronouns,caregiver_verification,,radio,What are your pronouns?,"1, He/Him/His | 2, She/Her/Hers | 3, They/Them/Theirs | 4, Other",,,,,,,y,,6,,,
+verify_knee,caregiver_verification,,radio,What does a parent usually do in the situation pictured below? (Child with a scraped knee),"1, Flips on a light | 2, Puts on a Band-Aid | 3, Jumps in the pool | 4, Tells them to do their homework | 5, Turns on a fan | 6, Takes to the ER immediately | 7, I don't know",Attention check,,,,,,y,,7,,,
+verify_comments,caregiver_verification,Feedback,notes,Any additional comments or questions for our research team? (optional),,,,,,,,,,,,,
+caregiver_verification_complete,caregiver_verification,,dropdown,Complete?,"0, Incomplete | 1, Unverified | 2, Complete",,,,,,,,,,,,
