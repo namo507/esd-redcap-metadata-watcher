@@ -8208,3 +8208,15 @@ def export_rules_records_workbook(
                 )
 
     return output_path
+
+
+# ── Stakeholder Simplified All Responses Export ─────────────────────────────
+try:
+    from build_simplified_responses import generate_simplified_all_responses_excel
+except ImportError:
+    from .build_simplified_responses import generate_simplified_all_responses_excel
+
+__all__ = [
+    *globals().get("__all__", []),
+    "generate_simplified_all_responses_excel",
+]
