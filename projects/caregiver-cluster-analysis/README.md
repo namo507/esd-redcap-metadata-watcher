@@ -1,5 +1,66 @@
 # Caregiver Acceptability Cluster Analysis
 
+## Refined response screening workbook
+
+For the current multi-study payment review, run `bot_analysis.ipynb` from top to
+bottom. It writes `Caregiver Outputs/restricted/ESD_AllResponses_AllStudies_2026-09-24.xlsx`.
+The dated workbook is a restricted record-level deliverable; the notebook shows
+aggregate results without contact information.
+
+This workflow uses `refined_sources.py`, `refined_screening.py`, and
+`generate_all_responses_excel.py`. It verifies the four REDCap project identities
+against `Survey Summary and Notes 07222026(Sheet1).csv` and reads the following
+credentials from the repository-root `.env`, without logging their values:
+
+| PID | Token variable | Study |
+|---|---|---|
+| 4797 | `TOKEN_CLEAN_4797` | Infant Autism Screening — CAN Registry |
+| 4581 | `TOKEN_DIRTY_4581` | old-Infant Autism Screening — Global |
+| 5749 | `TOKEN_BILINGUAL_5749` | Infant Autism Screening-27Sep25_bilingual-13Jul26 — Prisma List |
+| 4931 | `TOKEN_ICIS_4931` | Infant Autism Screening - ICIS |
+
+`REDCAP_API_URL` supplies the endpoint. Fresh API verification is the default.
+An identity mismatch or failed source fetch stops the export. An explicitly
+selected cached run verifies the saved snapshot's checksums and reports its
+original extraction time; it never substitutes a stale cache after a failed refresh.
+
+The prospective PID 5749 cohort excludes copied records 1–445 and retains the
+existing pre-launch exclusion of 446–473. All projects exclude a response when
+any source free-text field contains the whole word `test`, case-insensitively.
+This includes ordinary phrases such as “autism test,” as requested. Every
+excluded PID/record key and reason remains in the restricted audit.
+Spanish values are folded using the actual metadata and language choices.
+
+The workbook retains all 15 requested checks and their weighted risk score.
+The final action also considers completion, contact details, source issues,
+and independent substantive evidence. Multiple timing flags count as one
+evidence family. Contextual signals, including pronoun/gender pairings, do not
+establish bot activity. The score-only proposal is shown separately for comparison.
+The rule key and record-level reasons describe the implemented policy.
+
+Excel regression checks recompute rule flags, score, and action from exported
+evidence. Rule violations and regression failures have different meanings:
+the first describes a response, and the second indicates a calculation mismatch.
+The workbook is regenerated and validated before replacing the prior output.
+
+Workbook generation requires Node.js, the Codex `@oai/artifact-tool` runtime,
+and LibreOffice (`soffice` or `libreoffice`) on `PATH`. The artifact dependency is
+resolved from the Codex runtime cache, or from `CODEX_ARTIFACT_NODE_MODULES` when
+explicitly set to another installed runtime's `node_modules` directory.
+`openpyxl` is used only to inspect the saved formulas and cached results.
+
+From the repository root:
+
+```bash
+.venv312/bin/python -m jupyter nbconvert --execute --to notebook --inplace \
+  projects/caregiver-cluster-analysis/bot_analysis.ipynb
+.venv312/bin/python -m pytest projects/caregiver-cluster-analysis/tests/ -q
+```
+
+The sections below describe the separate historical clustering workflow and its
+original two-study reference counts. Those fixed counts do not define the
+refined live screening cohort.
+
 ## What this project does
 
 This project analyzes **1,956 caregiver survey responses** from the Infant Autism
