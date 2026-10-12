@@ -1,5 +1,16 @@
 # Caregiver Acceptability Cluster Analysis
 
+## Active decision-driving files
+
+This project surface is intentionally limited to the files that currently drive the cluster recommendation and stakeholder decisions.
+
+- `caregiver_cluster_simple_metrics.ipynb` — the live, reader-facing notebook that runs the current cluster analysis and writes the decision outputs
+- `valid_data_clusters.py` — the Valid_Data logic, score definitions, trust checks, and group comparison code used in Section D
+- `tests/test_valid_data_clusters.py` — the regression checks for the live verification rule, scoring ranges, and group comparison logic
+- `Caregiver Outputs/` — the active figures and tables generated from the current analysis run
+
+Historical exploratory and retired scripts, notebooks, and temporary workflow code have been moved to `archive/2026-10-12-legacy-workflow/` so the active decision path is easy to find and review.
+
 ## Refined response screening workbook
 
 For the current multi-study payment review, run `bot_analysis.ipynb` from top to
@@ -56,6 +67,35 @@ From the repository root:
   projects/caregiver-cluster-analysis/bot_analysis.ipynb
 .venv312/bin/python -m pytest projects/caregiver-cluster-analysis/tests/ -q
 ```
+
+## Cluster analysis on Valid_Data (notebook section D)
+
+Section D at the end of `caregiver_cluster_simple_metrics.ipynb` is the current
+cluster analysis. It stands on its own: run its cells from the project folder.
+Helpers live in `valid_data_clusters.py`.
+
+**Valid_Data** = every response the bot screen cleared (*Pay Now*, the same rules
+as `Simplified all responses.xlsx`) plus every flagged or excluded response whose
+owner passed the Caregiver Respondent Verification Survey (PID 6277,
+`TOKEN_VERIFICATION_6277`): birth year, ZIP code and education all matching the
+original survey. The original survey must be finished.
+
+- Every run pulls the four studies and PID 6277 live (`LIVE_PULL = False` re-reads
+  the last verified snapshot instead). The 6277 export is saved owner-only beside
+  the study snapshot it was analysed with.
+- The pass is recomputed from the live answers with REDCap's own formula. REDCap
+  stores its calculated flag when a record is saved, and on 2026-10-12 seven
+  stored flags were stale (answers present, flag still "awaiting").
+- Scores are the ten locked TFA domains with answer ranges read from metadata.
+  This corrects two errors in `build_cluster_domains` that never surfaced in the
+  4797-only cohort: `tfa_scan_any` has six options, not five (scores went
+  negative), and "I would not do this kind of test at all" scored 125 on accuracy
+  (now blank).
+- Writes `Caregiver Outputs/table_47_valid_data_group_comparison.csv` (averages
+  only) and `Caregiver Outputs/restricted/valid_data_groups_<date>.csv` (record
+  level, git-ignored). Charts use the ESD Lab palette and Libre Franklin from
+  `assets/fonts/` (the static Medium and Bold files; matplotlib reads the variable
+  font at its thinnest weight).
 
 The sections below describe the separate historical clustering workflow and its
 original two-study reference counts. Those fixed counts do not define the
@@ -137,6 +177,7 @@ python3 -m pytest tests/ -v
 | `caregiver_analysis_pipeline.py` | The 4,600-line reusable pipeline: API ingestion, trust screen, clustering, modeling, and figure generation. All analysis logic lives here. |
 | `bot_analysis.py` | Reader-facing bot-analysis helpers used by the notebook: the survey-system pull, the screening-evidence tables, the weighted risk score, and both Excel workbooks. |
 | `bot_analysis.ipynb` | The response-review notebook. Sections 1 to 4 explain and test the rules; section 5 adds the weighted risk score; section 6 triages the check-by-hand pile; section 7 lays out the rules broken two ways; section 8 writes the spreadsheets. |
+| `valid_data_clusters.py` | Notebook section D: the live PID 6277 pull, the Valid_Data rule, the ten 0-100 attitude scores, the two-group k-means fit, group comparisons, and the section's charts. |
 | `config.yaml` | Seeds, thresholds, tiers, and modeling configuration. Change parameters here, not in the code. |
 | `requirements.txt` | Pinned Python dependencies. |
 
@@ -179,6 +220,7 @@ python3 -m pytest tests/ -v
 | `tests/test_branching_logic_audit.py` | Tests for the R8 branching-logic audit rule. |
 | `tests/test_tier1_rule_overlap.py` | Tests for the Tier 1 rule overlap tables. |
 | `tests/test_bot_declaration_policy.py` | Tests for the bot declaration policy decision table and review queue CSV. |
+| `tests/test_valid_data_clusters.py` | Tests for the Valid_Data rule, the verification recheck, the attitude-score scales, group naming, and the comparison formula shown in section D. |
 
 ### Archive
 
