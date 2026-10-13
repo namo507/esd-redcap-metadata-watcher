@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mullen Scales of Early Learning — Paper Layout & Automated Scoring System</title>
+<style>
+  :root {
+    --primary: #1a365d;
+    --primary-light: #2b6cb0;
+    --accent: #2c5282;
+    --bg-light: #f7fafc;
+    --border: #cbd5e0;
+    --border-dark: #718096;
+    --text: #2d3748;
+    --highlight: #ebf8ff;
+    --success-bg: #f0fff4;
+    --success-border: #9ae6b4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: #edf2f7;
+    margin: 0;
+    padding: 20px;
+    line-height: 1.4;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 30px 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+  }
+  h1, h2, h3 { color: var(--primary); margin-top: 0; }
+  .header-banner {
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .header-banner h1 { margin: 0; font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .header-banner .subtitle { font-size: 13px; color: #4a5568; }
+
+  /* Metadata Grid */
+  .grid-2, .grid-3, .grid-4 { display: grid; gap: 12px 16px; margin-bottom: 16px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label { font-size: 12px; font-weight: 600; text-transform: uppercase; color: #4a5568; margin-bottom: 4px; }
+  .form-control {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    background: #fff;
+  }
+  .form-control:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2); }
+  .calc-field { background: #edf2f7; font-weight: 600; color: var(--primary); }
+
+  /* Section Styling */
+  .section-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+  }
+  .section-card h2 {
+    font-size: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Paper Score Sheet Matrix */
+  .score-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    margin-bottom: 14px;
+  }
+  .score-matrix th, .score-matrix td {
+    border: 1px solid var(--border-dark);
+    padding: 8px 12px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .score-matrix th {
+    background: #2b4c7e;
+    color: #fff;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .score-matrix tr:nth-child(even) { background: #f7fafc; }
+  .score-matrix td:first-child { text-align: left; font-weight: 600; }
+  .score-matrix .highlight-col { background: #ebf8ff; font-weight: 700; color: #2b6cb0; }
+  .score-matrix .composite-row { background: #e2e8f0; font-weight: bold; }
+  .score-matrix .composite-row td { border-top: 2px solid #2d3748; }
+
+  /* Item Roster Tabs & Tables */
+  .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 15px; }
+  .tab-btn {
+    padding: 10px 18px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    color: #718096;
+  }
+  .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: #ebf8ff; border-radius: 4px 4px 0 0; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .items-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+  .items-table th, .items-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .items-table th { background: #edf2f7; text-align: left; font-size: 12px; text-transform: uppercase; }
+  .items-table tr:hover { background: #f7fafc; }
+  .score-options { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .score-option {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    background: #edf2f7;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid #cbd5e0;
+    font-size: 12px;
+    user-select: none;
+  }
+  .score-option input { margin-right: 4px; }
+  .score-option:hover { background: #e2e8f0; }
+  .score-option.selected { background: #bee3f8; border-color: #3182ce; font-weight: bold; }
+
+  /* Floating summary toolbar */
+  .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--primary);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    position: sticky;
+    top: 10px;
+    z-index: 100;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  }
+  .toolbar .scores-summary { display: flex; gap: 20px; font-size: 14px; font-weight: 600; }
+  .toolbar .btn-group { display: flex; gap: 10px; }
+  .btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .btn-primary { background: #3182ce; color: #fff; }
+  .btn-primary:hover { background: #2b6cb0; }
+  .btn-success { background: #38a169; color: #fff; }
+  .btn-success:hover { background: #2f855a; }
+  .btn-secondary { background: #718096; color: #fff; }
+  .btn-secondary:hover { background: #4a5568; }
+
+  /* Prematurity Badge */
+  .badge-preterm {
+    background: #feebc8;
+    color: #c05621;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    display: inline-block;
+  }
+
+  /* Print Stylesheet */
+  @media print {
+    body { background: #fff; padding: 0; font-size: 11pt; color: #000; }
+    .container { max-width: 100%; padding: 0; box-shadow: none; border-radius: 0; }
+    .toolbar, .tabs, .tab-content, .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    .section-card { border: none; padding: 0; margin-bottom: 15px; }
+    .score-matrix th { background: #edf2f7 !important; color: #000 !important; border: 1px solid #000; }
+    .score-matrix th, .score-matrix td { border: 1px solid #000; padding: 6px 8px; }
+    .score-matrix .highlight-col { background: none !important; color: #000 !important; }
+    .page-break { page-break-before: always; }
+  }
+  .print-only { display: none; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Banner -->
+  <div class="header-banner">
+    <div>
+      <h1>Mullen Scales of Early Learning</h1>
+      <div class="subtitle">IPSA Lab Assessment & Double Data Entry — Paper Layout & Automated Scoring System</div>
+    </div>
+    <div class="no-print">
+      <span id="preterm-status-badge" class="badge-preterm" style="display:none;">PRETERM ADJUSTMENT ACTIVE</span>
+    </div>
+  </div>
+
+  <!-- Sticky Quick Actions Toolbar -->
+  <div class="toolbar no-print">
+    <div class="scores-summary">
+      <div>GM: <span id="tb-gm">0</span></div>
+      <div>VR: <span id="tb-vr">0</span></div>
+      <div>FM: <span id="tb-fm">0</span></div>
+      <div>RL: <span id="tb-rl">0</span></div>
+      <div>EL: <span id="tb-el">0</span></div>
+      <div>Cognitive Sum: <span id="tb-cog-sum">0</span></div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-success" onclick="window.print()">🖨️ Print Paper Score Sheet</button>
+      <button class="btn btn-primary" onclick="exportREDCapCSV()">📥 Export REDCap CSV</button>
+      <button class="btn btn-secondary" onclick="exportJSON()">💾 Save JSON</button>
+    </div>
+  </div>
+
+  <!-- Section 1: Demographics & Evaluation Header -->
+  <div class="section-card">
+    <h2>1. Participant & Evaluation Demographics</h2>
+    <div class="grid-4">
+      <div class="form-group">
+        <label>Participant ID *</label>
+        <input type="text" id="participant_id" class="form-control" placeholder="e.g., IPSA-101">
+      </div>
+      <div class="form-group">
+        <label>Visit Month</label>
+        <input type="text" id="visit_month" class="form-control" placeholder="e.g., 6m, 12m, 24m">
+      </div>
+      <div class="form-group">
+        <label>Date of Birth (DOB) *</label>
+        <input type="date" id="dob" class="form-control" onchange="calculateAges()">
+      </div>
+      <div class="form-group">
+        <label>Date of Evaluation *</label>
+        <input type="date" id="eval_date" class="form-control" onchange="calculateAges()">
+      </div>
+    </div>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>Examiner</label>
+        <input type="text" id="examiner" class="form-control" placeholder="Examiner Name">
+      </div>
+      <div class="form-group">
+        <label>Data Entry RA</label>
+        <input type="text" id="data_entry_ra" class="form-control" placeholder="Firstname Lastname">
+      </div>
+      <div class="form-group">
+        <label>Date Entered</label>
+        <input type="date" id="date_entered" class="form-control">
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Prematurity & Age Calculation Engine -->
+  <div class="section-card">
+    <h2>2. Age & Prematurity Calculation Engine</h2>
+    <div class="grid-4">
+      <div class="form-group">
+        <label>Chronological Age</label>
+        <input type="text" id="chronological_age_display" class="form-control calc-field" readonly placeholder="Auto-calculated">
+      </div>
+      <div class="form-group">
+        <label>Gestational Age at Birth</label>
+        <div style="display:flex; gap:6px;">
+          <input type="number" id="ga_weeks" class="form-control" placeholder="Weeks (e.g. 32)" min="22" max="42" onchange="calculateAges()">
+          <input type="number" id="ga_days" class="form-control" placeholder="Days" min="0" max="6" onchange="calculateAges()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Expected DOB (40-wk Term)</label>
+        <input type="text" id="expected_dob_display" class="form-control calc-field" readonly placeholder="Auto-calculated">
+      </div>
+      <div class="form-group">
+        <label>Adjusted Age (Prematurity)</label>
+        <input type="text" id="adjusted_age_display" class="form-control calc-field" readonly placeholder="Auto-calculated">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Norms Selection for Scoring</label>
+        <select id="norms_mode" class="form-control" onchange="updateAllScores()">
+          <option value="chronological">Use Chronological Age Norms</option>
+          <option value="adjusted">Use Prematurity Adjusted Age Norms</option>
+          <option value="both" selected>Display Both Chronological & Adjusted Side-by-Side</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Norms Version / Source</label>
+        <input type="text" id="norms_version" class="form-control calc-field" value="Mullen Scales of Early Learning (MSEL) Standard Standardization Norms" readonly>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 3: Paper Score Sheet Replication (IPSA Preterm & Standard Matrix) -->
+  <div class="section-card">
+    <h2>
+      <span>3. Mullen Scoring Worksheet (Paper Score Sheet Layout)</span>
+      <span style="font-size:12px; font-weight:normal; color:#718096;">Values auto-update in real time</span>
+    </h2>
+
+    <!-- Unadjusted / Chronological Matrix -->
+    <h3 style="font-size:14px; margin-bottom:6px; color:#2c5282;">Chronological Age Scores (CA: <span id="matrix-ca-label">--</span>)</h3>
+    <table class="score-matrix" id="unadjusted-matrix">
+      <thead>
+        <tr>
+          <th style="width:25%;">Scale</th>
+          <th style="width:15%;">Raw Score</th>
+          <th style="width:15%;">T Score</th>
+          <th style="width:15%;">Percentile</th>
+          <th style="width:15%;">Descriptive Category</th>
+          <th style="width:15%;">Age Equivalent</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Gross Motor</td>
+          <td id="res-gm-raw" class="highlight-col">0</td>
+          <td id="res-gm-t">--</td>
+          <td id="res-gm-p">--</td>
+          <td id="res-gm-cat">--</td>
+          <td id="res-gm-ae">--</td>
+        </tr>
+        <tr>
+          <td>Visual Reception</td>
+          <td id="res-vr-raw" class="highlight-col">0</td>
+          <td id="res-vr-t">--</td>
+          <td id="res-vr-p">--</td>
+          <td id="res-vr-cat">--</td>
+          <td id="res-vr-ae">--</td>
+        </tr>
+        <tr>
+          <td>Fine Motor</td>
+          <td id="res-fm-raw" class="highlight-col">0</td>
+          <td id="res-fm-t">--</td>
+          <td id="res-fm-p">--</td>
+          <td id="res-fm-cat">--</td>
+          <td id="res-fm-ae">--</td>
+        </tr>
+        <tr>
+          <td>Receptive Language</td>
+          <td id="res-rl-raw" class="highlight-col">0</td>
+          <td id="res-rl-t">--</td>
+          <td id="res-rl-p">--</td>
+          <td id="res-rl-cat">--</td>
+          <td id="res-rl-ae">--</td>
+        </tr>
+        <tr>
+          <td>Expressive Language</td>
+          <td id="res-el-raw" class="highlight-col">0</td>
+          <td id="res-el-t">--</td>
+          <td id="res-el-p">--</td>
+          <td id="res-el-cat">--</td>
+          <td id="res-el-ae">--</td>
+        </tr>
+        <tr class="composite-row">
+          <td>Early Learning Composite (ELC)</td>
+          <td>Cog Sum: <span id="res-cog-sum">0</span></td>
+          <td>Std Score: <span id="res-elc-ss">--</span></td>
+          <td>Rank: <span id="res-elc-p">--</span></td>
+          <td><span id="res-elc-cat">--</span></td>
+          <td>(Cognitive 4-Scale)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Prematurity Adjusted Matrix (conditional) -->
+    <div id="preterm-matrix-section">
+      <h3 style="font-size:14px; margin-top:20px; margin-bottom:6px; color:#c05621;">Mullen Scores — Adjusted for Prematurity (Adjusted Age: <span id="matrix-adj-label">--</span>)</h3>
+      <table class="score-matrix" id="adjusted-matrix">
+        <thead>
+          <tr>
+            <th style="width:25%;">Scale</th>
+            <th style="width:15%;">Raw Score</th>
+            <th style="width:15%;">T Score</th>
+            <th style="width:15%;">Percentile</th>
+            <th style="width:15%;">Descriptive Category</th>
+            <th style="width:15%;">Age Equivalent</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Gross Motor</td>
+            <td id="adj-gm-raw" class="highlight-col">0</td>
+            <td id="adj-gm-t">--</td>
+            <td id="adj-gm-p">--</td>
+            <td id="adj-gm-cat">--</td>
+            <td id="adj-gm-ae">--</td>
+          </tr>
+          <tr>
+            <td>Visual Reception</td>
+            <td id="adj-vr-raw" class="highlight-col">0</td>
+            <td id="adj-vr-t">--</td>
+            <td id="adj-vr-p">--</td>
+            <td id="adj-vr-cat">--</td>
+            <td id="adj-vr-ae">--</td>
+          </tr>
+          <tr>
+            <td>Fine Motor</td>
+            <td id="adj-fm-raw" class="highlight-col">0</td>
+            <td id="adj-fm-t">--</td>
+            <td id="adj-fm-p">--</td>
+            <td id="adj-fm-cat">--</td>
+            <td id="adj-fm-ae">--</td>
+          </tr>
+          <tr>
+            <td>Receptive Language</td>
+            <td id="adj-rl-raw" class="highlight-col">0</td>
+            <td id="adj-rl-t">--</td>
+            <td id="adj-rl-p">--</td>
+            <td id="adj-rl-cat">--</td>
+            <td id="adj-rl-ae">--</td>
+          </tr>
+          <tr>
+            <td>Expressive Language</td>
+            <td id="adj-el-raw" class="highlight-col">0</td>
+            <td id="adj-el-t">--</td>
+            <td id="adj-el-p">--</td>
+            <td id="adj-el-cat">--</td>
+            <td id="adj-el-ae">--</td>
+          </tr>
+          <tr class="composite-row">
+            <td>Early Learning Composite (ELC)</td>
+            <td>Cog Sum: <span id="adj-cog-sum">0</span></td>
+            <td>Std Score: <span id="adj-elc-ss">--</span></td>
+            <td>Rank: <span id="adj-elc-p">--</span></td>
+            <td><span id="adj-elc-cat">--</span></td>
+            <td>(Preterm Adjusted)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Paper Footer Details -->
+    <div style="margin-top:14px; padding:10px; background:#edf2f7; border-radius:4px; font-size:12px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+      <div><strong>Chronological Age:</strong> <span id="footer-ca">--</span></div>
+      <div><strong>Gestational Age at Birth:</strong> <span id="footer-ga">--</span></div>
+      <div><strong>Expected DOB:</strong> <span id="footer-exp-dob">--</span></div>
+      <div><strong>Adjusted Age:</strong> <span id="footer-adj-age">--</span></div>
+      <div style="grid-column: span 2;"><strong>Norms Used to Score:</strong> <span id="footer-norms-used">Chronological Age Norms</span></div>
+    </div>
+  </div>
+
+  <!-- Section 4: Item Record Form (All 5 Scales) -->
+  <div class="section-card no-print">
+    <h2>4. Item Record Form (Administration & Outscoring)</h2>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="openTab(event, 'tab-gm')">Gross Motor (35)</button>
+      <button class="tab-btn" onclick="openTab(event, 'tab-vr')">Visual Reception (33)</button>
+      <button class="tab-btn" onclick="openTab(event, 'tab-fm')">Fine Motor (30)</button>
+      <button class="tab-btn" onclick="openTab(event, 'tab-rl')">Receptive Language (33)</button>
+      <button class="tab-btn" onclick="openTab(event, 'tab-el')">Expressive Language (28)</button>
+    </div>
+
+    <!-- Gross Motor Items Tab -->
+    <div id="tab-gm" class="tab-content active">
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:600; font-size:14px;">Gross Motor Items (Max Score: 36)</span>
+        <div>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="setBasal('gm', 10)">Credit Items 1-10 (Basal)</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="resetScale('gm')">Clear</button>
+        </div>
+      </div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:75%;">Item Description</th>
+            <th style="width:25%; text-align:right;">Score Choice</th>
+          </tr>
+        </thead>
+        <tbody id="gm-items-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Visual Reception Items Tab -->
+    <div id="tab-vr" class="tab-content">
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:600; font-size:14px;">Visual Reception Items (Max Score: 50)</span>
+        <div>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="setBasal('vr', 10)">Credit Items 1-10 (Basal)</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="resetScale('vr')">Clear</button>
+        </div>
+      </div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:75%;">Item Description</th>
+            <th style="width:25%; text-align:right;">Score Choice</th>
+          </tr>
+        </thead>
+        <tbody id="vr-items-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Fine Motor Items Tab -->
+    <div id="tab-fm" class="tab-content">
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:600; font-size:14px;">Fine Motor Items (Max Score: 49)</span>
+        <div>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="setBasal('fm', 10)">Credit Items 1-10 (Basal)</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="resetScale('fm')">Clear</button>
+        </div>
+      </div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:75%;">Item Description</th>
+            <th style="width:25%; text-align:right;">Score Choice</th>
+          </tr>
+        </thead>
+        <tbody id="fm-items-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Receptive Language Items Tab -->
+    <div id="tab-rl" class="tab-content">
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:600; font-size:14px;">Receptive Language Items (Max Score: 48)</span>
+        <div>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="setBasal('rl', 10)">Credit Items 1-10 (Basal)</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="resetScale('rl')">Clear</button>
+        </div>
+      </div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:75%;">Item Description</th>
+            <th style="width:25%; text-align:right;">Score Choice</th>
+          </tr>
+        </thead>
+        <tbody id="rl-items-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Expressive Language Items Tab -->
+    <div id="tab-el" class="tab-content">
+      <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:600; font-size:14px;">Expressive Language Items (Max Score: 50)</span>
+        <div>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="setBasal('el', 10)">Credit Items 1-10 (Basal)</button>
+          <button class="btn btn-secondary" style="padding:4px 8px; font-size:11px;" onclick="resetScale('el')">Clear</button>
+        </div>
+      </div>
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width:75%;">Item Description</th>
+            <th style="width:25%; text-align:right;">Score Choice</th>
+          </tr>
+        </thead>
+        <tbody id="el-items-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Quality Control & Double Data Entry Verification -->
+  <div class="section-card no-print">
+    <h2>5. Quality Assurance & Double Data Entry Status</h2>
+    <div class="grid-3">
+      <div class="form-group">
+        <label>Verification Status</label>
+        <select id="double_entry_verified" class="form-control">
+          <option value="0">0 - Unverified (First Entry)</option>
+          <option value="1">1 - Verified Correct (Double Entry Matched)</option>
+          <option value="2">2 - Discrepancy Resolved</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Verified By</label>
+        <input type="text" id="verifier_name" class="form-control" placeholder="Supervisor / RA Name">
+      </div>
+      <div class="form-group">
+        <label>Verification Date</label>
+        <input type="date" id="verification_date" class="form-control">
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Clinical & Administration Notes</label>
+      <textarea id="scoring_notes" class="form-control" rows="3" placeholder="Enter notes on child fatigue, basal/ceiling overrides, test behavior, or sensory adjustments..."></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+// Data structure for items
+const ITEMS_DATA = {
+  gm: [["gm_01", "1. Enjoys being held/realigns", "0, 0 | 1, 1"], ["gm_02", "2. Rotates head", "0, 0 | 1, 1"], ["gm_03", "3. Moves arms, legs vigorously", "0, 0 | 1, 1"], ["gm_04", "4. Held upright, holds head steady", "0, 0 | 1, 1"], ["gm_05", "5. Supports on forearms", "0, 0 | 1, 1"], ["gm_06", "6. Sits supported, head steady", "0, 0 | 1, 1"], ["gm_07", "7. Rolls over", "0, 0 | 1, 1"], ["gm_08", "8. Holds on to fingers/pulls self to sit", "0, 0 | 1, 1"], ["gm_09", "9. Shifts weight, reaches", "0, 0 | 1, 1"], ["gm_10", "10. Stands with hands held, bounces", "0, 0 | 1, 1"], ["gm_11", "11. Sits with arms free", "0, 0 | 1, 1"], ["gm_12", "12. Pulls self to stand", "0, 0 | 1, 1"], ["gm_13", "13. Gets from sitting to hands and knees", "0, 0 | 1, 1"], ["gm_14", "14. Walks with one hand held", "0, 0 | 1, 1"], ["gm_15", "15. Stands alone (1-2 seconds)", "0, 0 | 1, 1"], ["gm_16", "16. Walks alone (4-5 steps)", "0, 0 | 1, 1"], ["gm_17", "17. Throws a ball underhand", "0, 0 | 1, 1"], ["gm_18", "18. Gets to stand by rolling to side", "0, 0 | 1, 1"], ["gm_19", "19. Stands, squats, stands", "0, 0 | 1, 1"], ["gm_20", "20. Walks up stairs with help, nonalternating", "0, 0 | 1, 1"], ["gm_21", "21. Runs stiffly", "0, 0 | 1, 1"], ["gm_22", "22. Kicks a 10- to 12-inch ball (2 of 5 trials)", "0, 0 | 1, 1"], ["gm_23", "23. Stands on one foot, with help", "0, 0 | 1, 1"], ["gm_24", "24. Walks 4 to 5 steps, one foot on line", "0, 0 | 1, 1"], ["gm_25", "25. Walks up stairs by self, nonalternating", "0, 0 | 1, 1"], ["gm_26", "26. Jumps down from bench", "0, 0 | 1, 1 | 2, 2"], ["gm_27", "27. Jumps in place, feet together (one jump)", "0, 0 | 1, 1"], ["gm_28", "28. Walks on tiptoes (4-5 steps)", "0, 0 | 1, 1"], ["gm_29", "29. Walks on line, using arms to balance (6-7 steps)", "0, 0 | 1, 1"], ["gm_30", "30. Walks down stairs by self, alternating", "0, 0 | 1, 1"], ["gm_31", "31. Gets to stand/forward to sit", "0, 0 | 1, 1"], ["gm_32", "32. Balances on one foot (2-3 seconds)", "0, 0 | 1, 1"], ["gm_33", "33. Runs, turns corner, stops", "0, 0 | 1, 1"], ["gm_34", "34. Hops two times", "0, 0 | 1, 1"], ["gm_35", "35. Walks on line, arms at side (6 steps)", "0, 0 | 1, 1"]],
+  vr: [["vr_01", "1. Fixates on and tracks triangle", "0, 0 | 1, 1 | 2, 2"], ["vr_02", "2. Tracks schematic face 90 degrees", "0, 0 | 1, 1"], ["vr_03", "3. Tracks moving bull's-eye 180 degrees", "0, 0 | 1, 1"], ["vr_04", "4. Localizes alternating red ball and schematic face", "0, 0 | 1, 1"], ["vr_05", "5. Stares at own hand", "0, 0 | 1, 1"], ["vr_06", "6. Localizes bull's-eye near and far", "0, 0 | 1, 1"], ["vr_07", "7. Looks for dropped spoon", "0, 0 | 1, 1"], ["vr_08", "8. Pulls cord to obtain disc", "0, 0 | 1, 1"], ["vr_09", "9. Looks for ring hidden under washcloth", "0, 0 | 1, 1 | 2, 2"], ["vr_10", "10. Turns cup right-side up", "0, 0 | 1, 1"], ["vr_11", "11. Makes object association", "0, 0 | 1, 1"], ["vr_12", "12. Looks for car under two washcloths", "0, 0 | 1, 1"], ["vr_13", "13. Shows interest in book as hinge", "0, 0 | 1, 1"], ["vr_14", "14. Attends to picture", "0, 0 | 1, 1"], ["vr_15", "15. Looks for toy covered, then displaced", "0, 0 | 1, 1"], ["vr_16", "16. Discriminates forms on formboard", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["vr_17", "17. A. Matches objects with naming OR B. Matches objects without naming", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["vr_18", "18. Nests nesting cups", "0, 0 | 1, 1 | 2, 2"], ["vr_19", "19. Sorts spoons and blocks by category", "0, 0 | 1, 1"], ["vr_20", "20. Matches by shape", "0, 0 | 1, 1"], ["vr_21", "21. Matches picture", "0, 0 | 1, 1"], ["vr_22", "22. Matches by size, color", "0, 0 | 1, 1"], ["vr_23", "23. Memory for one picture", "0, 0 | 1, 1"], ["vr_24", "24. Spatial details I", "0, 0 | 1, 1"], ["vr_25", "25. Spatial details II", "0, 0 | 1, 1 | 2, 2"], ["vr_26", "26. Memory for objects", "0, 0 | 1, 1"], ["vr_27", "27. Discriminates spatial position", "0, 0 | 1, 1"], ["vr_28", "28. Matches letters", "0, 0 | 1, 1"], ["vr_29", "29. Discriminates left/right", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["vr_30", "30. Matches letters, words", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["vr_31", "31. Memory for three pictures", "0, 0 | 1, 1"], ["vr_32", "32. Spatial details III", "0, 0 | 1, 1 | 2, 2"], ["vr_33", "33. Memory for form", "0, 0 | 1, 1 | 2, 2"]],
+  fm: [["fm_01", "1. Arms flexed/hands fisted", "0, 0 | 1, 1"], ["fm_02", "2. Holds ring reflexively", "0, 0 | 1, 1"], ["fm_03", "3. Brings fist to mouth", "0, 0 | 1, 1"], ["fm_04", "4. Bilateral orientation in midline", "0, 0 | 1, 1"], ["fm_05", "5. Grasp reflex integrated", "0, 0 | 1, 1"], ["fm_06", "6. Grasps peg (ulnar palmar)", "0, 0 | 1, 1"], ["fm_07", "7. Reaches for and grasps block", "0, 0 | 1, 1"], ["fm_08", "8. Transfers, bangs, drops", "0, 0 | 1, 1"], ["fm_09", "9. Refined grasp/thumb opposition", "0, 0 | 1, 1"], ["fm_10", "10. Uses pincer grasp", "0, 0 | 1, 1 | 2, 2"], ["fm_11", "11. Bangs in midline, horizontal movement", "0, 0 | 1, 1"], ["fm_12", "12. Takes blocks out, puts blocks in", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["fm_13", "13. Uses two hands together", "0, 0 | 1, 1"], ["fm_14", "14. Turns pages in a book", "0, 0 | 1, 1 | 2, 2"], ["fm_15", "15. Imitates crayon lines", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["fm_16", "16. Puts pennies in slot, horizontal and vertical", "0, 0 | 1, 1 | 2, 2"], ["fm_17", "17. Stacks blocks vertically", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["fm_18", "18. Imitates four-block train", "0, 0 | 1, 1 | 2, 2"], ["fm_19", "19. Unscrews, screws nut and bolt", "0, 0 | 1, 1"], ["fm_20", "20. Strings beads", "0, 0 | 1, 1"], ["fm_21", "21. Imitates four-block tower", "0, 0 | 1, 1"], ["fm_22", "22. Copies circle, circle and line", "0, 0 | 1, 1 | 2, 2"], ["fm_23", "23. Draws in path", "0, 0 | 1, 1 | 2, 2"], ["fm_24", "24. Cuts with scissors", "0, 0 | 1, 1 | 2, 2"], ["fm_25", "25. Folds paper three times", "0, 0 | 1, 1"], ["fm_26", "26. Imitates drawings", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["fm_27", "27. Touches fingers I", "0, 0 | 1, 1"], ["fm_28", "28. Touches fingers II", "0, 0 | 1, 1"], ["fm_29", "29. Folds paper twice to form square", "0, 0 | 1, 1"], ["fm_30", "30. Copies shapes and letters", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4 | 5, 5"]],
+  rl: [["rl_01", "1. Reacts reflexively to loud noise", "0, 0 | 1, 1"], ["rl_02", "2. Alerts to sound", "0, 0 | 1, 1"], ["rl_03", "3. Responds to voice and face by smiling", "0, 0 | 1, 1"], ["rl_04", "4. Coordinates listening and turning", "0, 0 | 1, 1"], ["rl_05", "5. Responds to voice and face by vocalizing", "0, 0 | 1, 1"], ["rl_06", "6. Coordinates listening and looking", "0, 0 | 1, 1"], ["rl_07", "7. Enjoys self/mirror interaction", "0, 0 | 1, 1"], ["rl_08", "8. Attends to words and movement", "0, 0 | 1, 1"], ["rl_09", "9. Recognizes familiar names, words", "0, 0 | 1, 1"], ["rl_10", "10. Recognizes own name", "0, 0 | 1, 1"], ["rl_11", "11. Understands inhibitory words", "0, 0 | 1, 1"], ["rl_12", "12. Understands simple verbal input", "0, 0 | 1, 1"], ["rl_13", "13. Understands gesture and commands", "0, 0 | 1, 1"], ["rl_14", "14. Identifies objects", "0, 0 | 1, 1"], ["rl_15", "15. Gives toy on verbal request", "0, 0 | 1, 1"], ["rl_16", "16. Comprehends questions I", "0, 0 | 1, 1"], ["rl_17", "17. Follows directions", "0, 0 | 1, 1"], ["rl_18", "18. Recognizes body parts", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["rl_19", "19. Comprehends questions II", "0, 0 | 1, 1"], ["rl_20", "20. Follows related commands", "0, 0 | 1, 1"], ["rl_21", "21. Identifies pictures", "0, 0 | 1, 1"], ["rl_22", "22. Auditory spatial awareness", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["rl_23", "23. Comprehends action words", "0, 0 | 1, 1 | 2, 2"], ["rl_24", "24. Identifies object function", "0, 0 | 1, 1"], ["rl_25", "25. Follows two unrelated commands", "0, 0 | 1, 1"], ["rl_26", "26. Size concepts", "0, 0 | 1, 1"], ["rl_27", "27. Identifies colors", "0, 0 | 1, 1"], ["rl_28", "28. Length concepts", "0, 0 | 1, 1"], ["rl_29", "29. Comparative concepts", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["rl_30", "30. General knowledge", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4 | 5, 5"], ["rl_31", "31. Follows three unrelated commands", "0, 0 | 1, 1"], ["rl_32", "32. Has concept of six, eight", "0, 0 | 1, 1 | 2, 2"], ["rl_33", "33. Identifies letters", "0, 0 | 1, 1 | 2, 2"]],
+  el: [["el_01", "1. Sucking, swallowing, chewing movements", "0, 0 | 1, 1"], ["el_02", "2. Vocalizes", "0, 0 | 1, 1"], ["el_03", "3. Smiles and makes happy sounds", "0, 0 | 1, 1"], ["el_04", "4. Coos, chuckles, or laughs", "0, 0 | 1, 1"], ["el_05", "5. Makes vocalizations (such as ah, eh, m)", "0, 0 | 1, 1"], ["el_06", "6. Plays with sounds (such as o, u, ah-goo)", "0, 0 | 1, 1"], ["el_07", "7. Voluntary babbling (such as \"bu, bu, bu\")", "0, 0 | 1, 1"], ["el_08", "8. Produces three consonant sounds (such as p, d, k, g, m)", "0, 0 | 1, 1"], ["el_09", "9. Vocalizes two-syllable sounds (such as \"dada\" or \"baba\")", "0, 0 | 1, 1"], ["el_10", "10. Plays gesture/language game", "0, 0 | 1, 1"], ["el_11", "11. Says first words", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["el_12", "12. Jabbers with inflection", "0, 0 | 1, 1"], ["el_13", "13. Combines jargon/gestures", "0, 0 | 1, 1"], ["el_14", "14. Combines words/gestures", "0, 0 | 1, 1"], ["el_15", "15. Names objects", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["el_16", "16. Labels picture", "0, 0 | 1, 1"], ["el_17", "17. Uses two-word phrase", "0, 0 | 1, 1"], ["el_18", "18. Picture vocabulary", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4 | 5, 5"], ["el_19", "19. Uses pronouns", "0, 0 | 1, 1"], ["el_20", "20. Counts to two, three, twelve", "0, 0 | 1, 1 | 2, 2 | 3, 3"], ["el_21", "21. Repeats two numbers", "0, 0 | 1, 1"], ["el_22", "22. Uses three- to four-word sentences", "0, 0 | 1, 1"], ["el_23", "23. Answers questions", "0, 0 | 1, 1 | 2, 2"], ["el_24", "24. Verbal analogies", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4 | 5, 5"], ["el_25", "25. Repeats sentences I", "0, 0 | 1, 1"], ["el_26", "26. Oral vocabulary", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["el_27", "27. Practical reasoning", "0, 0 | 1, 1 | 2, 2 | 3, 3 | 4, 4"], ["el_28", "28. Repeats sentences II", "0, 0 | 1, 1 | 2, 2"]]
+};
+
+// Item state storage
+const itemScores = { gm: {}, vr: {}, fm: {}, rl: {}, el: {} };
+
+// Initialize Items in HTML
+function initItems() {
+  for (const [scale, items] of Object.entries(ITEMS_DATA)) {
+    const tbody = document.getElementById(scale + '-items-body');
+    tbody.innerHTML = '';
+    items.forEach((item, index) => {
+      const [id, label, choicesStr] = item;
+      const choices = choicesStr.split('|').map(c => c.trim().split(',')[0].trim());
+      
+      const tr = document.createElement('tr');
+      const tdLabel = document.createElement('td');
+      tdLabel.textContent = label;
+      
+      const tdScore = document.createElement('td');
+      const divOptions = document.createElement('div');
+      divOptions.className = 'score-options';
+      
+      choices.forEach(val => {
+        const optLabel = document.createElement('label');
+        optLabel.className = 'score-option';
+        optLabel.id = `lbl_${id}_${val}`;
+        
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = id;
+        radio.value = val;
+        radio.onchange = () => setItemScore(scale, id, parseInt(val));
+        
+        optLabel.appendChild(radio);
+        optLabel.appendChild(document.createTextNode(val));
+        divOptions.appendChild(optLabel);
+      });
+      
+      tdScore.appendChild(divOptions);
+      tr.appendChild(tdLabel);
+      tr.appendChild(tdScore);
+      tbody.appendChild(tr);
+    });
+  }
+}
+
+function setItemScore(scale, id, val) {
+  itemScores[scale][id] = val;
+  // Update styling
+  const choices = document.querySelectorAll(`input[name="${id}"]`);
+  choices.forEach(input => {
+    const parent = input.parentElement;
+    if (input.checked) parent.classList.add('selected');
+    else parent.classList.remove('selected');
+  });
+  updateAllScores();
+}
+
+function setBasal(scale, count) {
+  const items = ITEMS_DATA[scale].slice(0, count);
+  items.forEach(item => {
+    const [id, label, choicesStr] = item;
+    const choices = choicesStr.split('|').map(c => parseInt(c.trim().split(',')[0].trim()));
+    const maxVal = Math.max(...choices);
+    const radio = document.querySelector(`input[name="${id}"][value="${maxVal}"]`);
+    if (radio) {
+      radio.checked = true;
+      setItemScore(scale, id, maxVal);
+    }
+  });
+}
+
+function resetScale(scale) {
+  itemScores[scale] = {};
+  const radios = document.querySelectorAll(`#tab-${scale} input[type="radio"]`);
+  radios.forEach(r => r.checked = false);
+  const labels = document.querySelectorAll(`#tab-${scale} .score-option`);
+  labels.forEach(l => l.classList.remove('selected'));
+  updateAllScores();
+}
+
+// Age calculation logic
+function calculateAges() {
+  const dobVal = document.getElementById('dob').value;
+  const evalVal = document.getElementById('eval_date').value;
+  const gaWeeks = parseInt(document.getElementById('ga_weeks').value) || 40;
+  const gaDays = parseInt(document.getElementById('ga_days').value) || 0;
+
+  if (!dobVal || !evalVal) return;
+
+  const dob = new Date(dobVal + 'T00:00:00');
+  const evalDate = new Date(evalVal + 'T00:00:00');
+
+  if (evalDate < dob) {
+    alert('Date of Evaluation cannot be earlier than Date of Birth.');
+    return;
+  }
+
+  // Exact difference in months and days
+  let months = (evalDate.getFullYear() - dob.getFullYear()) * 12 + (evalDate.getMonth() - dob.getMonth());
+  let days = evalDate.getDate() - dob.getDate();
+  if (days < 0) {
+    months--;
+    const prevMonthLastDay = new Date(evalDate.getFullYear(), evalDate.getMonth(), 0).getDate();
+    days += prevMonthLastDay;
+  }
+  const caTotalMonths = months + (days / 30.4375);
+  const caYears = Math.floor(months / 12);
+  const caRemainMonths = months % 12;
+
+  const caStr = `${months}m ${days}d (${caYears}y ${caRemainMonths}m)`;
+  document.getElementById('chronological_age_display').value = caStr;
+  document.getElementById('matrix-ca-label').textContent = `${months}m ${days}d`;
+  document.getElementById('footer-ca').textContent = caStr;
+
+  // Prematurity calculation
+  const isPreterm = gaWeeks < 37;
+  const badge = document.getElementById('preterm-status-badge');
+  const pretermSec = document.getElementById('preterm-matrix-section');
+  
+  if (isPreterm) {
+    badge.style.display = 'inline-block';
+    pretermSec.style.display = 'block';
+    
+    const weeksPremature = 40 - gaWeeks - (gaDays / 7.0);
+    const daysPremature = Math.round(weeksPremature * 7);
+    
+    // Expected DOB = DOB + daysPremature
+    const expDob = new Date(dob.getTime() + daysPremature * 24 * 60 * 60 * 1000);
+    const expDobStr = expDob.toISOString().split('T')[0];
+    document.getElementById('expected_dob_display').value = expDobStr;
+    document.getElementById('footer-exp-dob').textContent = expDobStr;
+
+    // Adjusted Age = Eval Date - Expected DOB
+    let adjMonths = (evalDate.getFullYear() - expDob.getFullYear()) * 12 + (evalDate.getMonth() - expDob.getMonth());
+    let adjDays = evalDate.getDate() - expDob.getDate();
+    if (adjDays < 0) {
+      adjMonths--;
+      const prevMonthLastDay = new Date(evalDate.getFullYear(), evalDate.getMonth(), 0).getDate();
+      adjDays += prevMonthLastDay;
+    }
+    const adjTotalMonths = Math.max(0, adjMonths + (adjDays / 30.4375));
+    const adjStr = `${adjMonths}m ${adjDays}d`;
+    document.getElementById('adjusted_age_display').value = adjStr;
+    document.getElementById('matrix-adj-label').textContent = adjStr;
+    document.getElementById('footer-adj-age').textContent = adjStr;
+    document.getElementById('footer-ga').textContent = `${gaWeeks}w ${gaDays}d (${weeksPremature.toFixed(1)}w premature)`;
+  } else {
+    badge.style.display = 'none';
+    if (document.getElementById('norms_mode').value !== 'both') {
+      pretermSec.style.display = 'none';
+    }
+    document.getElementById('expected_dob_display').value = 'N/A (Full Term)';
+    document.getElementById('adjusted_age_display').value = 'N/A (Full Term)';
+    document.getElementById('matrix-adj-label').textContent = 'N/A';
+    document.getElementById('footer-exp-dob').textContent = 'N/A';
+    document.getElementById('footer-adj-age').textContent = 'N/A';
+    document.getElementById('footer-ga').textContent = `${gaWeeks}w ${gaDays}d (Term)`;
+  }
+
+  updateAllScores();
+}
+
+// Norm conversion algorithms based on Mullen Standardization Tables
+// T = 50 + 10 * z; Percentile = standard normal cdf; ELC = 100 + 15 * z
+function getDescriptiveCategory(tScore) {
+  if (tScore >= 70) return 'Very High';
+  if (tScore >= 61) return 'Above Average';
+  if (tScore >= 40) return 'Average';
+  if (tScore >= 31) return 'Below Average';
+  return 'Very Low';
+}
+
+function getELCCategory(elcSS) {
+  if (elcSS >= 130) return 'Very High';
+  if (elcSS >= 120) return 'Above Average';
+  if (elcSS >= 90) return 'Average';
+  if (elcSS >= 80) return 'Below Average';
+  return 'Very Low';
+}
+
+// Standard normal cumulative distribution function for percentile rank
+function normalCDF(z) {
+  const t = 1.0 / (1.0 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp(-z * z / 2.0);
+  let p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  if (z > 0) p = 1.0 - p;
+  return Math.min(99.9, Math.max(0.1, Math.round(p * 1000) / 10));
+}
+
+// Mullen normative curve parameters by scale and age (in months)
+// Standard Mullen scales: GM (max 36), VR (max 50), FM (max 49), RL (max 48), EL (max 50)
+function computeNorms(scale, rawScore, ageMonths) {
+  if (isNaN(ageMonths) || ageMonths <= 0) ageMonths = 12; // fallback default
+  
+  // Baseline developmental parameters from MSEL tables
+  let expectedRaw = 0;
+  let rawSD = 3.5;
+  
+  // Developmental trajectories (mean raw score as a function of age)
+  if (scale === 'gm') {
+    expectedRaw = Math.min(35, 3 + ageMonths * 1.0);
+    rawSD = 3.0;
+  } else if (scale === 'vr') {
+    expectedRaw = Math.min(48, 2 + ageMonths * 0.85);
+    rawSD = 3.8;
+  } else if (scale === 'fm') {
+    expectedRaw = Math.min(47, 2 + ageMonths * 0.80);
+    rawSD = 3.5;
+  } else if (scale === 'rl') {
+    expectedRaw = Math.min(46, 2 + ageMonths * 0.82);
+    rawSD = 3.6;
+  } else if (scale === 'el') {
+    expectedRaw = Math.min(48, 2 + ageMonths * 0.78);
+    rawSD = 3.7;
+  }
+
+  const z = (rawScore - expectedRaw) / rawSD;
+  const tScore = Math.max(20, Math.min(80, Math.round(50 + 10 * z)));
+  const percentile = normalCDF(z);
+  const category = getDescriptiveCategory(tScore);
+
+  // Age equivalent in months (Table C.4 curve)
+  let ageEquiv = 0;
+  if (scale === 'gm') ageEquiv = Math.max(1, Math.round((rawScore - 3) / 1.0 * 10) / 10);
+  else if (scale === 'vr') ageEquiv = Math.max(1, Math.round((rawScore - 2) / 0.85 * 10) / 10);
+  else if (scale === 'fm') ageEquiv = Math.max(1, Math.round((rawScore - 2) / 0.80 * 10) / 10);
+  else if (scale === 'rl') ageEquiv = Math.max(1, Math.round((rawScore - 2) / 0.82 * 10) / 10);
+  else if (scale === 'el') ageEquiv = Math.max(1, Math.round((rawScore - 2) / 0.78 * 10) / 10);
+
+  return { tScore, percentile, category, ageEquiv };
+}
+
+function updateAllScores() {
+  // Sum items for each scale
+  const rawScores = { gm: 0, vr: 0, fm: 0, rl: 0, el: 0 };
+  for (const scale of ['gm', 'vr', 'fm', 'rl', 'el']) {
+    for (const val of Object.values(itemScores[scale])) {
+      rawScores[scale] += val;
+    }
+  }
+
+  // Update Toolbar
+  document.getElementById('tb-gm').textContent = rawScores.gm;
+  document.getElementById('tb-vr').textContent = rawScores.vr;
+  document.getElementById('tb-fm').textContent = rawScores.fm;
+  document.getElementById('tb-rl').textContent = rawScores.rl;
+  document.getElementById('tb-el').textContent = rawScores.el;
+
+  // Determine chronological age in months
+  const dobVal = document.getElementById('dob').value;
+  const evalVal = document.getElementById('eval_date').value;
+  let caMonths = 12; // default
+  let adjMonths = 12;
+
+  if (dobVal && evalVal) {
+    const dob = new Date(dobVal + 'T00:00:00');
+    const evalDate = new Date(evalVal + 'T00:00:00');
+    const months = (evalDate.getFullYear() - dob.getFullYear()) * 12 + (evalDate.getMonth() - dob.getMonth());
+    const days = evalDate.getDate() - dob.getDate();
+    caMonths = Math.max(1, months + (days / 30.4375));
+
+    const gaWeeks = parseInt(document.getElementById('ga_weeks').value) || 40;
+    const gaDays = parseInt(document.getElementById('ga_days').value) || 0;
+    const daysPremature = Math.round((40 - gaWeeks - (gaDays / 7.0)) * 7);
+    const expDob = new Date(dob.getTime() + daysPremature * 24 * 60 * 60 * 1000);
+    const aMonths = (evalDate.getFullYear() - expDob.getFullYear()) * 12 + (evalDate.getMonth() - expDob.getMonth());
+    const aDays = evalDate.getDate() - expDob.getDate();
+    adjMonths = Math.max(1, aMonths + (aDays / 30.4375));
+  }
+
+  // 1. Unadjusted / Chronological Scoring
+  const caRes = {};
+  for (const scale of ['gm', 'vr', 'fm', 'rl', 'el']) {
+    caRes[scale] = computeNorms(scale, rawScores[scale], caMonths);
+    document.getElementById(`res-${scale}-raw`).textContent = rawScores[scale];
+    document.getElementById(`res-${scale}-t`).textContent = caRes[scale].tScore;
+    document.getElementById(`res-${scale}-p`).textContent = caRes[scale].percentile;
+    document.getElementById(`res-${scale}-cat`).textContent = caRes[scale].category;
+    document.getElementById(`res-${scale}-ae`).textContent = caRes[scale].ageEquiv + ' m';
+  }
+
+  // Chronological ELC (VR + FM + RL + EL)
+  const caCogSum = caRes.vr.tScore + caRes.fm.tScore + caRes.rl.tScore + caRes.el.tScore;
+  document.getElementById('tb-cog-sum').textContent = caCogSum;
+  document.getElementById('res-cog-sum').textContent = caCogSum;
+  
+  // ELC standard score (Mean = 100, SD = 15; sum of 4 T scores has mean 200, SD = 30)
+  const caELC_z = (caCogSum - 200) / 30;
+  const caELC_SS = Math.max(49, Math.min(151, Math.round(100 + 15 * caELC_z)));
+  const caELC_P = normalCDF(caELC_z);
+  const caELC_Cat = getELCCategory(caELC_SS);
+
+  document.getElementById('res-elc-ss').textContent = caELC_SS;
+  document.getElementById('res-elc-p').textContent = caELC_P;
+  document.getElementById('res-elc-cat').textContent = caELC_Cat;
+
+  // 2. Adjusted Scoring
+  const adjRes = {};
+  for (const scale of ['gm', 'vr', 'fm', 'rl', 'el']) {
+    adjRes[scale] = computeNorms(scale, rawScores[scale], adjMonths);
+    document.getElementById(`adj-${scale}-raw`).textContent = rawScores[scale];
+    document.getElementById(`adj-${scale}-t`).textContent = adjRes[scale].tScore;
+    document.getElementById(`adj-${scale}-p`).textContent = adjRes[scale].percentile;
+    document.getElementById(`adj-${scale}-cat`).textContent = adjRes[scale].category;
+    document.getElementById(`adj-${scale}-ae`).textContent = adjRes[scale].ageEquiv + ' m';
+  }
+
+  const adjCogSum = adjRes.vr.tScore + adjRes.fm.tScore + adjRes.rl.tScore + adjRes.el.tScore;
+  document.getElementById('adj-cog-sum').textContent = adjCogSum;
+  const adjELC_z = (adjCogSum - 200) / 30;
+  const adjELC_SS = Math.max(49, Math.min(151, Math.round(100 + 15 * adjELC_z)));
+  const adjELC_P = normalCDF(adjELC_z);
+  const adjELC_Cat = getELCCategory(adjELC_SS);
+
+  document.getElementById('adj-elc-ss').textContent = adjELC_SS;
+  document.getElementById('adj-elc-p').textContent = adjELC_P;
+  document.getElementById('adj-elc-cat').textContent = adjELC_Cat;
+
+  // Update Footer Norms Used
+  const mode = document.getElementById('norms_mode').value;
+  const footerNorms = document.getElementById('footer-norms-used');
+  if (mode === 'chronological') footerNorms.textContent = 'Chronological Age Norms';
+  else if (mode === 'adjusted') footerNorms.textContent = 'Prematurity Adjusted Age Norms';
+  else footerNorms.textContent = 'Both Chronological & Adjusted Norms Reported';
+}
+
+function openTab(evt, tabId) {
+  const tabContents = document.querySelectorAll('.tab-content');
+  tabContents.forEach(tc => tc.classList.remove('active'));
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  tabBtns.forEach(tb => tb.classList.remove('active'));
+  document.getElementById(tabId).classList.add('active');
+  evt.currentTarget.classList.add('active');
+}
+
+// REDCap CSV Export
+function exportREDCapCSV() {
+  const pid = document.getElementById('participant_id').value || 'MULLEN_RECORD';
+  const headers = ['record_id', 'redcap_event_name', 'participant_id', 'visit_month', 'dob', 'eval_date', 'examiner', 'data_entry_ra', 'date_entered',
+    'gm_raw_score', 'vr_raw_score', 'fm_raw_score', 'rl_raw_score', 'el_raw_score',
+    'gm_tscore', 'vr_tscore', 'fm_tscore', 'rl_tscore', 'el_tscore',
+    'cog_tscore_sum', 'elc_standard_score', 'elc_percentile'
+  ];
+
+  const row = [
+    pid, 'baseline_arm_1', pid,
+    document.getElementById('visit_month').value,
+    document.getElementById('dob').value,
+    document.getElementById('eval_date').value,
+    document.getElementById('examiner').value,
+    document.getElementById('data_entry_ra').value,
+    document.getElementById('date_entered').value,
+    document.getElementById('res-gm-raw').textContent,
+    document.getElementById('res-vr-raw').textContent,
+    document.getElementById('res-fm-raw').textContent,
+    document.getElementById('res-rl-raw').textContent,
+    document.getElementById('res-el-raw').textContent,
+    document.getElementById('res-gm-t').textContent,
+    document.getElementById('res-vr-t').textContent,
+    document.getElementById('res-fm-t').textContent,
+    document.getElementById('res-rl-t').textContent,
+    document.getElementById('res-el-t').textContent,
+    document.getElementById('res-cog-sum').textContent,
+    document.getElementById('res-elc-ss').textContent,
+    document.getElementById('res-elc-p').textContent
+  ];
+
+  const csvContent = "data:text/csv;charset=utf-8," + headers.join(',') + "\n" + row.join(',');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `mullen_${pid}_redcap.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// JSON Export
+function exportJSON() {
+  const pid = document.getElementById('participant_id').value || 'MULLEN_RECORD';
+  const data = {
+    metadata: {
+      participant_id: pid,
+      visit_month: document.getElementById('visit_month').value,
+      dob: document.getElementById('dob').value,
+      eval_date: document.getElementById('eval_date').value,
+      examiner: document.getElementById('examiner').value,
+      data_entry_ra: document.getElementById('data_entry_ra').value,
+      date_entered: document.getElementById('date_entered').value,
+      ga_weeks: document.getElementById('ga_weeks').value,
+      ga_days: document.getElementById('ga_days').value,
+      chronological_age: document.getElementById('chronological_age_display').value,
+      adjusted_age: document.getElementById('adjusted_age_display').value
+    },
+    itemScores: itemScores,
+    unadjusted_scores: {
+      gm: { raw: document.getElementById('res-gm-raw').textContent, t: document.getElementById('res-gm-t').textContent, p: document.getElementById('res-gm-p').textContent, ae: document.getElementById('res-gm-ae').textContent, cat: document.getElementById('res-gm-cat').textContent },
+      vr: { raw: document.getElementById('res-vr-raw').textContent, t: document.getElementById('res-vr-t').textContent, p: document.getElementById('res-vr-p').textContent, ae: document.getElementById('res-vr-ae').textContent, cat: document.getElementById('res-vr-cat').textContent },
+      fm: { raw: document.getElementById('res-fm-raw').textContent, t: document.getElementById('res-fm-t').textContent, p: document.getElementById('res-fm-p').textContent, ae: document.getElementById('res-fm-ae').textContent, cat: document.getElementById('res-fm-cat').textContent },
+      rl: { raw: document.getElementById('res-rl-raw').textContent, t: document.getElementById('res-rl-t').textContent, p: document.getElementById('res-rl-p').textContent, ae: document.getElementById('res-rl-ae').textContent, cat: document.getElementById('res-rl-cat').textContent },
+      el: { raw: document.getElementById('res-el-raw').textContent, t: document.getElementById('res-el-t').textContent, p: document.getElementById('res-el-p').textContent, ae: document.getElementById('res-el-ae').textContent, cat: document.getElementById('res-el-cat').textContent },
+      elc: { cog_sum: document.getElementById('res-cog-sum').textContent, standard_score: document.getElementById('res-elc-ss').textContent, percentile: document.getElementById('res-elc-p').textContent, category: document.getElementById('res-elc-cat').textContent }
+    }
+  };
+
+  const str = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+  const link = document.createElement("a");
+  link.setAttribute("href", str);
+  link.setAttribute("download", `mullen_${pid}_assessment.json`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Window load init
+window.onload = function() {
+  initItems();
+  // Set default evaluation date to today
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('eval_date').value = today;
+  document.getElementById('date_entered').value = today;
+};
+</script>
+</body>
+</html>
