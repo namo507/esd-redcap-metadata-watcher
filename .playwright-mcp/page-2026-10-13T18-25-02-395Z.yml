@@ -1,0 +1,60 @@
+- main [ref=e2]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "Log In" [level=4] [ref=e6]
+      - img "USC" [ref=e8]
+      - generic [ref=e9]:
+        - paragraph [ref=e10]:
+          - strong [ref=e11]: Please use your USC Columbia campus email address (username@mailbox.sc.edu or username@sc.edu) and password to log in using the SSO (Single Sign On) button. Aiken, Upstate and SOM users will need to open the website in a 'new incognito window' browser window.
+        - paragraph [ref=e12]:
+          - strong [ref=e13]: Click on 'SSO' to login
+        - paragraph [ref=e14]
+        - paragraph [ref=e15]:
+          - strong [ref=e16]:
+            - text: "USC REDCap ListServ:"
+            - link "Click Here to Register" [ref=e17] [cursor=pointer]:
+              - /url: https://listserv.sc.edu/scripts/wa-scedu.exe?SUBED1=USC-REDCAP
+        - paragraph [ref=e18]
+      - generic [ref=e19]:
+        - generic [ref=e20]: Click one of the buttons below to choose how you wish to log in to REDCap.
+        - generic [ref=e21]:
+          - generic [ref=e22]: Log in using
+          - button "SSO" [ref=e23] [cursor=pointer]
+          - generic [ref=e25]: "-- OR --"
+          - button "Local REDCap Login" [ref=e26] [cursor=pointer]
+    - separator [ref=e28]
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - paragraph [ref=e31]: REDCap is a secure web platform for building and managing online databases and surveys. REDCap's streamlined process for rapidly creating and designing projects offers a vast array of tools that can be tailored to virtually any data collection strategy.
+        - paragraph [ref=e32]: REDCap provides automated export procedures for seamless data downloads to Excel and common statistical packages (SPSS, SAS, Stata, R), as well as a built-in project calendar, a scheduling module, ad hoc reporting tools, and advanced features, such as branching logic, file uploading, and calculated fields.
+        - paragraph [ref=e33]:
+          - text: Learn more about REDCap by watching a
+          - link "brief summary video (4 min)" [ref=e35] [cursor=pointer]:
+            - /url: javascript:;
+          - text: . If you would like to view other quick video tutorials of REDCap in action and an overview of its features, please see the
+          - link "Training Resources" [ref=e36] [cursor=pointer]:
+            - /url: /index.php?action=training
+          - text: page.
+        - paragraph [ref=e37]: "NOTICE: If you are collecting data for the purposes of human subjects research, review and approval of the project is required by your Institutional Review Board."
+        - paragraph [ref=e38]:
+          - text: If you require assistance or have any questions about REDCap, please contact
+          - link "REDCap Administrator (ORHSREDCap@mailbox.sc.edu)" [ref=e39] [cursor=pointer]:
+            - /url: mailto:ORHSREDCap@mailbox.sc.edu
+          - text: .
+      - generic [ref=e41]:
+        - paragraph [ref=e42]: Build online surveys and databases quickly and securely in your browser - Create and design your project using a secure login from any device. No extra software required. Access from anywhere, at any time.
+        - paragraph [ref=e43]: Fast and flexible - Go from project creation to starting data collection in less than one day. Customizations and changes are possible any time, even after data collection has begun.
+        - paragraph [ref=e44]: Advanced instrument design features - Auto-validation, calculated fields, file uploading, branching/skip logic, and survey stop actions.
+        - paragraph [ref=e45]: Diverse and flexible survey distribution options - Use a list of email addresses or phone numbers for your survey respondents and automatically contact them with personalized messages, and track who has responded. Or create a simple link for an anonymous survey for mass email mailings, to post on a website, or print on a flyer.
+        - paragraph [ref=e46]: Data quality - Use field validation, branching/skip logic, and Missing Data Codes to improve and protect data quality during data entry. Open data queries to automatically identify and resolve discrepancies and other issues real-time.
+        - paragraph [ref=e47]: Custom reporting - Create custom searches for generating reports to view aggregate data. Identify trends with built-in basic statistics and charts.
+        - paragraph [ref=e48]: Export data to common analysis packages - Export your data as a PDF or as CSV data for easy analysis in SAS, Stata, R, SPSS, or Microsoft Excel.
+        - paragraph [ref=e49]: Secure file storage and sharing - Upload and share any type of file with anyone in the world through the File Repository feature or Send-It tool. Also works with exports and other built-in file uploading features.
+        - paragraph [ref=e50]: Data-based triggers and alerts - Send real-time alerts and notifications to your team or other stakeholders via email, text, or phone based on certain data being entered or specific questions having a particular answer.
+        - paragraph [ref=e51]: Connect to other resources - Use built-in features (API) to move data to/from your project. Build your own custom software development features to connect your project to other systems.
+  - generic [ref=e52]:
+    - link "REDCap 16.0.18" [ref=e53] [cursor=pointer]:
+      - /url: https://projectredcap.org
+    - text: "-© 2026 Vanderbilt University-"
+    - link "Cookie policy" [ref=e54] [cursor=pointer]:
+      - /url: javascript:;
