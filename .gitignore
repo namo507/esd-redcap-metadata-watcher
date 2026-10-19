@@ -30,6 +30,7 @@ design-qa.md
 # These patterns are intentionally depth-independent (leading **/) so they keep
 # matching if a project folder is moved or renamed.
 **/recruitment_audit_secure/
+**/csbsbs_audit_secure/
 archive/restricted/
 **/csbs_redcap_outputs/csbs_scoring_assignments.csv
 **/csbs_redcap_outputs/csbs_scoring_candidate_trace.csv
