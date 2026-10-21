@@ -53,6 +53,12 @@ Excel regression checks recompute rule flags, score, and action from exported
 evidence. Rule violations and regression failures have different meanings:
 the first describes a response, and the second indicates a calculation mismatch.
 The workbook is regenerated and validated before replacing the prior output.
+The `Responses Analysis_Revised (3).xlsx` companion workbook now includes a
+`Final Verification` column on `Simplified All Responses` (between `Record ID`
+and `Verification Check 1`): `Valid` means the survey is complete and either
+cleared the bot screen (`Pay Now`) or passed PID 6277 verification on all three
+checks (birth year, ZIP, education). `Not Valid` means the record is currently
+outside that rule.
 
 Workbook generation requires Node.js, the Codex `@oai/artifact-tool` runtime,
 and LibreOffice (`soffice` or `libreoffice`) on `PATH`. The artifact dependency is
