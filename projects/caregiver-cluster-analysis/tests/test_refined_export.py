@@ -17,7 +17,7 @@ from test_refined_screening import response, score
 def synthetic_bundle():
     scored = score([response()])
     sources = SimpleNamespace(
-        registry={4797: {"display_label": "Synthetic study (PID 4797)", "sheet_name": "Study 1 - CAN (PID 4797)"}},
+        registry={4797: {"display_label": "Synthetic study (PID 4797)", "sheet_name": "PID 4797 (CAN)"}},
         exclusions=pd.DataFrame(columns=["project_id", "record_id", "response_key", "exclusion_reason",
                                          "matched_text_fields", "archive_clone", "prelaunch_protocol", "contains_test_word"]),
         provenance=pd.DataFrame([{"project_id": 4797, "study_name": "Synthetic", "raw_records": 1,

@@ -40,10 +40,10 @@ import refined_sources as sources
 import refined_screening as screening
 
 STUDY_NAMES: dict[int, str] = {
-    4797: "Study 1 - Infant Autism Screening [CAN Registry]",
-    4581: "Study 2 - old-Infant Autism Screening [Global Online]",
-    5749: "Study 3 - Bilingual Infant Autism Screening [Prisma]",
-    4931: "Study 4 - Infant Autism Screening [ICIS Board]",
+    4797: "PID 4797 [Infant Autism Screening — CAN Registry]",
+    4581: "PID 4581 [old-Infant Autism Screening — Global Online]",
+    5749: "PID 5749 [Infant Autism Screening-27Sep25_bilingual-13Jul26]",
+    4931: "PID 4931 [Infant Autism Screening - ICIS]",
 }
 
 POPULATION_MAP: dict[int, str] = {
