@@ -120,6 +120,12 @@ modeling:
     - tied
     - full
   blrt_bootstrap_repeats: 100
+  multiple_imputations: 20
+  imputation_minimum_observed_scores: 4
+  stakeholder_gmm_covariance: diagonal
+  ensemble_bootstrap_repeats: 200
+  community_weight_method: sqrt_balance
+  fairness_minimum_stratum_n: 20
   knowledge_primary: binary_correct_count
   knowledge_primary_reason: "Pre-specified conservative score; the graded score was documented after significance was observed."
 
