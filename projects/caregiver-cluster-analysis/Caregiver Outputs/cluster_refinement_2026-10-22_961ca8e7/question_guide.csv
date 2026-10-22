@@ -1,0 +1,24 @@
+Domain,Field,Question wording,Raw anchors/options,L,U,Reverse,Minimum items
+Positive affect (more positive),tfa_happy,Happy,not at all | | a lot,1.0,5.0,False,2
+Positive affect (more positive),tfa_comfortable,Comfortable,not at all | | a lot,1.0,5.0,False,2
+Emotional distress (less distress),tfa_scared,Scared,not at all | | a lot,1.0,5.0,True,2
+Emotional distress (less distress),tfa_sad,Sad,not at all | | a lot,1.0,5.0,True,2
+Aversive feelings (less aversion),tfa_disgusted,Disgusted,not at all | | a lot,1.0,5.0,True,2
+Aversive feelings (less aversion),tfa_angry,Angry,not at all | | a lot,1.0,5.0,True,2
+Visit feasibility (more feasible),tfa_difficult,How difficult would it be to spend an extra 15-30 minutes to complete this autism screening test?,"1, Very difficult | 2, Somewhat difficult | 3, Mostly easy | 4, Very easy",1.0,4.0,False,4
+Visit feasibility (more feasible),tfa_doable,How doable would it be?,"1, Very doable | 2, Probably doable | 3, Might be doable | 4, Impossible",1.0,4.0,True,4
+Visit feasibility (more feasible),tfa_separate_difficult,How difficult would it be for you and your family to make and attend ONE appointment with a specialist to complete the test?,"1, Very difficult | 2, Somewhat difficult | 3, Mostly easy | 4, Very easy",1.0,4.0,False,4
+Visit feasibility (more feasible),tfa_separate_doable,How doable would it be?,"1, Very doable | 2, Probably doable | 3, Might be doable | 4, Impossible",1.0,4.0,True,4
+Visit feasibility (more feasible),tfa_series_difficult,How difficult would it be for you and your family to make and attend a SERIES of appointments with a specialist to complete the test?,"1, Very difficult | 2, Somewhat difficult | 3, Mostly easy | 4, Very easy",1.0,4.0,False,4
+Visit feasibility (more feasible),tfa_series_doable,How doable would this be?,"1, Very doable | 2, Probably doable | 3, Might be doable | 4, Impossible",1.0,4.0,True,4
+Result usefulness (more useful),tfa_overall_help,"It turns out, this test only tells you if your baby is autistic. It does NOT tell you how much help they will need. How helpful is this test for you?","1, Very helpful, I only need to know if my baby is autistic | 2, Somewhat helpful | 3, Not helpful at all, I also need to know much help my child will need | 4, I don't want to know if my baby is autistic",1.0,4.0,True,1
+Ethical support (more support),tfa_scan_any,"Thinking about what is right and fair for everyone: Is it ethical for pediatricians to offer free infant autism screenings at 4-month well-child checkups to all babies, even if there are no troubling behavior or delays?","1, Very ethically right (very right and fair) | 2, Ethically right | 3, Somewhat right | 4, Somewhat wrong | 5, Ethically wrong | 6, Very ethically wrong (very wrong and unfair)",1.0,6.0,True,2
+Ethical support (more support),tfa_scan_mine,"Thinking about YOUR personal beliefs and values: Is it morally right to have a 4-month-old screened for autism, even if there are NO troubling behavior or delays?","1, Very morally right (a must do) | 2, Morally right | 3, Somewhat morally right | 4, Somewhat morally wrong | 5, Morally wrong | 6, Very morally wrong (a must NOT do)",1.0,6.0,True,2
+Held out,tfa_video,Watching movies while a doctor observes/watches where they look (15-30 minute test) {tfa_p05_4_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_saliva,Saliva test (5-10 minute test) {tfa_p05_6_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_heart,Heart rate test (10-15 minute test) {tfa_p05_7_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_observe,Doctor observation of my baby's behavior (30-60 minute test) {tfa_p05_8_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_blood,Blood test (10-15 minute test) {tfa_p05_5_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_mri,Brain imaging (MRI) while baby naps (2-3 hour test) {tfa_p05_2_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_eeg,Brain test (EEG) while baby is awake (1 hour test) {tfa_p05_3_8},very difficult | moderately difficult | very easy,1.0,7.0,False,1
+Held out,tfa_trusting,Trusting (confident in doctor),not at all | | a lot,1.0,5.0,False,1

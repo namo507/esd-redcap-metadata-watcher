@@ -1,0 +1,10 @@
+Analysis,Training n,ARI on common cohort,Profile 2 share on common cohort %
+"Primary, unweighted",645,1.0,59.18322268626967
+"Equal-source reporting, sources n>=20 only",642,,71.7787084993407
+Equal-source reporting weights (same profiles),645,1.0,78.82392149451657
+Equal-source resampled refit,645,0.8563763016710535,57.52357369597686
+Leave out CAN Registry,589,0.7887974071783728,55.46247125841883
+Leave out Global Online,153,0.8335384229993084,58.26177246174397
+Leave out Prisma List,551,0.9691485954474445,59.13948346726098
+At least 5/6 observed domains,642,1.0,59.08264423148155
+At least 6/6 observed domains,624,0.9814298027512479,59.45125643348405

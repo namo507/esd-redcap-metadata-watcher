@@ -1,15 +1,38 @@
 # Caregiver Acceptability Cluster Analysis
 
-## Active decision-driving files
+## Current refined notebook (2026-10-22)
 
-This project surface is intentionally limited to the files that currently drive the cluster recommendation and stakeholder decisions.
+`caregiver_cluster_simple_metrics.ipynb` now runs an **offline, frozen analysis** of
+`Final Verification = Valid` on `Responses Analysis_Revised (3).xlsx`. It checks the
+workbook SHA-256, the pinned REDCap snapshot manifest, project identities, source
+completion, and one-to-one PID–record joins before analysis. It does not read API
+tokens or recompute the workbook's final eligibility decisions.
 
-- `caregiver_cluster_simple_metrics.ipynb` — the live, reader-facing notebook that runs the current cluster analysis and writes the decision outputs
-- `valid_data_clusters.py` — the Valid_Data logic, score definitions, trust checks, and group comparison code used in Section D
-- `tests/test_valid_data_clusters.py` — the regression checks for the live verification rule, scoring ranges, and group comparison logic
-- `Caregiver Outputs/` — the active figures and tables generated from the current analysis run
+The notebook uses six primary attitude composites, keeping demographics, values,
+scenario-specific doctor confidence, method ease, accuracy requirements, and
+screening intention outside profile construction. It includes k-means and GMM
+comparisons (including one component), 20 bounded imputations, 100 full-preprocessing
+bootstrap refits, posterior-weighted profiles, adjusted exploratory associations,
+recruitment/completeness sensitivity, subgroup measurement audits, and an optional
+five-fold predictive check. The two-profile view is a configured descriptive
+comparison, not a preregistered or proven optimal number of parent types.
 
-Historical exploratory and retired scripts, notebooks, and temporary workflow code have been moved to `archive/2026-10-12-legacy-workflow/` so the active decision path is easy to find and review.
+Run all cells with the project environment. The notebook resolves the project
+folder before imports, including when opened from Downloads. For a moved checkout,
+set `CAREGIVER_PROJECT_DIR`. To analyze new inputs, deliberately reconcile the new
+workbook/snapshot and update the visible expected hash and snapshot parameters.
+
+Outputs go to `Caregiver Outputs/cluster_refinement_<date>_<workbook-hash>/`:
+aggregate CSVs, figures, a findings summary, and provenance. A run-local `.gitignore`
+excludes `restricted/`, whose respondent probabilities and frozen model bundle are
+owner-only. Future scoring requires final-valid responses and compatible metadata;
+the notebook does not claim prospective or longitudinal validation.
+
+- `refined_sources.py` supplies the existing metadata-verified bilingual folding.
+- `valid_data_clusters.py` supplies the historical ten-score comparison.
+- `tests/test_valid_data_clusters.py` checks that existing helper workflow.
+- `cluster-refinements.md` and `Aims_ResearchStrategy_BradshawR21.pdf` document the
+  refinement requirements and research questions.
 
 ## Refined response screening workbook
 
@@ -74,11 +97,12 @@ From the repository root:
 .venv312/bin/python -m pytest projects/caregiver-cluster-analysis/tests/ -q
 ```
 
-## Cluster analysis on Valid_Data (notebook section D)
+## Historical live Valid_Data workflow
 
-Section D at the end of `caregiver_cluster_simple_metrics.ipynb` is the current
-cluster analysis. It stands on its own: run its cells from the project folder.
-Helpers live in `valid_data_clusters.py`.
+The description below documents the prior section D workflow and its helpers in
+`valid_data_clusters.py`. The refined notebook described above instead uses the
+frozen final workbook as cohort authority; these historical live-pull instructions
+do not control its current execution.
 
 **Valid_Data** = every response the bot screen cleared (*Pay Now*, the same rules
 as `Simplified all responses.xlsx`) plus every flagged or excluded response whose

@@ -1,0 +1,7 @@
+Measure,Calculated result,Interpretation
+Group separation,Working GMM mean silhouette 0.233,Overlap remains; not an accuracy percentage
+Repeatability,Mean bootstrap ARI 0.898; fifth percentile 0.770,100 full-preprocessing refits
+Assignment confidence,9.5% below 0.8,Model-dependent probabilities; threshold is descriptive
+Missing-answer sensitivity,Profile 2 share 58.8–59.6% across 20 draws,Also see stricter completeness refits
+Recruitment sensitivity,Equal-source reporting effective n 44.0,Includes n=3 ICIS; inspect the sensitivity excluding small sources
+Group size,"Profile 1: 262 modal assignments, Profile 2: 383 modal assignments",Probability-weighted shares and intervals reported separately

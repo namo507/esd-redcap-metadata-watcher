@@ -1,0 +1,125 @@
+{
+  "run_date_America_New_York": "2026-10-22",
+  "seed": 20261022,
+  "imputations": 20,
+  "bootstrap_requested": 100,
+  "bootstrap_successful": 100,
+  "bootstrap_failures": [],
+  "workbook": "/Users/namomac/esd-redcap-metadata-watcher/projects/caregiver-cluster-analysis/Responses Analysis_Revised (3).xlsx",
+  "workbook_sha256": "961ca8e78f77fd4669d63bf6b3a199ae3d0465190597b9976b207d9439d72257",
+  "worksheet": "Simplified All Responses",
+  "eligibility_rule": "Final Verification normalized equals Valid",
+  "source_snapshot": "20261021T192955575131Z",
+  "source_extracted_at_utc": "2026-10-21T19:29:55.575131+00:00",
+  "source_files": {
+    "4797_project.json": {
+      "sha256": "cc64aa8d64d353c3d3d5e9fbf8922d73c09f93ce43fdbcd4c3ad33969844504e",
+      "rows": 1
+    },
+    "4797_metadata.json": {
+      "sha256": "0d06eff59efc41853a66a60585a4ea4a5cf00f932acdb9828d9ada80ec8ce92a",
+      "rows": 324
+    },
+    "4797_record.json": {
+      "sha256": "e2a1bb76818e7205445c6ae79e2596b7ac941b69efb514701c7c705db2386709",
+      "rows": 177
+    },
+    "4797_instrument.json": {
+      "sha256": "5c5150e8dc88c04866756ca809b42ec1cb538d8597cb794a7b0c39da43c01e5e",
+      "rows": 5
+    },
+    "4581_project.json": {
+      "sha256": "123f8d3aebac5c516c7bbd63e65cb3a307e562d074fce75efc8eeea2c6d63cde",
+      "rows": 1
+    },
+    "4581_metadata.json": {
+      "sha256": "1a779df0da66aacbc517196037bc08d944963adea4cd7c7a131219a68cc2dc25",
+      "rows": 315
+    },
+    "4581_record.json": {
+      "sha256": "6b69515535dfd03934fb617eaec5bd87a72e3a6a5025151a16960a28ecc3c1a4",
+      "rows": 1779
+    },
+    "4581_instrument.json": {
+      "sha256": "5c5150e8dc88c04866756ca809b42ec1cb538d8597cb794a7b0c39da43c01e5e",
+      "rows": 5
+    },
+    "5749_project.json": {
+      "sha256": "50d6f0e4a7f6cbb69e1807b1d1bcf02f04f4daffa44f1f53f551dfa9c2fc4a34",
+      "rows": 1
+    },
+    "5749_metadata.json": {
+      "sha256": "59737d53c013c89c005cad54a70fdecc1f26fc2619e92682858db813ec4d6cf5",
+      "rows": 597
+    },
+    "5749_record.json": {
+      "sha256": "d140bbc36bdb3a137b8399d878dbfd5157036044a2e13d105cdd4406b3429df5",
+      "rows": 545
+    },
+    "5749_instrument.json": {
+      "sha256": "5c5150e8dc88c04866756ca809b42ec1cb538d8597cb794a7b0c39da43c01e5e",
+      "rows": 5
+    },
+    "4931_project.json": {
+      "sha256": "f2ca637c8721a3f7780ca251dbb5996e50ac1310ae9d97cd7c753444e082714b",
+      "rows": 1
+    },
+    "4931_metadata.json": {
+      "sha256": "0d06eff59efc41853a66a60585a4ea4a5cf00f932acdb9828d9ada80ec8ce92a",
+      "rows": 324
+    },
+    "4931_record.json": {
+      "sha256": "13a184dc9bc42cfeb377482910ee07574188a578dc02a8e304cddda23093a095",
+      "rows": 10
+    },
+    "4931_instrument.json": {
+      "sha256": "5c5150e8dc88c04866756ca809b42ec1cb538d8597cb794a7b0c39da43c01e5e",
+      "rows": 5
+    },
+    "provenance.csv": {
+      "sha256": "59ad53fa22e3faf3953e48eaa88ed43fa1cc915cc9632bfb022f05451e2b0316",
+      "rows": 4
+    },
+    "exclusions.csv": {
+      "sha256": "bbd53d9a138229388eea003d3f73e0497b5db81de5e03372d433fac7349ad473",
+      "rows": 819
+    },
+    "field_mapping.csv": {
+      "sha256": "269f363ef2bf5e8f2d9a878c5f8020b74370aab93eddb8974a8596d223efcd78",
+      "rows": 1561
+    },
+    "bilingual_folding.csv": {
+      "sha256": "549fb32a94d3fb2ab324a2c7458905126fa11dc1979d5766ed1483833811f866",
+      "rows": 195
+    }
+  },
+  "reference_sha256": {
+    "cluster-refinements.md": "b2b5f87d9c9a6a7344f776c5c033d9e3a34309aec90878fc23539fe337c223ca",
+    "Aims_ResearchStrategy_BradshawR21.pdf": "1b2675ee0c5cae0eaa7b45895825c58e1dacc6e3adf67b3c9050976442849a35",
+    "valid_data_clusters.py": "54dd8c1e543b40b2c5a82ee9bd4e98a153415a9bfb66f19ed9b3d572bea6a274"
+  },
+  "language_helper_sha256": "59b572bb9b6689d3975d30d39865efee991104496c7e53ea518925045ca72608",
+  "versions": {
+    "pandas": "2.2.3",
+    "numpy": "2.0.2",
+    "scikit-learn": "1.6.1",
+    "scipy": "1.13.1",
+    "statsmodels": "0.14.4",
+    "openpyxl": "3.1.5",
+    "nbformat": "5.10.4"
+  },
+  "unit": "PID-record response, not proven unique individual",
+  "primary_features": [
+    "Positive affect (more positive)",
+    "Emotional distress (less distress)",
+    "Aversive feelings (less aversion)",
+    "Visit feasibility (more feasible)",
+    "Result usefulness (more useful)",
+    "Ethical support (more support)"
+  ],
+  "comparison_k": 2,
+  "comparison_covariance": "tied",
+  "cohort_n": 664,
+  "classifiable_n": 645,
+  "future_data_validated": false
+}

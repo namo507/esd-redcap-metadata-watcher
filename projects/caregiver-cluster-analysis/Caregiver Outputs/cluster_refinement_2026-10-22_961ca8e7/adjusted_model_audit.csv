@@ -1,0 +1,14 @@
+Model,Eligible profiles,Complete predictors,Adjusted n,Missing predictors excluded,Sparse categories excluded
+Demographic context,645,622,619,23,3
+definite_screen,645,622,619,23,3
+trust,645,615,613,30,2
+value_conformity,645,622,619,23,3
+value_tradition,645,622,619,23,3
+value_benevolence,645,622,619,23,3
+value_universalism,645,622,619,23,3
+value_self_direction,645,622,619,23,3
+value_stimulation,645,622,619,23,3
+value_hedonism,645,622,619,23,3
+value_achievement,645,622,619,23,3
+value_power,645,622,619,23,3
+value_security,645,622,619,23,3

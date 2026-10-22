@@ -1,0 +1,6 @@
+Metric,Value
+Legacy eligible (>=8/10),642.0
+Legacy excluded,22.0
+Legacy silhouette,0.18475497952939385
+Common keyed responses,641.0
+ARI: legacy k-means vs refined GMM,0.4554737930566789
