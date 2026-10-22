@@ -1,38 +1,37 @@
 # Caregiver Acceptability Cluster Analysis
 
-## Current refined notebook (2026-10-22)
+## Current stakeholder notebook (2026-10-22)
 
-`caregiver_cluster_simple_metrics.ipynb` now runs an **offline, frozen analysis** of
-`Final Verification = Valid` on `Responses Analysis_Revised (3).xlsx`. It checks the
-workbook SHA-256, the pinned REDCap snapshot manifest, project identities, source
-completion, and one-to-one PID–record joins before analysis. It does not read API
-tokens or recompute the workbook's final eligibility decisions.
+`caregiver_cluster_simple_metrics.ipynb` is the short, decision-focused readout.
+Its seven chronological sections cover the verified sample, screening interest,
+attitude patterns and overlap, procedure-specific ease, family/background context,
+early support, and proposals for stakeholder review. Code is collapsed; a
+code-free HTML presentation is also saved in Downloads.
 
-The notebook uses six primary attitude composites, keeping demographics, values,
-scenario-specific doctor confidence, method ease, accuracy requirements, and
-screening intention outside profile construction. It includes k-means and GMM
-comparisons (including one component), 20 bounded imputations, 100 full-preprocessing
-bootstrap refits, posterior-weighted profiles, adjusted exploratory associations,
-recruitment/completeness sensitivity, subgroup measurement audits, and an optional
-five-fold predictive check. The two-profile view is a configured descriptive
-comparison, not a preregistered or proven optimal number of parent types.
+The readout keeps the validated six-theme, two-profile analysis. It does not
+reselect the model to change the story. `caregiver_stakeholder_core.py` quietly
+rebuilds the checked cohort, repeated imputations, matched bootstrap refits, and
+posterior-weighted summaries. Existing adjusted comparisons are used only after
+both their source provenance and their recomputed respondent probabilities match.
+`caregiver_stakeholder_views.py` draws the plain-language charts and decision tables.
 
-Run all cells with the project environment. The notebook resolves the project
-folder before imports, including when opened from Downloads. For a moved checkout,
-set `CAREGIVER_PROJECT_DIR`. To analyze new inputs, deliberately reconcile the new
-workbook/snapshot and update the visible expected hash and snapshot parameters.
+The input remains **Final Verification = Valid** in
+`Responses Analysis_Revised (3).xlsx`, paired with the pinned October 21 REDCap
+snapshot. The workbook hash, source manifest, project identities, completion,
+question anchors, and one-to-one PID–record joins are checked before analysis.
+No live API or credential access is required. The notebook resolves the project
+folder when opened from Downloads; set `CAREGIVER_PROJECT_DIR` for a moved checkout.
 
-Outputs go to `Caregiver Outputs/cluster_refinement_<date>_<workbook-hash>/`:
-aggregate CSVs, figures, a findings summary, and provenance. A run-local `.gitignore`
-excludes `restricted/`, whose respondent probabilities and frozen model bundle are
-owner-only. Future scoring requires final-valid responses and compatible metadata;
-the notebook does not claim prospective or longitudinal validation.
+Stakeholder outputs are aggregate tables and figures in
+`Caregiver Outputs/stakeholder_readout_<workbook-hash>/`. Detailed diagnostics,
+model comparisons, and future-scoring work are preserved in
+`archive/2026-10-22-technical-reference/caregiver_cluster_technical.ipynb`, rather
+than placed in the leadership reading path. The original detailed Downloads
+notebook is also saved as `caregiver_cluster_simple_metrics.technical_backup_2026-10-22.ipynb`.
 
-- `refined_sources.py` supplies the existing metadata-verified bilingual folding.
-- `valid_data_clusters.py` supplies the historical ten-score comparison.
-- `tests/test_valid_data_clusters.py` checks that existing helper workflow.
-- `cluster-refinements.md` and `Aims_ResearchStrategy_BradshawR21.pdf` document the
-  refinement requirements and research questions.
+The profiles overlap. Percentages describe this convenience sample, reported
+intentions are hypothetical, method ratings describe ease rather than uptake,
+and early-support importance does not establish willingness to join a trial.
 
 ## Refined response screening workbook
 
